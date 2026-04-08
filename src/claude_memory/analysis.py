@@ -411,6 +411,7 @@ class AnalysisMixin:
         pairs_evaluated = 0
 
         async def _scan_entity(entity_id: str) -> None:
+            """Scan a single entity for semantically similar but disconnected neighbors."""
             nonlocal already_connected, pairs_evaluated
             async with semaphore:
                 similar = await self.vector_store.find_similar_by_id(

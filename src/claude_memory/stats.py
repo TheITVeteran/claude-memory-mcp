@@ -34,6 +34,7 @@ class SearchStatsAccumulator:
     """Rolling-window statistics for search behaviour monitoring."""
 
     def __init__(self, window_size: int | None = None) -> None:
+        """Initialize with configurable rolling window size (default from STATS_WINDOW_SIZE env)."""
         size = window_size or int(os.getenv("STATS_WINDOW_SIZE", "500"))
         self._window: deque[SearchSnapshot] = deque(maxlen=size)
 

@@ -252,10 +252,10 @@ class TestGetGraphHealth:
         graph = m.select_graph()
         graph.query.side_effect = [
             _mock_result([[100]]),  # total nodes
-            _mock_result([[80]]),   # entity count
-            _mock_result([[20]]),   # observation count
+            _mock_result([[80]]),  # entity count
+            _mock_result([[20]]),  # observation count
             _mock_result([[150]]),  # total edges
-            _mock_result([[5]]),    # orphan count
+            _mock_result([[5]]),  # orphan count
         ]
 
         result = m.get_graph_health()
@@ -308,8 +308,8 @@ class TestGetGraphHealth:
         graph.query.side_effect = [
             _mock_result([[10]]),  # total nodes
             _mock_result([[10]]),  # entity count
-            _mock_result([[0]]),   # observation count
-            _mock_result([[0]]),   # total edges
+            _mock_result([[0]]),  # observation count
+            _mock_result([[0]]),  # total edges
             _mock_result([[10]]),  # orphan count = all nodes
         ]
 
@@ -322,11 +322,11 @@ class TestGetGraphHealth:
         m = _make_mixin()
         graph = m.select_graph()
         graph.query.side_effect = [
-            _mock_result([[5]]),   # total nodes
-            _mock_result([[5]]),   # entity count
-            _mock_result([[0]]),   # observation count
+            _mock_result([[5]]),  # total nodes
+            _mock_result([[5]]),  # entity count
+            _mock_result([[0]]),  # observation count
             _mock_result([[20]]),  # total edges (max = 5*4 = 20)
-            _mock_result([[0]]),   # orphan count
+            _mock_result([[0]]),  # orphan count
         ]
 
         result = m.get_graph_health()

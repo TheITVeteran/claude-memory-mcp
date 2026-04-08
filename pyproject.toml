@@ -173,7 +173,7 @@ markers = [
 
 
 [tool.codespell]
-skip = "*.lock,*.json,*.html"
+skip = "*.lock,*.json,*.html,*.egg-info"
 ignore-words-list = "ne,falkordb,nd"
 
 [tool.docstr_coverage]

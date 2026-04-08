@@ -167,7 +167,9 @@ async def test_happy_upsert(store: QdrantVectorStore, mock_qdrant_client: AsyncM
 # ─── search Tests ───────────────────────────────────────────────────
 
 
-async def test_happy_search_no_filter(store: QdrantVectorStore, mock_qdrant_client: AsyncMock) -> None:
+async def test_happy_search_no_filter(
+    store: QdrantVectorStore, mock_qdrant_client: AsyncMock
+) -> None:
     results = await store.search(vector=POINT_VECTOR, limit=SEARCH_LIMIT)
     assert len(results) == 1
     assert results[0]["_id"] == POINT_ID
@@ -201,7 +203,9 @@ async def test_sad4_search_empty_results(
     assert results == []
 
 
-async def test_sad5_search_null_payload(store: QdrantVectorStore, mock_qdrant_client: AsyncMock) -> None:
+async def test_sad5_search_null_payload(
+    store: QdrantVectorStore, mock_qdrant_client: AsyncMock
+) -> None:
     """When point.payload is None, return empty dict."""
     point = MagicMock()
     point.id = POINT_ID

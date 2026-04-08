@@ -105,7 +105,9 @@ class TestRoute:
     """Tests for QueryRouter.route() dispatch."""
 
     @pytest.mark.asyncio()
-    async def test_sad2_route_empty_query(self, router: QueryRouter, mock_service: MagicMock) -> None:
+    async def test_sad2_route_empty_query(
+        self, router: QueryRouter, mock_service: MagicMock
+    ) -> None:
         """Empty query returns [] without calling any service."""
         result = await router.route("", mock_service)
         assert result == []
@@ -119,7 +121,9 @@ class TestRoute:
         assert result == [{"id": "sem-1"}]
 
     @pytest.mark.asyncio()
-    async def test_happy_route_associative(self, router: QueryRouter, mock_service: MagicMock) -> None:
+    async def test_happy_route_associative(
+        self, router: QueryRouter, mock_service: MagicMock
+    ) -> None:
         """ASSOCIATIVE intent dispatches to search_associative()."""
         result = await router.route("things related to auth patterns", mock_service)
         mock_service.search_associative.assert_called_once()

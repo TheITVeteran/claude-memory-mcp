@@ -92,7 +92,9 @@ async def test_happy_startup_event() -> None:
 # ─── /embed Endpoint Tests ─────────────────────────────────────────
 
 
-async def test_happy_embed_texts_success(client: AsyncClient, mock_embedding_service: MagicMock) -> None:
+async def test_happy_embed_texts_success(
+    client: AsyncClient, mock_embedding_service: MagicMock
+) -> None:
     response = await client.post(EMBED_ENDPOINT, json={"texts": BATCH_TEXTS})
     assert response.status_code == HTTP_OK
     data = response.json()
@@ -115,7 +117,9 @@ async def test_happy_embed_service_not_initialized() -> None:
     assert response.status_code == HTTP_SERVICE_UNAVAILABLE
 
 
-async def test_evil1_embed_service_error(client: AsyncClient, mock_embedding_service: MagicMock) -> None:
+async def test_evil1_embed_service_error(
+    client: AsyncClient, mock_embedding_service: MagicMock
+) -> None:
     """Test 500 when encode_batch raises."""
     mock_embedding_service.encode_batch.side_effect = RuntimeError("model crashed")
     response = await client.post(EMBED_ENDPOINT, json={"texts": BATCH_TEXTS})

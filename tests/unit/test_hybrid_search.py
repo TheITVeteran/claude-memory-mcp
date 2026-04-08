@@ -89,7 +89,9 @@ class TestHybridSearchPipeline:
         service.vector_store.search.assert_called_once()
 
     @pytest.mark.asyncio()
-    async def test_happy_temporal_intent_triggers_graph_enrichment(self, service: MemoryService) -> None:
+    async def test_happy_temporal_intent_triggers_graph_enrichment(
+        self, service: MemoryService
+    ) -> None:
         """TEMPORAL intent triggers query_timeline alongside vector search."""
         service.vector_store.search.return_value = _vector_results("a")
         service.router.classify.return_value = QueryIntent.TEMPORAL
@@ -105,7 +107,9 @@ class TestHybridSearchPipeline:
         service.vector_store.search.assert_called_once()
 
     @pytest.mark.asyncio()
-    async def test_happy_relational_intent_triggers_path_enrichment(self, service: MemoryService) -> None:
+    async def test_happy_relational_intent_triggers_path_enrichment(
+        self, service: MemoryService
+    ) -> None:
         """RELATIONAL intent with quoted entities triggers traverse_path."""
         service.vector_store.search.return_value = _vector_results("a")
         service.router.classify.return_value = QueryIntent.RELATIONAL
@@ -123,7 +127,9 @@ class TestHybridSearchPipeline:
         mock_tp.assert_called_once()
 
     @pytest.mark.asyncio()
-    async def test_happy_associative_intent_triggers_activation(self, service: MemoryService) -> None:
+    async def test_happy_associative_intent_triggers_activation(
+        self, service: MemoryService
+    ) -> None:
         """ASSOCIATIVE intent runs spreading activation with vector seeds."""
         vec_results = _vector_results("a", "b")
         service.vector_store.search.return_value = vec_results
@@ -141,7 +147,9 @@ class TestHybridSearchPipeline:
         assert len(results) > 0
 
     @pytest.mark.asyncio()
-    async def test_sad2_semantic_intent_skips_graph_enrichment(self, service: MemoryService) -> None:
+    async def test_sad2_semantic_intent_skips_graph_enrichment(
+        self, service: MemoryService
+    ) -> None:
         """SEMANTIC intent → vector-only, no graph enrichment methods called."""
         service.vector_store.search.return_value = _vector_results("a")
         service.router.classify.return_value = QueryIntent.SEMANTIC
