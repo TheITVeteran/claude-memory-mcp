@@ -62,7 +62,7 @@ async def check_for_updates() -> None:
                 logger.info("   Release notes: %s", release_url)
                 logger.info("   To update: git pull && pip install -e .")
 
-    except Exception:  # noqa: S110 — intentional silent failure; must never crash server
+    except Exception:  # noqa: S110 — intentional silent failure; must never crash server  # nosec B110
         pass  # Fire-and-forget: server starts regardless
 
 

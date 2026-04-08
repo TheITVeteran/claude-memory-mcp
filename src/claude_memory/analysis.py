@@ -58,7 +58,7 @@ class AnalysisMixin:
         Delegates to repository-level Cypher query. Returns id, name,
         node_type, project_id, focus, labels, and created_at.
         """
-        return self.repo.list_orphans(limit=limit)
+        return list(self.repo.list_orphans(limit=limit))
 
     async def system_diagnostics(self) -> dict[str, Any]:
         """E-5: Unified system diagnostics — graph, vector, and split-brain."""

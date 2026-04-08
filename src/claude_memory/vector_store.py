@@ -343,8 +343,8 @@ class QdrantVectorStore:
         if exclude_ids:
             all_exclude.update(exclude_ids)
 
-        must_not = [models.HasIdCondition(has_id=list(all_exclude))]
-        q_filter = models.Filter(must_not=must_not)
+        must_not: list[models.HasIdCondition] = [models.HasIdCondition(has_id=list(all_exclude))]
+        q_filter = models.Filter(must_not=must_not)  # type: ignore[arg-type]
 
         results = await self.client.query_points(
             collection_name=self.collection,

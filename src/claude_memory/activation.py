@@ -260,7 +260,7 @@ class ActivationEngine:
                 }
                 for eid in bridge_ids
             ],
-            key=lambda x: x["vector_score"],
+            key=lambda x: x.get("vector_score", 0.0),  # type: ignore[arg-type,return-value]
             reverse=True,
         )
 
@@ -276,7 +276,7 @@ class ActivationEngine:
                 }
                 for eid in questionable_ids
             ],
-            key=lambda x: x["activation_energy"],
+            key=lambda x: x.get("activation_energy", 0.0),  # type: ignore[arg-type,return-value]
             reverse=True,
         )
 
