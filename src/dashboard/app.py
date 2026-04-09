@@ -12,6 +12,7 @@ from pyvis.network import Network
 
 from claude_memory.embedding import EmbeddingService
 from claude_memory.tools import MemoryService
+from dashboard.radar_viz import render_graph_with_radar
 
 # Allow nested event loops so asyncio.run() works inside Streamlit callbacks.
 nest_asyncio.apply()
@@ -97,6 +98,97 @@ def _render_explorer_tab() -> None:
         with open("graph.html", encoding="utf-8") as f:
             source_code = f.read()
         components.html(source_code, height=600)
+
+
+def _render_radar_tab(service: MemoryService) -> None:
+    """Render the Semantic Radar tab with graph overlay."""
+    st.header("🎯 Semantic Radar — Discover Missing Connections")
+    st.markdown(
+        "Discovers potential relationships by comparing vector similarity "
+        "against graph distance. **Advisory only — nothing is committed.**"
+    )
+
+    # Controls
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        project_id = st.text_input("Project ID (optional)", value="", key="radar_project")
+    with col2:
+        similarity_threshold = st.slider(
+            "Similarity threshold", 0.5, 0.95, 0.65, 0.05, key="radar_sim"
+        )
+    with col3:
+        limit = st.slider("Max suggestions", 5, 50, 20, key="radar_limit")
+
+    run_scan = st.button("🔍 Run Radar Scan", type="primary")
+
+    if run_scan:
+        with st.spinner("Scanning graph for missing connections..."):
+            results = asyncio.run(
+                service.find_semantic_opportunities(
+                    project_id=project_id or None,
+                    similarity_threshold=similarity_threshold,
+                    limit=limit,
+                )
+            )
+
+        # Metrics row
+        stats = results.get("stats", {})
+        mc1, mc2, mc3 = st.columns(3)
+        with mc1:
+            st.metric("Entities Scanned", stats.get("entities_scanned", "—"))
+        with mc2:
+            st.metric("Pairs Evaluated", stats.get("pairs_evaluated", "—"))
+        with mc3:
+            st.metric("Bridges Found", stats.get("bridges_found", "—"))
+
+        st.divider()
+
+        opportunities = results.get("opportunities", [])
+        if not opportunities:
+            st.info("No radar suggestions found. Your graph is well-connected!")
+            return
+
+        # Graph + suggestions layout
+        left, right = st.columns([2, 1])
+
+        with left:
+            st.subheader("Graph with Radar Overlay")
+            # Fetch existing edges for context
+            edge_q = (
+                "MATCH (a:Entity)-[r]->(b:Entity) "
+                "RETURN a.id, b.id, type(r), a.name, b.name LIMIT 500"
+            )
+            edge_res = service.repo.execute_cypher(edge_q, {})
+            existing_edges = [
+                {
+                    "source": r[0],
+                    "target": r[1],
+                    "type": r[2],
+                    "source_name": r[3],
+                    "target_name": r[4],
+                }
+                for r in edge_res.result_set
+                if r
+            ]
+            graph_html = render_graph_with_radar(existing_edges, opportunities)
+            components.html(graph_html, height=600)
+
+        with right:
+            st.subheader("Suggestions")
+            for i, opp in enumerate(opportunities):
+                a_name = opp.get("entity_a", {}).get("name", "?")
+                b_name = opp.get("entity_b", {}).get("name", "?")
+                score = opp.get("radar_score", opp.get("cosine_similarity", 0))
+                with st.expander(f"#{i + 1} {a_name} ↔ {b_name} ({score:.2f})"):
+                    st.markdown(f"**Similarity:** {opp.get('cosine_similarity', 0):.2f}")
+                    st.markdown(
+                        f"**Graph distance:** "
+                        f"{'∞' if opp.get('graph_distance') is None else opp['graph_distance']}"
+                    )
+                    if opp.get("suggested_relationship"):
+                        st.markdown(f"**Suggested:** `{opp['suggested_relationship']}`")
+                    if opp.get("reasoning"):
+                        st.markdown(f"**Reasoning:** {opp['reasoning']}")
 
 
 def _render_search_tab(service: MemoryService) -> None:
@@ -196,12 +288,14 @@ def main() -> None:
     st.sidebar.metric("Total Nodes", nodes)
     st.sidebar.metric("Relationships", edges)
 
-    menu = st.sidebar.radio("Mode", ["Explorer", "Search", "Maintenance"])
+    menu = st.sidebar.radio("Mode", ["Explorer", "Search", "Radar", "Maintenance"])
 
     if menu == "Explorer":
         _render_explorer_tab()
     elif menu == "Search":
         _render_search_tab(service)
+    elif menu == "Radar":
+        _render_radar_tab(service)
     elif menu == "Maintenance":
         _render_maintenance_tab(service)
 
