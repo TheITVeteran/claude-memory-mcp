@@ -40,10 +40,17 @@ def render_graph_with_radar(
     seen_nodes: set[str] = set()
     node_count = 0
 
-    def _add_node(node_id: str, label: str) -> None:
-        """Add a node if not already present and under the cap."""
+    def _add_node(node_id: str, label: str, *, force: bool = False) -> None:
+        """Add a node if not already present and under the cap.
+
+        Args:
+            force: If True, add node even if max_nodes is exceeded.
+                   Required for radar endpoints to avoid pyvis errors.
+        """
         nonlocal node_count
-        if node_id in seen_nodes or node_count >= max_nodes:
+        if node_id in seen_nodes:
+            return
+        if not force and node_count >= max_nodes:
             return
         seen_nodes.add(node_id)
         node_count += 1
@@ -62,10 +69,11 @@ def render_graph_with_radar(
 
     # ── Radar suggestions (dashed red) ──
     for suggestion in radar_suggestions:
+        # Support both flat format (entity_a_id) and nested (entity_a.id)
         entity_a = suggestion.get("entity_a", {})
         entity_b = suggestion.get("entity_b", {})
-        a_id = str(entity_a.get("id", ""))
-        b_id = str(entity_b.get("id", ""))
+        a_id = str(suggestion.get("entity_a_id", entity_a.get("id", "")))
+        b_id = str(suggestion.get("entity_b_id", entity_b.get("id", "")))
         if not a_id or not b_id:
             continue
 
@@ -73,8 +81,10 @@ def render_graph_with_radar(
         alpha = _score_to_alpha(score)
         color = f"rgba(255, 71, 87, {alpha})"
 
-        _add_node(a_id, entity_a.get("name", a_id[:8]))
-        _add_node(b_id, entity_b.get("name", b_id[:8]))
+        a_label = suggestion.get("entity_a_name", entity_a.get("name", a_id[:8]))
+        b_label = suggestion.get("entity_b_name", entity_b.get("name", b_id[:8]))
+        _add_node(a_id, a_label, force=True)
+        _add_node(b_id, b_label, force=True)
 
         net.add_edge(
             a_id,

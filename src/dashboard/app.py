@@ -100,6 +100,19 @@ def _render_explorer_tab() -> None:
         components.html(source_code, height=600)
 
 
+def _resolve_entity_a_names(service: MemoryService, opportunities: list[dict[str, Any]]) -> None:
+    """Resolve entity_a UUIDs to human-readable names via graph lookup."""
+    a_ids = list({opp.get("entity_a_id", "") for opp in opportunities})
+    if not a_ids:
+        return
+    name_q = "MATCH (n:Entity) WHERE n.id IN $ids RETURN n.id, n.name"
+    name_res = service.repo.execute_cypher(name_q, {"ids": a_ids})
+    name_map = {r[0]: r[1] for r in name_res.result_set if r}
+    for opp in opportunities:
+        aid = opp.get("entity_a_id", "")
+        opp["entity_a_name"] = name_map.get(aid, aid[:12])
+
+
 def _render_radar_tab(service: MemoryService) -> None:
     """Render the Semantic Radar tab with graph overlay."""
     st.header("🎯 Semantic Radar — Discover Missing Connections")
@@ -144,6 +157,8 @@ def _render_radar_tab(service: MemoryService) -> None:
         st.divider()
 
         opportunities = results.get("opportunities", [])
+        _resolve_entity_a_names(service, opportunities)
+
         if not opportunities:
             st.info("No radar suggestions found. Your graph is well-connected!")
             return
@@ -176,8 +191,8 @@ def _render_radar_tab(service: MemoryService) -> None:
         with right:
             st.subheader("Suggestions")
             for i, opp in enumerate(opportunities):
-                a_name = opp.get("entity_a", {}).get("name", "?")
-                b_name = opp.get("entity_b", {}).get("name", "?")
+                a_name = opp.get("entity_a_name", opp.get("entity_a_id", "?")[:12])
+                b_name = opp.get("entity_b_name", opp.get("entity_b_id", "?"))
                 score = opp.get("radar_score", opp.get("cosine_similarity", 0))
                 with st.expander(f"#{i + 1} {a_name} ↔ {b_name} ({score:.2f})"):
                     st.markdown(f"**Similarity:** {opp.get('cosine_similarity', 0):.2f}")
@@ -185,8 +200,7 @@ def _render_radar_tab(service: MemoryService) -> None:
                         f"**Graph distance:** "
                         f"{'∞' if opp.get('graph_distance') is None else opp['graph_distance']}"
                     )
-                    if opp.get("suggested_relationship"):
-                        st.markdown(f"**Suggested:** `{opp['suggested_relationship']}`")
+                    st.markdown(f"**Entity B type:** `{opp.get('entity_b_type', 'Entity')}`")
                     if opp.get("reasoning"):
                         st.markdown(f"**Reasoning:** {opp['reasoning']}")
 
