@@ -158,6 +158,210 @@ class SearchMixin(SearchAdvancedMixin):
             n.pop("embedding", None)
         return nodes
 
+    async def diff_knowledge_state(
+        self,
+        as_of_start: datetime,
+        as_of_end: datetime,
+        project_id: str | None = None,
+        include_observations: bool = False,
+    ) -> dict[str, Any]:
+        """Compute the difference between two knowledge graph snapshots.
+
+        Returns structured diff showing entities and relationships
+        added/removed/evolved between two points in time.
+
+        Args:
+            as_of_start: Earlier timestamp.
+            as_of_end: Later timestamp (must be after start).
+            project_id: Optional project scoping.
+            include_observations: If True, include per-entity observation diffs.
+
+        Returns:
+            Dict with added/removed/evolved entities and relationships,
+            superseded entities, optional observation deltas, and a summary.
+
+        Raises:
+            ValueError: If as_of_start >= as_of_end.
+        """
+        if as_of_start >= as_of_end:
+            raise ValueError(
+                f"as_of_start ({as_of_start.isoformat()}) must be before "
+                f"as_of_end ({as_of_end.isoformat()})"
+            )
+
+        start_iso = as_of_start.isoformat()
+        end_iso = as_of_end.isoformat()
+        project_clause = "AND n.project_id = $project_id" if project_id else ""
+        params: dict[str, Any] = {"start": start_iso, "end": end_iso}
+        if project_id:
+            params["project_id"] = project_id
+
+        # Fetch snapshots via helpers
+        start_ents, end_ents = self._diff_fetch_entities(params, project_clause)
+        start_rels, end_rels = self._diff_fetch_relationships(params, project_clause)
+        superseded = self._diff_fetch_supersedes(params, project_clause)
+
+        # Compute diffs
+        added_ids = set(end_ents.keys()) - set(start_ents.keys())
+        removed_ids = set(start_ents.keys()) - set(end_ents.keys())
+        evolved = [
+            end_ents[eid]
+            for eid in (set(start_ents.keys()) & set(end_ents.keys()))
+            if (end_ents[eid].get("updated_at", "") > start_iso)
+        ]
+        added_rel_ids = set(end_rels.keys()) - set(start_rels.keys())
+        removed_rel_ids = set(start_rels.keys()) - set(end_rels.keys())
+
+        result: dict[str, Any] = {
+            "window": {"start": start_iso, "end": end_iso},
+            "added_entities": [end_ents[eid] for eid in added_ids],
+            "removed_entities": [start_ents[eid] for eid in removed_ids],
+            "added_relationships": [end_rels[rid] for rid in added_rel_ids],
+            "removed_relationships": [start_rels[rid] for rid in removed_rel_ids],
+            "evolved_entities": evolved,
+            "superseded": superseded,
+            "summary": {
+                "entities_added": len(added_ids),
+                "entities_removed": len(removed_ids),
+                "entities_evolved": len(evolved),
+                "relationships_added": len(added_rel_ids),
+                "relationships_removed": len(removed_rel_ids),
+                "superseded_count": len(superseded),
+                "total_changes": (
+                    len(added_ids)
+                    + len(removed_ids)
+                    + len(evolved)
+                    + len(added_rel_ids)
+                    + len(removed_rel_ids)
+                ),
+            },
+        }
+        if include_observations:
+            result["observation_deltas"] = self._diff_fetch_observations(
+                evolved, start_iso, end_iso
+            )
+        return result
+
+    # ── diff_knowledge_state helpers ──────────────────────────────────
+
+    def _diff_fetch_entities(
+        self, params: dict[str, Any], project_clause: str
+    ) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+        """Fetch entity snapshots at start and end timestamps."""
+        start_q = f"""
+        MATCH (n:Entity)
+        WHERE n.created_at <= $start
+          AND (n.archived_at IS NULL OR n.archived_at > $start)
+          {project_clause}
+        RETURN n
+        """
+        end_q = f"""
+        MATCH (n:Entity)
+        WHERE n.created_at <= $end
+          AND (n.archived_at IS NULL OR n.archived_at > $end)
+          {project_clause}
+        RETURN n
+        """
+        start_res = self.repo.execute_cypher(start_q, params)
+        end_res = self.repo.execute_cypher(end_q, params)
+        return (
+            self._diff_extract_entities(start_res),
+            self._diff_extract_entities(end_res),
+        )
+
+    @staticmethod
+    def _diff_extract_entities(result: Any) -> dict[str, dict[str, Any]]:
+        """Build {id: properties} map from a Cypher entity result set."""
+        out: dict[str, dict[str, Any]] = {}
+        for row in result.result_set:
+            if row and row[0]:
+                props = dict(row[0].properties)
+                props.pop("embedding", None)
+                eid = props.get("id", "")
+                if eid:
+                    out[eid] = props
+        return out
+
+    def _diff_fetch_relationships(
+        self, params: dict[str, Any], project_clause: str
+    ) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+        """Fetch relationship snapshots at start and end timestamps."""
+        proj = project_clause.replace("n.", "a.")
+        start_q = f"""
+        MATCH (a:Entity)-[r]->(b:Entity)
+        WHERE r.created_at <= $start {proj}
+        RETURN r.id AS rid, type(r) AS rtype,
+               a.id AS src, b.id AS dst, r.created_at AS cat
+        """
+        end_q = f"""
+        MATCH (a:Entity)-[r]->(b:Entity)
+        WHERE r.created_at <= $end {proj}
+        RETURN r.id AS rid, type(r) AS rtype,
+               a.id AS src, b.id AS dst, r.created_at AS cat
+        """
+        start_res = self.repo.execute_cypher(start_q, params)
+        end_res = self.repo.execute_cypher(end_q, params)
+        return self._diff_extract_rels(start_res), self._diff_extract_rels(end_res)
+
+    @staticmethod
+    def _diff_extract_rels(result: Any) -> dict[str, dict[str, Any]]:
+        """Build {rel_id: info} map from relationship result set."""
+        out: dict[str, dict[str, Any]] = {}
+        for row in result.result_set:
+            if not row:
+                continue
+            rid = row[0] or f"{row[2]}-{row[1]}-{row[3]}"
+            out[str(rid)] = {
+                "id": str(rid),
+                "type": row[1],
+                "source": row[2],
+                "target": row[3],
+                "created_at": row[4],
+            }
+        return out
+
+    def _diff_fetch_supersedes(
+        self, params: dict[str, Any], project_clause: str
+    ) -> list[dict[str, Any]]:
+        """Query SUPERSEDES edges created within the diff window."""
+        proj = project_clause.replace("n.", "old.")
+        q = f"""
+        MATCH (old:Entity)-[r:SUPERSEDES]->(new:Entity)
+        WHERE r.created_at > $start AND r.created_at <= $end {proj}
+        RETURN old.id AS old_id, old.name AS old_name,
+               new.id AS new_id, new.name AS new_name
+        """
+        res = self.repo.execute_cypher(q, params)
+        return [
+            {"old_id": row[0], "old_name": row[1], "new_id": row[2], "new_name": row[3]}
+            for row in res.result_set
+            if row
+        ]
+
+    def _diff_fetch_observations(
+        self, evolved: list[dict[str, Any]], start_iso: str, end_iso: str
+    ) -> list[dict[str, Any]]:
+        """Fetch new observations for evolved entities within the window."""
+        deltas: list[dict[str, Any]] = []
+        for entity in evolved:
+            obs_q = """
+            MATCH (e:Entity {id: $eid})-[:HAS_OBSERVATION]->(o)
+            WHERE o.created_at > $start AND o.created_at <= $end
+            RETURN o.content AS content, o.created_at AS cat
+            ORDER BY o.created_at ASC
+            """
+            res = self.repo.execute_cypher(
+                obs_q, {"eid": entity["id"], "start": start_iso, "end": end_iso}
+            )
+            new_obs = [
+                {"content": row[0], "created_at": row[1]}
+                for row in res.result_set
+                if row and row[0]
+            ]
+            if new_obs:
+                deltas.append({"entity_id": entity["id"], "new_observations": new_obs})
+        return deltas
+
     # ── Main search entry point (ADR-007 hybrid pipeline) ────────────
 
     async def search(  # noqa: PLR0913

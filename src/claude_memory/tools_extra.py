@@ -48,6 +48,7 @@ def configure(mcp: FastMCP, service: MemoryService, librarian: LibrarianAgent) -
     mcp.tool()(list_orphans)
     mcp.tool()(semantic_radar)
     mcp.tool()(find_semantic_opportunities)
+    mcp.tool()(diff_knowledge_state)
 
 
 async def search_associative(  # noqa: PLR0913
@@ -248,4 +249,34 @@ async def find_semantic_opportunities(
         similarity_threshold=similarity_threshold,
         limit=limit,
         min_graph_distance=min_graph_distance,
+    )
+
+
+async def diff_knowledge_state(
+    as_of_start: str,
+    as_of_end: str,
+    project_id: str | None = None,
+    include_observations: bool = False,
+) -> dict[str, Any]:
+    """Diff the knowledge graph between two points in time.
+
+    Shows what was added, removed, or evolved between two timestamps.
+    Uses ISO 8601 format for timestamps (e.g., "2026-01-15T00:00:00Z").
+
+    Args:
+        as_of_start: Earlier timestamp in ISO 8601 format.
+        as_of_end: Later timestamp in ISO 8601 format.
+        project_id: Optional project scope filter.
+        include_observations: If True, include per-entity observation diffs.
+    """
+    from datetime import datetime  # noqa: PLC0415
+
+    start_dt = datetime.fromisoformat(as_of_start.replace("Z", "+00:00"))
+    end_dt = datetime.fromisoformat(as_of_end.replace("Z", "+00:00"))
+
+    return await _service.diff_knowledge_state(  # type: ignore[union-attr]
+        as_of_start=start_dt,
+        as_of_end=end_dt,
+        project_id=project_id,
+        include_observations=include_observations,
     )
