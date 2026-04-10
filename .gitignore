@@ -141,3 +141,5 @@ SPEC-*.md
 release_notes.md
 social_preview*.png
 graph.html
+
+test_dynamic_ontology.json
