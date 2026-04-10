@@ -8,7 +8,7 @@ Drop this file into your project root or reference it from your Claude Code conf
 
 ## What This Is
 
-A persistent memory system for Claude. Knowledge graph (FalkorDB) + vector search (Qdrant) + MCP server. Claude can store entities, observations, and relationships — then recall them semantically across sessions.
+A persistent memory system for AI agents. Knowledge graph (FalkorDB) + vector search (Qdrant) + MCP server. Any MCP-compatible client can store entities, observations, and relationships — then recall them semantically across sessions. Published on PyPI as `dragon-brain`.
 
 ## Setup Verification
 
@@ -103,7 +103,7 @@ Common node types: `Entity`, `Concept`, `Session`, `Breakthrough`, `Tool`, `Deci
 add_observation(entity_id="<uuid>", content="This project uses a microservices architecture")
 ```
 
-Observations are automatically embedded and indexed for semantic search.
+Observations are automatically embedded and indexed for semantic search. **Adding an observation also re-embeds the parent entity** — entity vectors include observation content for richer semantic matching (not just name/type/description).
 
 ### Relationships (Connections)
 
@@ -180,8 +180,21 @@ This is a standalone utility, not an MCP tool. Use it programmatically when doin
 | `query_timeline(start, end)` | Entities within a time window |
 | `get_temporal_neighbors(entity_id)` | Entities connected by temporal edges |
 | `point_in_time_query(query, as_of)` | "What did I know as of this date?" |
+| `diff_knowledge_state(as_of_start, as_of_end)` | "What changed between two dates?" — added/removed/evolved entities and relationships |
 | `start_session(project_id, focus)` | Begin a tracked session |
 | `end_session(session_id, summary)` | Close a session with outcomes |
+
+### Time Diff
+
+```
+diff_knowledge_state(
+    as_of_start="2026-03-01T00:00:00Z",
+    as_of_end="2026-04-01T00:00:00Z",
+    project_id="dragon-brain"
+)
+```
+
+Shows what changed in your knowledge graph between two points — added/removed/evolved entities, new/removed relationships, and supersessions. Use for monthly reviews, sprint retrospectives, or "what did I learn last week?" Add `include_observations=True` for per-entity observation diffs (verbose).
 
 ## Health & Diagnostics
 
