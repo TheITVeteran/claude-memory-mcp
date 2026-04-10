@@ -70,9 +70,17 @@ def _import_dashboard() -> Any:
         with patch("claude_memory.embedding.EmbeddingService"):
             with patch("claude_memory.repository.FalkorDB"):
                 with patch("claude_memory.lock_manager.redis.Redis"):
-                    # Force reimport
-                    if "dashboard.app" in sys.modules:
-                        del sys.modules["dashboard.app"]
+                    # Purge ALL dashboard-related modules to prevent stale
+                    # references when test_dashboard.py runs first and
+                    # caches modules with a different mock_st.
+                    for mod in list(sys.modules):
+                        if mod.startswith("dashboard"):
+                            del sys.modules[mod]
+
+                    # Also mock nest_asyncio so the module-level
+                    # nest_asyncio.apply() at import time is harmless.
+                    sys.modules.setdefault("nest_asyncio", MagicMock())
+
                     from dashboard import app as dashboard_app
 
                     return dashboard_app
