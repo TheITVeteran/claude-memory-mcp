@@ -10,6 +10,8 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
+from claude_memory.crud import _compute_entity_embedding_text
+
 if TYPE_CHECKING:  # pragma: no cover
     from .interfaces import Embedder, VectorStore
     from .repository import MemoryRepository
@@ -100,5 +102,36 @@ class CrudMaintenanceMixin:
                 obs_props.get("id"),
             )
             raise
+
+        # Re-embed the parent entity with the new observation included
+        try:
+            entity = self.repo.get_node(params.entity_id)
+            if entity:
+                entity_text = _compute_entity_embedding_text(
+                    self.repo,
+                    entity_id=params.entity_id,
+                    name=entity.get("name", ""),
+                    node_type=entity.get("node_type", "Entity"),
+                    description=entity.get("description", ""),
+                )
+                entity_embedding = self.embedder.encode(entity_text)
+                entity_payload = {
+                    "name": entity.get("name", ""),
+                    "node_type": entity.get("node_type", "Entity"),
+                    "project_id": entity.get("project_id"),
+                }
+                await self.vector_store.upsert(
+                    id=params.entity_id,
+                    vector=entity_embedding,
+                    payload=entity_payload,
+                )
+        except Exception:
+            logger.error(
+                "entity_re_embed_failed after observation add for %s — "
+                "observation was stored, but entity embedding is stale",
+                params.entity_id,
+            )
+            # Do NOT raise — observation was successfully stored
+            # Stale entity embedding is degraded quality, not data loss
 
         return obs_props

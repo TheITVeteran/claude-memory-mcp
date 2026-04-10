@@ -25,6 +25,47 @@ if TYPE_CHECKING:  # pragma: no cover
 logger = logging.getLogger(__name__)
 
 
+def _compute_entity_embedding_text(
+    repo: "MemoryRepository",
+    entity_id: str | None,
+    name: str,
+    node_type: str,
+    description: str,
+) -> str:
+    """Compute the text used to embed an entity.
+
+    Combines entity metadata with observation content for semantically
+    rich embeddings. This is the **single source of truth** for entity
+    embedding text — all create/update paths must use this function.
+
+    Caps at 20 observations x 500 chars each to stay well under
+    BGE-M3's 8K token context window.
+
+    Args:
+        repo: Memory repository (for fetching observations).
+        entity_id: Entity ID (None for new entities during creation).
+        name: Entity name.
+        node_type: Entity type.
+        description: Entity description.
+
+    Returns:
+        Combined text string ready for ``embedder.encode()``.
+    """
+    max_observations = 20
+    max_chars_per_obs = 500
+
+    parts = [name, node_type, description]
+
+    if entity_id:
+        observations = repo.get_observations_for_entity(entity_id, limit=max_observations)
+        for obs in observations:
+            content = obs.get("content", "")
+            if content:
+                parts.append(content[:max_chars_per_obs])
+
+    return " ".join(p for p in parts if p)
+
+
 class CrudMixin:
     """Entity/Relationship/Observation CRUD — mixed into MemoryService."""
 
@@ -72,8 +113,13 @@ class CrudMixin:
             )
 
             # Compute embedding (AI Layer)
-            desc = props.get("description", "")
-            text_to_embed = f"{params.name} {params.node_type} {desc}"
+            text_to_embed = _compute_entity_embedding_text(
+                self.repo,
+                entity_id=None,  # new entity, no observations yet
+                name=params.name,
+                node_type=params.node_type,
+                description=props.get("description", ""),
+            )
             embedding = self.embedder.encode(text_to_embed)
 
             # 1. Write to Graph (FalkorDB) - Source of Truth for Structure
@@ -194,7 +240,13 @@ class CrudMixin:
             name = merged_props.get("name", "")
             node_type = merged_props.get("node_type", "Entity")
 
-            text_to_embed = f"{name} {node_type} {desc}"
+            text_to_embed = _compute_entity_embedding_text(
+                self.repo,
+                entity_id=params.entity_id,
+                name=name,
+                node_type=node_type,
+                description=desc,
+            )
             embedding = self.embedder.encode(text_to_embed)
 
             # 1. Update Graph

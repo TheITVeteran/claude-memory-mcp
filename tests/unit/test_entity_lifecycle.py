@@ -92,14 +92,47 @@ async def test_happy_hard_delete_entity(memory_service: MemoryService) -> None:
 async def test_happy_add_observation(memory_service: MemoryService) -> None:
     graph = memory_service.repo.client.select_graph.return_value
 
-    # Return the created observation node
-    mock_node = MagicMock()
-    mock_node.properties = {
+    # Mock observation node returned by the CREATE query
+    mock_obs_node = MagicMock()
+    mock_obs_node.properties = {
         "id": "obs-789",
         "content": "User likes Python",
         "certainty": "confirmed",
+        "project_id": "default",
     }
-    graph.query.return_value.result_set = [[mock_node]]
+
+    # Mock entity node returned by get_node (for re-embedding)
+    mock_entity_node = MagicMock()
+    mock_entity_node.properties = {
+        "id": "ent-123",
+        "name": "TestUser",
+        "node_type": "Person",
+        "description": "A test user",
+        "project_id": "default",
+    }
+
+    # Return different results depending on which query is called:
+    # 1st call: CREATE observation → returns obs node
+    # 2nd call: get_node → returns entity node
+    # 3rd call: get_observations_for_entity → returns obs list
+    call_count = 0
+
+    def query_side_effect(*args: Any, **kwargs: Any) -> MagicMock:
+        nonlocal call_count
+        call_count += 1
+        result = MagicMock()
+        if call_count == 1:
+            # CREATE observation
+            result.result_set = [[mock_obs_node]]
+        elif call_count == 2:
+            # get_node for re-embedding
+            result.result_set = [[mock_entity_node]]
+        else:
+            # get_observations_for_entity
+            result.result_set = [[mock_obs_node]]
+        return result
+
+    graph.query.side_effect = query_side_effect
 
     params = ObservationParams(
         entity_id="ent-123", content="User likes Python", certainty="confirmed"
@@ -111,7 +144,11 @@ async def test_happy_add_observation(memory_service: MemoryService) -> None:
     assert result["id"] == "obs-789"
     assert result["content"] == "User likes Python"
 
-    # Verify Cypher has both node creation and linking
-    cypher = graph.query.call_args[0][0]
-    assert "CREATE (o:Observation" in cypher
-    assert "CREATE (e)-[:HAS_OBSERVATION]->(o)" in cypher
+    # Verify observation CREATE query was the first call
+    first_call_cypher = graph.query.call_args_list[0][0][0]
+    assert "CREATE (o:Observation" in first_call_cypher
+    assert "CREATE (e)-[:HAS_OBSERVATION]->(o)" in first_call_cypher
+
+    # Verify vector_store was called at least twice:
+    # once for observation, once for entity re-embed
+    assert memory_service.vector_store.upsert.call_count >= 2  # type: ignore[union-attr]

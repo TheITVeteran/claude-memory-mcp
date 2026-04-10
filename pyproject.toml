@@ -113,6 +113,7 @@ ignore = []
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101", "PLR2004", "PLC0415", "E501"] # Allow asserts, magic numbers, lazy imports, and long lines in tests
 "scripts/*" = ["E501", "S603", "S602", "S105", "S106", "S311", "PLC0415", "PLW1508", "PLR2004", "PLR0915", "PLR1722", "B007", "E402", "UP022"] # Relaxed for utility scripts
+"benchmarks/*" = ["S101", "PLR2004", "PLC0415", "E501", "S310"] # Relaxed for benchmark scripts
 
 [tool.mypy]
 python_version = "3.12"

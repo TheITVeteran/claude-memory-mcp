@@ -285,3 +285,22 @@ class RepositoryQueryMixin:
         graph = self.select_graph()  # type: ignore[attr-defined]
         result = graph.query("MATCH (n:Entity) RETURN n.id LIMIT $limit", {"limit": limit})
         return [row[0] for row in result.result_set if row]
+
+    @retry_on_transient()
+    def get_observations_for_entity(self, entity_id: str, limit: int = 20) -> list[dict[str, Any]]:
+        """Fetch observations linked to an entity via HAS_OBSERVATION.
+
+        Returns most recent observations first, capped at ``limit``.
+        Used by ``_compute_entity_embedding_text`` to build rich
+        entity embeddings that include observation content.
+        """
+        graph = self.select_graph()  # type: ignore[attr-defined]
+        query = """
+        MATCH (e)-[:HAS_OBSERVATION]->(o:Observation)
+        WHERE e.id = $entity_id
+        RETURN o
+        ORDER BY o.created_at DESC
+        LIMIT $limit
+        """
+        result = graph.query(query, {"entity_id": entity_id, "limit": limit})
+        return [row[0].properties for row in result.result_set if row]
