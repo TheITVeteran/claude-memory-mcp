@@ -167,3 +167,15 @@
 - **Gotcha**: We set `hnsw_index.on_disk_threshold` to 1000 via `vector_store.py`'s `_ensure_collection()`.
 - **Risk**: Collections with fewer than 1000 points use brute-force search (slower for large collections, but avoids index-building overhead for small ones).
 - **Fix**: This threshold is appropriate for brain sizes up to ~5000 entities. For larger brains, increase or remove the threshold.
+
+## 29. Observation Triggers Entity Re-Embedding
+
+- **Gotcha**: `add_observation()` now re-embeds the **parent entity** using a composite text (name + type + description + all observations).
+- **Risk**: High-frequency observation additions cause repeated embedding API calls. Each `add_observation` is O(1) embedding call + O(n) observation fetch.
+- **Fix**: This is by design — entity vectors must stay semantically current. Batch observation additions don't yet coalesce re-embedding calls. For bulk imports, add observations first and call `reembed_entities.py` once.
+
+## 30. Dashboard Test `sys.modules` Pollution
+
+- **Gotcha**: `test_dashboard.py` and `test_dashboard_app.py` both import `dashboard.app` with different mocks. If `test_dashboard.py` runs first (alphabetical), it caches `dashboard.*` modules in `sys.modules` with its own `mock_st`.
+- **Risk**: `test_dashboard_app.py` only deleted `dashboard.app` from `sys.modules`, leaving `dashboard` and `dashboard.radar_viz` cached. The reimported module's `st` reference bound to the wrong mock, causing `assert_called()` failures.
+- **Fix**: `_import_dashboard()` now purges **all** `dashboard.*` modules from `sys.modules` before reimport. (Fixed in commit `a8ebabb`.)

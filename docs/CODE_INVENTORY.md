@@ -1,6 +1,6 @@
 # Code Inventory
 
-A manifest of the project structure. Last updated: April 7, 2026.
+A manifest of the project structure. Last updated: April 10, 2026.
 
 ## Core Logic (`src/claude_memory/`)
 
@@ -31,7 +31,7 @@ A manifest of the project structure. Last updated: April 7, 2026.
 | `interfaces.py`           | **Protocols**. Abstract base classes (e.g., `Embedder`) for decoupling.                                                   |
 | `ontology.py`             | **Type System**. Runtime ontology management for custom memory types.                                                     |
 | **Infrastructure**        |                                                                                                                           |
-| `server.py`               | **MCP Server**. Wires services together, exposes 33 functions as MCP Tools. **stdio transport only.**                     |
+| `server.py`               | **MCP Server**. Wires services together, exposes 34 functions as MCP Tools. **stdio transport only.**                     |
 | `lock_manager.py`         | **Concurrency**. Redis-based distributed locking with file-based fallback. REDIS\_\* env vars take precedence.            |
 | `retry.py`                | **Resilience**. `@retry_on_transient` decorator for handling transient connection failures.                               |
 | `repository_queries.py`   | **Query Builder**. Cypher query construction helpers for repository.                                                      |
@@ -43,9 +43,10 @@ A manifest of the project structure. Last updated: April 7, 2026.
 
 ## Dashboard (`src/dashboard/`)
 
-| File     | Purpose                                                                                         |
-| -------- | ----------------------------------------------------------------------------------------------- |
-| `app.py` | **Streamlit App**. Graph visualization, stats, diagnostics. Healthchecked on `/_stcore/health`. |
+| File           | Purpose                                                                                                                            |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `app.py`       | **Streamlit App**. Graph visualization, stats, diagnostics, radar tab. Healthchecked on `/_stcore/health`.                         |
+| `radar_viz.py` | **Radar Visualization**. Interactive pyvis graph for Semantic Radar relationship discovery. Renders suggested edges with tooltips.  |
 
 ## Tests (`tests/`)
 
@@ -93,6 +94,9 @@ A manifest of the project structure. Last updated: April 7, 2026.
 | `unit/test_backup_restore.py`     | Backup/restore script tests.                                    |
 | `unit/test_crud_split_brain.py`   | W3 strict consistency tests (Qdrant-down behavior).             |
 | `unit/test_librarian_repro.py`    | Librarian edge case reproductions.                              |
+| `unit/test_diff_knowledge_state.py` | Diff Mode time-based knowledge graph diffs.                    |
+| `unit/test_radar_viz.py`          | Radar visualization rendering and edge cases.                   |
+| `unit/test_vector_store_radar.py` | Vector store radar query and similarity methods.                |
 
 ### E2E / UAT (`tests/`)
 
@@ -100,7 +104,14 @@ A manifest of the project structure. Last updated: April 7, 2026.
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `e2e_functional.py` | **Exhaustive UAT**. 31-phase, 74-check lifecycle against the live Docker stack (CRUD, search, relationships, observations, temporal, sessions, graph health, strict consistency, associative, hologram, consolidation, ontology, archive/prune, knowledge gaps, cleanup, split-brain, reconnect, router strategies, deep search, bottles, concurrent creates, PRECEDED_BY chain, error recovery, algorithm semantics, point-in-time). |
 
-**Total: 1,121 tests across 77 files, ~98% coverage.**
+**Total: 1,166 tests (1,027 unit + 139 gauntlet) across 76 files, ~98% coverage.**
+
+## Benchmarks (`benchmarks/`)
+
+| File                       | Purpose                                                                                          |
+| -------------------------- | ------------------------------------------------------------------------------------------------ |
+| `longmemeval/runner.py`    | **LongMemEval Runner**. Orchestrates benchmark evaluation against the live memory system.         |
+| `longmemeval/metrics.py`   | **Metrics**. Scoring functions for benchmark evaluation (recall, precision, F1).                  |
 
 ## Configuration
 
@@ -166,3 +177,4 @@ A manifest of the project structure. Last updated: April 7, 2026.
 | `embed_observations.py`     | **Backfill**. Embeds existing observation content into Qdrant (E-3 retroactive). Idempotent, `--dry-run` support.                             |
 | `validate_brain.py`         | **Health Check**. 9-check live brain validator (split-brain, bottle chain, temporal, obs vectors, maxmemory, ghosts, orphans, indices, HNSW). |
 | `purge_ghost_vectors.py`    | **Repair**. Removes orphan Qdrant vectors with no matching graph entity.                                                                      |
+| `reembed_entities.py`       | **Migration**. Re-embeds all entities with observation-aware composite text (entity embedding quality fix).                                     |

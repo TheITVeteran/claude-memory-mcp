@@ -7,13 +7,13 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](docker-compose.yml)
-[![Outils MCP](https://img.shields.io/badge/MCP%20tools-33-green.svg)]()
-[![Tests](https://img.shields.io/badge/tests-1%2C147%20passing-brightgreen)]()
+[![Outils MCP](https://img.shields.io/badge/MCP%20tools-34-green.svg)]()
+[![Tests](https://img.shields.io/badge/tests-1%2C166%20passing-brightgreen)]()
 [![Qualité](https://img.shields.io/badge/gauntlet-A%E2%88%92%20(95%2F100)-blue)]()
 [![GPU](https://img.shields.io/badge/GPU-CUDA%20supported-orange.svg)]()
 [![GitHub stars](https://img.shields.io/github/stars/iikarus/Dragon-Brain)](https://github.com/iikarus/Dragon-Brain/stargazers)
 
-> **1 599 souvenirs** · **33 outils MCP** · **Graphe de connaissances + recherche vectorielle hybride** · **recherche <200ms** · **1 147 tests**
+> **1 599 souvenirs** · **34 outils MCP** · **Graphe de connaissances + recherche vectorielle hybride** · **recherche <200ms** · **1 166 tests**
 
 Un serveur MCP open source qui fournit une mémoire à long terme à n'importe quel LLM grâce à un hybride graphe de connaissances + recherche vectorielle. Stockez des entités, des observations et des relations — puis retrouvez-les sémantiquement entre les sessions. Compatible avec tout client MCP : Claude Code, Claude Desktop, Cursor, Windsurf, Cline, Gemini CLI.
 
@@ -99,7 +99,7 @@ IA :   "Vous construisez Atlas en Rust avec une approche fonctionnelle..." [rapp
 
 ## Qualité
 
-Tests de niveau production : **1 147 tests** · tests de mutation (3-evil/1-sad/1-happy) · tests basés sur les propriétés (38 propriétés Hypothesis) · fuzz testing (30K+ entrées, 0 crash) · analyse statique (mypy mode strict, ruff) · audit de sécurité · **Score Gauntlet : A- (95/100)**.
+Tests de niveau production : **1 166 tests** · tests de mutation (3-evil/1-sad/1-happy) · tests basés sur les propriétés (38 propriétés Hypothesis) · fuzz testing (30K+ entrées, 0 crash) · analyse statique (mypy mode strict, ruff) · audit de sécurité · **Score Gauntlet : A- (95/100)**.
 
 Résultats complets : [GAUNTLET_RESULTS.md](docs/GAUNTLET_RESULTS.md)
 

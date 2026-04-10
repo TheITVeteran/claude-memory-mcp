@@ -1,6 +1,6 @@
 # MCP Tool Reference
 
-Complete reference for the **33 MCP tools** exposed by the Dragon Brain memory system.
+Complete reference for the **34 MCP tools** exposed by the Dragon Brain memory system.
 
 ---
 
@@ -96,6 +96,8 @@ Add an observation (fact, note) linked to an entity.
 
 > [!NOTE]
 > Observations are automatically embedded and upserted to the vector store (E-3).
+> Adding an observation also **re-embeds the parent entity** — entity vectors
+> include observation content for richer semantic matching.
 
 ---
 
@@ -245,6 +247,24 @@ Execute a search considering only knowledge known before `as_of`.
 | `as_of`      | `str` (ISO 8601) | required |
 
 **Returns:** `list[dict]` — results filtered by temporal cutoff
+
+### `diff_knowledge_state`
+
+Diff the knowledge graph between two points in time. Shows what was added, removed,
+or evolved between two timestamps.
+
+| Param                  | Type             | Default  |
+| ---------------------- | ---------------- | -------- |
+| `as_of_start`          | `str` (ISO 8601) | required |
+| `as_of_end`            | `str` (ISO 8601) | required |
+| `project_id`           | `str`            | `None`   |
+| `include_observations` | `bool`           | `False`  |
+
+**Returns:** `dict` — `{added_entities, removed_entities, evolved_entities, added_relationships, removed_relationships, supersessions}`
+
+> [!NOTE]
+> `include_observations=True` adds per-entity observation diffs (verbose). Use for
+> sprint retrospectives, monthly reviews, or "what did I learn last week?"
 
 ---
 

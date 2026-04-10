@@ -7,13 +7,13 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](docker-compose.yml)
-[![MCP-Werkzeuge](https://img.shields.io/badge/MCP%20tools-33-green.svg)]()
-[![Tests](https://img.shields.io/badge/tests-1%2C147%20passing-brightgreen)]()
+[![MCP-Werkzeuge](https://img.shields.io/badge/MCP%20tools-34-green.svg)]()
+[![Tests](https://img.shields.io/badge/tests-1%2C166%20passing-brightgreen)]()
 [![Qualität](https://img.shields.io/badge/gauntlet-A%E2%88%92%20(95%2F100)-blue)]()
 [![GPU](https://img.shields.io/badge/GPU-CUDA%20supported-orange.svg)]()
 [![GitHub stars](https://img.shields.io/github/stars/iikarus/Dragon-Brain)](https://github.com/iikarus/Dragon-Brain/stargazers)
 
-> **1.599 Erinnerungen** · **33 MCP-Werkzeuge** · **Wissensgraph + Vektorsuche Hybrid** · **Suche <200ms** · **1.147 Tests**
+> **1.599 Erinnerungen** · **34 MCP-Werkzeuge** · **Wissensgraph + Vektorsuche Hybrid** · **Suche <200ms** · **1.166 Tests**
 
 Ein Open-Source MCP-Server, der jedem LLM Langzeitgedächtnis durch einen Wissensgraph + Vektorsuche Hybrid bietet. Speichern Sie Entitäten, Beobachtungen und Beziehungen — und rufen Sie sie semantisch über Sitzungen hinweg ab. Kompatibel mit jedem MCP-Client: Claude Code, Claude Desktop, Cursor, Windsurf, Cline, Gemini CLI.
 
@@ -99,7 +99,7 @@ KI:  "Sie bauen Atlas in Rust mit funktionalem Ansatz..." [aus dem Graph abgeruf
 
 ## Qualität
 
-Produktionsqualitäts-Tests: **1.147 Tests** · Mutationstests (3-evil/1-sad/1-happy) · Eigenschaftsbasierte Tests (38 Hypothesis-Eigenschaften) · Fuzz-Tests (30K+ Eingaben, 0 Abstürze) · Statische Analyse (mypy Strict-Modus, ruff) · Sicherheitsaudit · **Gauntlet-Bewertung: A- (95/100)**.
+Produktionsqualitäts-Tests: **1.166 Tests** · Mutationstests (3-evil/1-sad/1-happy) · Eigenschaftsbasierte Tests (38 Hypothesis-Eigenschaften) · Fuzz-Tests (30K+ Eingaben, 0 Abstürze) · Statische Analyse (mypy Strict-Modus, ruff) · Sicherheitsaudit · **Gauntlet-Bewertung: A- (95/100)**.
 
 Vollständige Ergebnisse: [GAUNTLET_RESULTS.md](docs/GAUNTLET_RESULTS.md)
 

@@ -8,6 +8,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- **Diff Mode** (`e7da6aa`) — `diff_knowledge_state` MCP tool for time-based
+  knowledge graph diffs. Shows added/removed/evolved entities and relationships
+  between two timestamps. Supports `include_observations` for per-entity
+  observation diffs.
+- **Entity Embedding Quality Fix** (`dcbab40`) — Write-time observation-aware
+  embeddings. `_compute_entity_embedding_text()` centralizes embedding text
+  generation; `add_observation` triggers parent entity re-embedding for richer
+  semantic matching.
+- **Semantic Radar Dashboard Tab** (`fb07392`, `12b1293`) — New "Radar" tab in
+  Streamlit dashboard with `radar_viz.py` for interactive relationship discovery
+  visualization. Includes entity name resolution fix.
+- **LongMemEval Benchmark Infrastructure** — `benchmarks/longmemeval/` with
+  `runner.py` and `metrics.py` for standardized benchmark evaluation.
+- `scripts/reembed_entities.py` — Migration script to re-embed all existing
+  entities with observation-aware vectors.
+
+### Fixed
+
+- Dashboard test cross-file mock leakage (`a8ebabb`) — Purge all `dashboard.*`
+  modules from `sys.modules` before reimport to prevent stale mock references
+  when `test_dashboard.py` runs before `test_dashboard_app.py`.
+- Redundant `noqa` directives in benchmarks (`51e5870`).
+- Gold Stack green — format, docstrings, codespell, CVE remediation (`16e6567`).
+- mypy + bandit — 6 type errors, `nosec B110`, hammer isolation (`b6df7f2`).
+- `nest-asyncio` added to `pyproject.toml` — dashboard `app.py` imports it,
+  CI was missing it (`efb6b16`).
+
+### Changed
+
+- Total test suite: 1,166 tests (1,027 unit + 139 gauntlet) across 76 files.
+- MCP tools: 33 → **34** (added `diff_knowledge_state`).
+- Test remediation consolidated stale tests after Hybrid Search Unification —
+  unit count decreased from 1,147 to 1,027 while total coverage increased.
+
+
 - **E-1: Bottle Reader with Content** (`bd2df89`) — `include_content` parameter
   in `BottleQueryParams` and `get_bottles()` to hydrate bottles with observation
   content in a single call.

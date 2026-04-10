@@ -25,6 +25,11 @@ High-performance vector similarity search.
 - **Features**: MMR diversity search, HNSW optimized threshold (500), full-text payload index on `name`.
 - **Env**: `QDRANT_HOST` (default `localhost`, set to `qdrant` in Docker).
 
+> **Entity Embedding Quality**: Entity vectors are computed from a composite text
+> that includes name, type, description, and all observation content. Adding an
+> observation triggers automatic re-embedding of the parent entity, ensuring
+> vectors stay semantically rich over time.
+
 ### Relationships
 
 Edges in the graph.
@@ -127,7 +132,7 @@ All ports are bound to `127.0.0.1` — no external access.
 
 | Tier   | What                                                           |
 | ------ | -------------------------------------------------------------- |
-| pulse   | Ruff lint + format check + Mypy strict + Pytest (1,147 tests)  |
+| pulse   | Ruff lint + format check + Mypy strict + Pytest (1,166 tests)  |
 | gate    | Hypothesis property tests + diff-cover (changed-line coverage) |
 | hammer  | Security scanning (bandit, pip-audit, detect-secrets)          |
 | polish  | Codespell (typos) + docstr-coverage (docstring completeness)   |

@@ -1,8 +1,8 @@
 # User Manual: The Exocortex
 
-This manual describes how to interact with the Claude Memory System. Last updated: February 14, 2026.
+This manual describes how to interact with the Claude Memory System. Last updated: April 10, 2026.
 
-## 🤖 For Claude (MCP Tools — 33 Total)
+## 🤖 For Claude (MCP Tools — 34 Total)
 
 The system exposes the following tools via the Model Context Protocol (stdio transport).
 
@@ -12,7 +12,7 @@ The system exposes the following tools via the Model Context Protocol (stdio tra
   - Creates a new memory node with optional metadata. Automatically links to most recent entity in the same project via `PRECEDED_BY`.
   - _Example_: `create_entity("Project Tesseract", "Project", "tesseract", {"status": "active"})`
 - **`add_observation(entity_id, content, certainty, evidence)`**
-  - Adds a raw observation/note linked to an entity.
+  - Adds a raw observation/note linked to an entity. Also **re-embeds the parent entity** with observation content for richer semantic matching.
   - _Example_: `add_observation("123-abc", "The build failed due to missing wheel.")`
 - **`update_entity(entity_id, properties, reason)`**
   - Updates an existing entity's properties.
@@ -55,6 +55,10 @@ The system exposes the following tools via the Model Context Protocol (stdio tra
 - **`get_bottles(limit, search_text, before_date, after_date, project_id, include_content)`**
   - Queries "Message in a Bottle" entities — timestamped notes to your future self.
   - **`include_content=True`** hydrates bottles with observation text (E-1).
+- **`diff_knowledge_state(as_of_start, as_of_end, project_id, include_observations)`**
+  - Time-based diff: "What changed between date A and date B?"
+  - Shows added/removed/evolved entities and relationships.
+  - _Example_: `diff_knowledge_state("2026-03-01T00:00:00Z", "2026-04-01T00:00:00Z")`
 
 ### Session Management
 

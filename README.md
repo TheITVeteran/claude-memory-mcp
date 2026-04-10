@@ -8,13 +8,13 @@
 [![CI](https://github.com/iikarus/Dragon-Brain/actions/workflows/ci.yml/badge.svg)](https://github.com/iikarus/Dragon-Brain/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](docker-compose.yml)
-[![MCP Tools](https://img.shields.io/badge/MCP%20tools-33-green.svg)]()
-[![Tests](https://img.shields.io/badge/tests-1%2C147%20passing-brightgreen)]()
+[![MCP Tools](https://img.shields.io/badge/MCP%20tools-34-green.svg)]()
+[![Tests](https://img.shields.io/badge/tests-1%2C166%20passing-brightgreen)]()
 [![Gauntlet](https://img.shields.io/badge/gauntlet-A%E2%88%92%20(95%2F100)-blue)]()
 [![GPU](https://img.shields.io/badge/GPU-CUDA%20supported-orange.svg)]()
 [![GitHub stars](https://img.shields.io/github/stars/iikarus/Dragon-Brain)](https://github.com/iikarus/Dragon-Brain/stargazers)
 
-> **1,599 memories** · **33 MCP tools** · **Graph + Vector hybrid retrieval** · **sub-200ms search** · **1,147 tests**
+> **1,599 memories** · **34 MCP tools** · **Graph + Vector hybrid retrieval** · **sub-200ms search** · **1,166 tests**
 
 An open-source MCP server that gives any LLM long-term memory using a knowledge graph + vector search hybrid. Store entities, observations, and relationships — then recall them semantically across sessions. Works with any MCP client: Claude Code, Claude Desktop, Cursor, Windsurf, Cline, Gemini CLI, VS Code Copilot, or any LLM that speaks [Model Context Protocol](https://modelcontextprotocol.io/).
 
@@ -129,10 +129,10 @@ AI:  "You're building Atlas in Rust with a functional approach..." [recalled fro
 | **Typed Relationships** | Weighted edges | — | — | Edges | — | — |
 | **Session Tracking** | ✓ | — | — | — | ✓ | — |
 | **Model Agnostic** | Any MCP client | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Test Suite** | 1,147 tests | — | — | — | — | — |
+| **Test Suite** | 1,166 tests | — | — | — | — | — |
 | **Mutation Testing** | ✓ | — | — | — | — | — |
 | **Dashboard** | Streamlit | — | — | — | — | ✓ |
-| **MCP Tools** | 33 | — | — | — | — | — |
+| **MCP Tools** | 34 | — | — | — | — | — |
 
 > *Feature comparison based on public READMEs as of March 2026. Open an issue if anything is inaccurate.*
 
@@ -229,7 +229,7 @@ Track misconceptions across cohorts. Discover cross-course concept connections.
 ```mermaid
 graph TB
     Client["Any MCP Client<br/>(Claude, Cursor, Cline, ...)"]
-    Server["Dragon Brain MCP Server<br/>33 tools · FastMCP"]
+    Server["Dragon Brain MCP Server<br/>34 tools · FastMCP"]
     FalkorDB["FalkorDB<br/>Knowledge Graph · Cypher"]
     Qdrant["Qdrant<br/>Vector Search · HNSW"]
     Embeddings["Embedding Service<br/>BGE-M3 · 1024d"]
@@ -257,7 +257,7 @@ graph TB
 ```
 Dragon-Brain/
 ├── src/
-│   ├── claude_memory/          # MCP server — 33 tools, services, repositories
+│   ├── claude_memory/          # MCP server — 34 tools, services, repositories
 │   │   ├── server.py           # FastMCP entry point
 │   │   ├── tools.py            # MCP tool definitions
 │   │   ├── search.py           # Hybrid search (vector + graph + RRF)
@@ -269,8 +269,8 @@ Dragon-Brain/
 │   │   └── ...                 # Schema, embedding, analysis, etc.
 │   └── dashboard/              # Streamlit monitoring dashboard
 ├── tests/
-│   ├── unit/                   # 1,147 tests (3-evil/1-sad/1-happy per function)
-│   └── gauntlet/               # Mutation, fuzz, property-based, concurrency tests
+│   ├── unit/                   # 1,027 unit tests (3-evil/1-sad/1-happy per function)
+│   └── gauntlet/               # 139 mutation, fuzz, property-based, concurrency tests
 ├── docs/                       # Architecture, user manual, runbook, ADRs
 │   └── adr/                    # 7 Architecture Decision Records
 ├── scripts/                    # Docker, backup, health check, e2e tests
@@ -294,13 +294,13 @@ Dragon-Brain/
 | `semantic_radar` | Discover missing relationships via vector-graph gap analysis |
 | `graph_health` | Get stats on your memory graph — node counts, edge density, orphans |
 
-All 33 tools are documented in [docs/MCP_TOOL_REFERENCE.md](docs/MCP_TOOL_REFERENCE.md).
+All 34 tools are documented in [docs/MCP_TOOL_REFERENCE.md](docs/MCP_TOOL_REFERENCE.md).
 
 ## Quality
 
 This isn't a weekend hack. It's tested like production software:
 
-- **1,147 tests** across 73 unit test files, 0 failures, 0 skipped
+- **1,166 tests** across 76 test files, 0 failures, 0 skipped
 - **Mutation testing** — 2,270 mutants, 1,184 killed across 27 source files (3-evil/1-sad/1-happy per function)
 - **Property-based testing** — 38 Hypothesis properties
 - **Fuzz testing** — 30K+ inputs, 0 crashes
@@ -320,7 +320,7 @@ Claude is brilliant but forgets everything between conversations. Every new chat
 | Doc | What's In It |
 |-----|-------------|
 | [User Manual](docs/USER_MANUAL.md) | How to use each tool with examples |
-| [MCP Tool Reference](docs/MCP_TOOL_REFERENCE.md) | API reference: all 33 tools, params, return shapes |
+| [MCP Tool Reference](docs/MCP_TOOL_REFERENCE.md) | API reference: all 34 tools, params, return shapes |
 | [Architecture](docs/ARCHITECTURE.md) | System design, data model, component diagram |
 | [Maintenance Manual](docs/MAINTENANCE_MANUAL.md) | Backups, monitoring, troubleshooting |
 | [Runbook](docs/RUNBOOK.md) | 10 incident response recipes |

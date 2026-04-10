@@ -7,13 +7,13 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](docker-compose.yml)
-[![Herramientas MCP](https://img.shields.io/badge/MCP%20tools-33-green.svg)]()
-[![Tests](https://img.shields.io/badge/tests-1%2C147%20passing-brightgreen)]()
+[![Herramientas MCP](https://img.shields.io/badge/MCP%20tools-34-green.svg)]()
+[![Tests](https://img.shields.io/badge/tests-1%2C166%20passing-brightgreen)]()
 [![Calidad](https://img.shields.io/badge/gauntlet-A%E2%88%92%20(95%2F100)-blue)]()
 [![GPU](https://img.shields.io/badge/GPU-CUDA%20supported-orange.svg)]()
 [![GitHub stars](https://img.shields.io/github/stars/iikarus/Dragon-Brain)](https://github.com/iikarus/Dragon-Brain/stargazers)
 
-> **1,599 memorias** · **33 herramientas MCP** · **Grafo de conocimiento + búsqueda vectorial híbrida** · **búsqueda <200ms** · **1,147 tests**
+> **1,599 memorias** · **34 herramientas MCP** · **Grafo de conocimiento + búsqueda vectorial híbrida** · **búsqueda <200ms** · **1,166 tests**
 
 Un servidor MCP de código abierto que proporciona memoria a largo plazo a cualquier LLM mediante un grafo de conocimiento + búsqueda vectorial híbrida. Almacena entidades, observaciones y relaciones — luego las recupera semánticamente entre sesiones. Compatible con cualquier cliente MCP: Claude Code, Claude Desktop, Cursor, Windsurf, Cline, Gemini CLI.
 
@@ -126,7 +126,7 @@ IA:  "Estás construyendo Atlas en Rust con un enfoque funcional..." [recuperado
 ```mermaid
 graph TB
     Client["Cualquier Cliente MCP<br/>(Claude, Cursor, Cline, ...)"]
-    Server["Dragon Brain MCP Server<br/>33 tools · FastMCP"]
+    Server["Dragon Brain MCP Server<br/>34 tools · FastMCP"]
     FalkorDB["FalkorDB<br/>Grafo de Conocimiento · Cypher"]
     Qdrant["Qdrant<br/>Búsqueda Vectorial · HNSW"]
     Embeddings["Servicio de Embedding<br/>BGE-M3 · 1024d"]
@@ -166,7 +166,7 @@ graph TB
 | `semantic_radar` | Descubre relaciones faltantes mediante análisis de brecha vector-grafo |
 | `graph_health` | Estadísticas del grafo de memoria — conteo de nodos, densidad de aristas, huérfanos |
 
-Las 33 herramientas están documentadas en [docs/MCP_TOOL_REFERENCE.md](docs/MCP_TOOL_REFERENCE.md).
+Las 34 herramientas están documentadas en [docs/MCP_TOOL_REFERENCE.md](docs/MCP_TOOL_REFERENCE.md).
 
 ## Por Qué Lo Construí
 
@@ -174,7 +174,7 @@ Claude es brillante pero olvida todo entre conversaciones. Cada nuevo chat comie
 
 ## Calidad
 
-Testing de grado productivo: **1,147 tests** · testing de mutaciones (3-evil/1-sad/1-happy) · testing basado en propiedades (38 propiedades Hypothesis) · fuzz testing (30K+ entradas, 0 crashes) · análisis estático (mypy modo estricto, ruff) · auditoría de seguridad · **Puntuación Gauntlet: A- (95/100)**.
+Testing de grado productivo: **1,166 tests** · testing de mutaciones (3-evil/1-sad/1-happy) · testing basado en propiedades (38 propiedades Hypothesis) · fuzz testing (30K+ entradas, 0 crashes) · análisis estático (mypy modo estricto, ruff) · auditoría de seguridad · **Puntuación Gauntlet: A- (95/100)**.
 
 Resultados completos: [GAUNTLET_RESULTS.md](docs/GAUNTLET_RESULTS.md)
 
@@ -200,7 +200,7 @@ Más: [docs/GOTCHAS.md](docs/GOTCHAS.md) · [docs/RUNBOOK.md](docs/RUNBOOK.md)
 | Doc | Contenido |
 |-----|-----------|
 | [Manual de Usuario](docs/USER_MANUAL.md) | Cómo usar cada herramienta con ejemplos |
-| [Referencia de Herramientas MCP](docs/MCP_TOOL_REFERENCE.md) | Referencia API: las 33 herramientas, parámetros, formatos de respuesta |
+| [Referencia de Herramientas MCP](docs/MCP_TOOL_REFERENCE.md) | Referencia API: las 34 herramientas, parámetros, formatos de respuesta |
 | [Arquitectura](docs/ARCHITECTURE.md) | Diseño del sistema, modelo de datos, diagrama de componentes |
 | [Manual de Mantenimiento](docs/MAINTENANCE_MANUAL.md) | Respaldos, monitoreo, resolución de problemas |
 | [Runbook](docs/RUNBOOK.md) | 10 recetas de respuesta a incidentes |
