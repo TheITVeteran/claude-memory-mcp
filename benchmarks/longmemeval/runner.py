@@ -44,7 +44,7 @@ def download_dataset(
     Returns:
         List of evaluation instances.
     """
-    import urllib.request  # noqa: PLC0415
+    import urllib.request
 
     if cache_dir is None:
         cache_dir = Path(__file__).parent / "data"
@@ -56,7 +56,7 @@ def download_dataset(
     if not filepath.exists():
         url = f"{DATASET_BASE_URL}/{filename}"
         logger.info("Downloading %s → %s", url, filepath)
-        urllib.request.urlretrieve(url, filepath)  # noqa: S310
+        urllib.request.urlretrieve(url, filepath)
     else:
         logger.info("Using cached dataset: %s", filepath)
 
@@ -265,7 +265,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     # Import here to avoid import-time side effects
-    from claude_memory.tools import MemoryService  # noqa: PLC0415
+    from claude_memory.tools import MemoryService
 
     service = MemoryService()
 
