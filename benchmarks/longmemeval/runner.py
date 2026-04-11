@@ -68,7 +68,7 @@ async def ingest_sessions(
     service: Any,
     instance: dict[str, Any],
     project_id: str = "longmemeval",
-) -> list[str]:
+) -> dict[str, str]:
     """Ingest haystack sessions for one evaluation instance.
 
     Each session is stored as a single entity with all turns
@@ -81,10 +81,13 @@ async def ingest_sessions(
         project_id: Project scope for isolation.
 
     Returns:
-        List of entity IDs created during ingestion.
+        Mapping of dataset session ID → Dragon Brain entity UUID.
     """
-    entity_ids: list[str] = []
+    from claude_memory.schema import EntityCreateParams
+
+    id_map: dict[str, str] = {}  # dataset_session_id → entity_uuid
     sessions = instance.get("haystack_sessions", [])
+    session_ids = instance.get("haystack_session_ids", [])
 
     for i, session in enumerate(sessions):
         # Concatenate turns into a single text block
@@ -92,22 +95,24 @@ async def ingest_sessions(
             f"{turn.get('role', 'unknown')}: {turn.get('content', '')}" for turn in session
         )
 
-        # Create entity for this session
+        # Use the dataset session ID if available, else fall back to index
+        dataset_sid = session_ids[i] if i < len(session_ids) else f"session_{i}"
         entity_name = f"Session_{instance['question_id']}_{i}"
         try:
-            result = await service.create_entity(
+            params = EntityCreateParams(
                 name=entity_name,
-                entity_type="ChatSession",
-                observations=[turns_text],
+                node_type="Entity",
                 project_id=project_id,
+                properties={"description": turns_text[:500]},
             )
-            eid = result.get("id", "") if isinstance(result, dict) else ""
+            result = await service.create_entity(params)
+            eid = result.id if hasattr(result, "id") else ""
             if eid:
-                entity_ids.append(eid)
+                id_map[dataset_sid] = eid
         except Exception:
             logger.exception("Failed to ingest session %d for %s", i, instance["question_id"])
 
-    return entity_ids
+    return id_map
 
 
 async def query_system(
@@ -131,16 +136,14 @@ async def query_system(
         limit=10,
     )
 
-    entities = results.get("entities", [])
-    retrieved_ids = [e.get("id", "") for e in entities]
+    # results is list[SearchResult] — pydantic models with .id, .name, .observations
+    retrieved_ids = [r.id for r in results]
 
     # Build answer from top results
     answer_parts = []
-    for entity in entities[:3]:
-        name = entity.get("name", "")
-        obs = entity.get("observations", [])
-        obs_text = "; ".join(obs[:3]) if obs else ""
-        answer_parts.append(f"{name}: {obs_text}" if obs_text else name)
+    for r in results[:3]:
+        obs_text = "; ".join(r.observations[:3]) if r.observations else ""
+        answer_parts.append(f"{r.name}: {obs_text}" if obs_text else r.name)
 
     return {
         "answer": " | ".join(answer_parts) if answer_parts else "No results found.",
@@ -183,16 +186,18 @@ async def run_benchmark(
         qid = instance["question_id"]
         logger.info("[%d/%d] Processing %s", i + 1, len(dataset), qid)
 
-        # Ingest
-        entity_ids = await ingest_sessions(service, instance)
+        # Ingest — returns mapping of dataset session IDs → entity UUIDs
+        id_map = await ingest_sessions(service, instance)
 
         # Query
         response = await query_system(service, instance["question"])
 
-        # Evaluate retrieval
+        # Translate answer_session_ids from dataset namespace → our UUIDs
         answer_session_ids = instance.get("answer_session_ids", [])
-        r_at_5 = recall_at_k(response["retrieved_ids"], answer_session_ids, k=5)
-        r_at_10 = recall_at_k(response["retrieved_ids"], answer_session_ids, k=10)
+        expected_uuids = [id_map[sid] for sid in answer_session_ids if sid in id_map]
+
+        r_at_5 = recall_at_k(response["retrieved_ids"], expected_uuids, k=5)
+        r_at_10 = recall_at_k(response["retrieved_ids"], expected_uuids, k=10)
 
         score = {
             "recall_at_5": r_at_5,
@@ -208,7 +213,8 @@ async def run_benchmark(
                 "expected_answer": instance["answer"],
                 "hypothesis": response["answer"],
                 "retrieved_ids": response["retrieved_ids"],
-                "ingested_entity_ids": entity_ids,
+                "expected_uuids": expected_uuids,
+                "id_map": id_map,
                 "metrics": score,
             }
         )
@@ -265,9 +271,11 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     # Import here to avoid import-time side effects
+    from claude_memory.embedding import EmbeddingService
     from claude_memory.tools import MemoryService
 
-    service = MemoryService()
+    embedder = EmbeddingService()
+    service = MemoryService(embedding_service=embedder)
 
     output_path = Path(args.output) if args.output else None
     asyncio.run(

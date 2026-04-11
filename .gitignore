@@ -143,3 +143,7 @@ social_preview*.png
 graph.html
 
 test_dynamic_ontology.json
+
+benchmarks/longmemeval/data/
+benchmarks/longmemeval/results/
+benchmarks/longmemeval/print_results.py
