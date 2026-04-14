@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from benchmarks.longmemeval.metrics import aggregate_scores, recall_at_k
+from benchmarks.longmemeval.metrics import aggregate_scores, recall_any_at_k, recall_at_k
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ async def ingest_sessions(
     session_ids = instance.get("haystack_session_ids", [])
 
     for i, session in enumerate(sessions):
-        # Concatenate turns into a single text block
+        # Concatenate turns into a single text block (FULL content, no truncation)
         turns_text = "\n".join(
             f"{turn.get('role', 'unknown')}: {turn.get('content', '')}" for turn in session
         )
@@ -103,7 +103,7 @@ async def ingest_sessions(
                 name=entity_name,
                 node_type="Entity",
                 project_id=project_id,
-                properties={"description": turns_text[:500]},
+                properties={"description": turns_text},
             )
             result = await service.create_entity(params)
             eid = result.id if hasattr(result, "id") else ""
@@ -134,6 +134,7 @@ async def query_system(
         query=question,
         project_id=project_id,
         limit=10,
+        deep=True,
     )
 
     # results is list[SearchResult] — pydantic models with .id, .name, .observations
@@ -196,14 +197,35 @@ async def run_benchmark(
         answer_session_ids = instance.get("answer_session_ids", [])
         expected_uuids = [id_map[sid] for sid in answer_session_ids if sid in id_map]
 
-        r_at_5 = recall_at_k(response["retrieved_ids"], expected_uuids, k=5)
-        r_at_10 = recall_at_k(response["retrieved_ids"], expected_uuids, k=10)
+        retrieved = response["retrieved_ids"]
+        r_all_5 = recall_at_k(retrieved, expected_uuids, k=5)
+        r_all_10 = recall_at_k(retrieved, expected_uuids, k=10)
+        r_any_5 = recall_any_at_k(retrieved, expected_uuids, k=5)
+        r_any_10 = recall_any_at_k(retrieved, expected_uuids, k=10)
+
+        # Diagnostic: log rank positions of expected UUIDs
+        rank_positions = []
+        for uuid in expected_uuids:
+            if uuid in retrieved:
+                rank_positions.append(retrieved.index(uuid) + 1)  # 1-indexed
+            else:
+                rank_positions.append(-1)  # not found
 
         score = {
-            "recall_at_5": r_at_5,
-            "recall_at_10": r_at_10,
+            "recall_all_at_5": r_all_5,
+            "recall_all_at_10": r_all_10,
+            "recall_any_at_5": r_any_5,
+            "recall_any_at_10": r_any_10,
         }
         question_scores.append(score)
+
+        if r_any_5 < 1.0:
+            logger.debug(
+                "MISS %s: expected=%s ranks=%s",
+                qid,
+                expected_uuids,
+                rank_positions,
+            )
 
         results.append(
             {
@@ -212,9 +234,10 @@ async def run_benchmark(
                 "question": instance["question"],
                 "expected_answer": instance["answer"],
                 "hypothesis": response["answer"],
-                "retrieved_ids": response["retrieved_ids"],
+                "retrieved_ids": retrieved,
                 "expected_uuids": expected_uuids,
                 "id_map": id_map,
+                "rank_positions": rank_positions,
                 "metrics": score,
             }
         )

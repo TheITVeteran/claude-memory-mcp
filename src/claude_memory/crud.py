@@ -141,7 +141,19 @@ class CrudMixin:
                 )
                 raise
 
-            # 3. Link to most recent entity in same project via PRECEDED_BY
+            # 3. Index in FTS5 (lexical search channel)
+            if hasattr(self, "fts_store"):
+                try:
+                    self.fts_store.index_entity(
+                        entity_id=node_id,
+                        name=params.name,
+                        node_type=params.node_type,
+                        description=props.get("description", ""),
+                    )
+                except Exception:
+                    logger.warning("FTS index failed for %s — non-fatal", node_id, exc_info=True)
+
+            # 4. Link to most recent entity in same project via PRECEDED_BY
             warnings: list[str] = []
             try:
                 prev = self.repo.get_most_recent_entity(project_id)
