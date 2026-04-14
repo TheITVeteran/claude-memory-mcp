@@ -312,7 +312,7 @@ class TestRetryDecorator:
             call_count += 1
             raise ConnectionError("fail")
 
-        with pytest.raises(ConnectionError):
+        with patch("time.sleep"), pytest.raises(ConnectionError):
             always_fail()
         assert call_count == 6  # 1 initial + 5 retries
 

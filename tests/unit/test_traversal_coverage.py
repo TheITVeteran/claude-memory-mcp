@@ -8,7 +8,7 @@ Covers uncovered lines 158-193:
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -84,7 +84,7 @@ class TestIncrementSalience:
         m = _make_mixin()
         m.select_graph().query.side_effect = ConnectionError("FalkorDB down")
 
-        with pytest.raises(ConnectionError):
+        with patch("time.sleep"), pytest.raises(ConnectionError):
             m.increment_salience(["e1"])
 
 
@@ -128,7 +128,7 @@ class TestGetMostRecentEntity:
         m = _make_mixin()
         m.select_graph().query.side_effect = RuntimeError("query failed")
 
-        with pytest.raises(RuntimeError):
+        with patch("time.sleep"), pytest.raises(RuntimeError):
             m.get_most_recent_entity("proj-1")
 
     def test_evil_properties_returned_as_dict(self) -> None:
