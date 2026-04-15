@@ -111,6 +111,40 @@ class QueryRouter:
         # 4. Default: semantic vector search
         return QueryIntent.SEMANTIC
 
+    @staticmethod
+    def get_channel_weights(intent: QueryIntent) -> dict[str, float]:
+        """Return per-channel weights for soft routing.
+
+        All channels always get non-zero base weights. The detected
+        intent AMPLIFIES the relevant channel instead of suppressing
+        the others (soft routing vs hard routing).
+
+        Returns:
+            Dict mapping channel name to weight multiplier.
+        """
+        # Base weights — every channel always contributes
+        weights = {
+            "vector": 1.0,
+            "fts": 0.8,
+            "temporal": 0.3,
+            "relational": 0.3,
+            "associative": 0.3,
+        }
+
+        # Intent-specific boosts
+        if intent == QueryIntent.TEMPORAL:
+            weights["temporal"] = 1.5
+            weights["vector"] = 0.7
+        elif intent == QueryIntent.RELATIONAL:
+            weights["relational"] = 1.5
+            weights["vector"] = 0.7
+        elif intent == QueryIntent.ASSOCIATIVE:
+            weights["associative"] = 1.5
+            weights["vector"] = 0.8
+        # SEMANTIC: vector stays at 1.0, others at base
+
+        return weights
+
     async def route(  # noqa: PLR0913
         self,
         query: str,

@@ -12,7 +12,7 @@ import time
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from claude_memory.merge import rrf_merge
+from claude_memory.merge import MergedResult  # noqa: F401 — re-export for type hints
 from claude_memory.search_advanced import SearchAdvancedMixin
 from claude_memory.search_channels import SearchChannelsMixin
 
@@ -412,35 +412,54 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
             # Step 2: FTS5 lexical search (always — complements vector)
             fts_results = await self._fts_enrichment(query, limit=limit)
 
-            # Step 3: Intent classification (sequential — no asyncio.gather)
-            from .router import QueryIntent  # noqa: PLC0415
+            # Step 3: Intent classification → soft channel weights
+            from .router import QueryIntent, QueryRouter  # noqa: PLC0415
 
             detected_intent = self.router.classify(query)
+            weights = QueryRouter.get_channel_weights(detected_intent)
 
-            # Step 4: Graph enrichment (based on intent)
-            graph_results: list[dict[str, Any]] = []
+            # Step 4: ALL enrichment channels fire (soft routing — no gate)
+            temporal_results: list[dict[str, Any]] = []
             temporal_exhausted = False
+            relational_results: list[dict[str, Any]] = []
+            associative_results: list[dict[str, Any]] = []
 
-            if detected_intent == QueryIntent.TEMPORAL:
-                graph_results, temporal_exhausted = await self._temporal_enrichment(
-                    query, limit, project_id, temporal_window_days
-                )
-            elif detected_intent == QueryIntent.RELATIONAL:
-                graph_results = await self._relational_enrichment(query)
-            elif detected_intent == QueryIntent.ASSOCIATIVE:
-                graph_results = await self._associative_enrichment(
-                    query, vector_results, limit, project_id
-                )
-            # SEMANTIC intent → no graph enrichment needed
+            # Temporal — always fires (weight controls contribution)
+            if weights.get("temporal", 0) > 0:
+                try:
+                    temporal_results, temporal_exhausted = await self._temporal_enrichment(
+                        query, limit, project_id, temporal_window_days
+                    )
+                except Exception:
+                    logger.debug("Temporal enrichment failed", exc_info=True)
 
-            # Step 5: Merge — combine all channels via RRF
-            # FTS results are always included; graph results are intent-dependent
-            all_supplementary = fts_results + graph_results
-            if all_supplementary:
-                merged = rrf_merge(vector_results, all_supplementary, k=60, limit=limit)
-            else:
-                # Vector-only: build trivial merged results
-                merged = rrf_merge(vector_results, [], k=60, limit=limit)
+            # Relational — always fires
+            if weights.get("relational", 0) > 0:
+                try:
+                    relational_results = await self._relational_enrichment(query)
+                except Exception:
+                    logger.debug("Relational enrichment failed", exc_info=True)
+
+            # Associative — always fires
+            if weights.get("associative", 0) > 0:
+                try:
+                    associative_results = await self._associative_enrichment(
+                        query, vector_results, limit, project_id
+                    )
+                except Exception:
+                    logger.debug("Associative enrichment failed", exc_info=True)
+
+            # Step 5: Weighted multi-channel RRF merge
+            from .merge import ChannelResults, weighted_rrf_merge  # noqa: PLC0415
+
+            channels = [
+                ChannelResults("vector", vector_results, weights.get("vector", 1.0), id_key="_id"),
+                ChannelResults("fts", fts_results, weights.get("fts", 0.8)),
+                ChannelResults("temporal", temporal_results, weights.get("temporal", 0.3)),
+                ChannelResults("relational", relational_results, weights.get("relational", 0.3)),
+                ChannelResults("associative", associative_results, weights.get("associative", 0.3)),
+            ]
+            merged = weighted_rrf_merge(channels, limit=limit)
 
             # Step 5.5: Cross-encoder reranking (Tier 1.3)
             # Re-score merged candidates using cross-encoder for precision
@@ -483,7 +502,7 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
             self._last_temporal_exhausted = temporal_exhausted
             self._last_temporal_window_days = temporal_window_days
             self._last_temporal_result_count = (
-                len(graph_results) if (detected_intent == QueryIntent.TEMPORAL) else 0
+                len(temporal_results) if (detected_intent == QueryIntent.TEMPORAL) else 0
             )
             self._last_detected_intent = detected_intent
 
