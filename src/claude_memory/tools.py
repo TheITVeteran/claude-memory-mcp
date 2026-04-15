@@ -94,3 +94,8 @@ class MemoryService(
         from claude_memory.fts_store import FTSStore  # noqa: PLC0415
 
         self.fts_store = FTSStore()
+
+        # Cross-encoder reranker client (Tier 1.3)
+        from claude_memory.reranker import RerankerClient  # noqa: PLC0415
+
+        self.reranker = RerankerClient()

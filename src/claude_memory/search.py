@@ -368,7 +368,7 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
 
     # ── Main search entry point (ADR-007 hybrid pipeline) ────────────
 
-    async def search(  # noqa: PLR0913
+    async def search(  # noqa: PLR0913, C901, PLR0915, PLR0912
         self,
         query: str,
         limit: int = 5,
@@ -442,7 +442,39 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
                 # Vector-only: build trivial merged results
                 merged = rrf_merge(vector_results, [], k=60, limit=limit)
 
-            # Step 5: Hydrate
+            # Step 5.5: Cross-encoder reranking (Tier 1.3)
+            # Re-score merged candidates using cross-encoder for precision
+            if hasattr(self, "reranker") and merged:
+                # Convert MergedResult objects to dicts for the reranker
+                rerank_dicts = []
+                for m in merged:
+                    text_parts = []
+                    if m.graph_metadata.get("name"):
+                        text_parts.append(m.graph_metadata["name"])
+                    if m.graph_metadata.get("entity_type"):
+                        text_parts.append(m.graph_metadata["entity_type"])
+                    rerank_dicts.append(
+                        {
+                            "_id": m.entity_id,
+                            "_text": " ".join(text_parts) if text_parts else m.entity_id,
+                        }
+                    )
+
+                reranked_dicts = await self.reranker.rerank(
+                    query, rerank_dicts, text_key="_text", top_k=limit
+                )
+
+                # Rebuild merged list in reranked order
+                id_to_merged = {m.entity_id: m for m in merged}
+                reranked_merged = []
+                for rd in reranked_dicts:
+                    eid = rd["_id"]
+                    if eid in id_to_merged:
+                        reranked_merged.append(id_to_merged[eid])
+                if reranked_merged:
+                    merged = reranked_merged
+
+            # Step 6: Hydrate
             search_results = await self._hydrate_merged_results(
                 merged, detected_intent, deep, vector_results
             )

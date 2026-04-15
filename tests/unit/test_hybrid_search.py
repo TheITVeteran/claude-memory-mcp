@@ -43,6 +43,9 @@ def service():
     svc.activation_engine.repo = svc.repo
     svc.vector_store = AsyncMock()
     svc.router = MagicMock(spec=QueryRouter)
+    # Reranker: pass-through (return candidates unchanged)
+    svc.reranker = MagicMock()
+    svc.reranker.rerank = AsyncMock(side_effect=lambda q, c, **kw: c)
     return svc
 
 

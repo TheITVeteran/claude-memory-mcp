@@ -249,6 +249,8 @@ class TestSearchStrategy:
         svc._execute_vector_search = AsyncMock(return_value=[{"_id": "a", "_score": 0.9}])
         svc._fts_enrichment = AsyncMock(return_value=[])
         svc._hydrate_merged_results = AsyncMock(return_value=[])
+        svc.reranker = MagicMock()
+        svc.reranker.rerank = AsyncMock(side_effect=lambda q, c, **kw: c)
 
         import logging
 
@@ -309,6 +311,8 @@ class TestSearchStrategy:
         svc._fts_enrichment = AsyncMock(return_value=[])
         svc._hydrate_merged_results = AsyncMock(return_value=[mock_sr])
         svc._compute_recency = MagicMock(return_value=0.0)
+        svc.reranker = MagicMock()
+        svc.reranker.rerank = AsyncMock(side_effect=lambda q, c, **kw: c)
 
         result = await SearchMixin.search(svc, "test query")
 
