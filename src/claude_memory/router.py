@@ -126,6 +126,7 @@ class QueryRouter:
         weights = {
             "vector": 1.0,
             "fts": 0.8,
+            "entity": 0.6,
             "temporal": 0.3,
             "relational": 0.3,
             "associative": 0.3,

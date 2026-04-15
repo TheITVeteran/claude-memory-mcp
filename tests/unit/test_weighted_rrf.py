@@ -191,7 +191,7 @@ class TestChannelWeightProfiles:
         """Only known channels appear in weights dict."""
         weights = QueryRouter.get_channel_weights(QueryIntent.SEMANTIC)
 
-        known = {"vector", "fts", "temporal", "relational", "associative"}
+        known = {"vector", "fts", "entity", "temporal", "relational", "associative"}
         assert set(weights.keys()) == known
 
     def test_evil1_associative_profile(self) -> None:

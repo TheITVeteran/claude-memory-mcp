@@ -449,6 +449,14 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
                 except Exception:
                     logger.debug("Associative enrichment failed", exc_info=True)
 
+            # Entity extraction — always fires (Tier 2.2)
+            entity_results: list[dict[str, Any]] = []
+            if weights.get("entity", 0) > 0:
+                try:
+                    entity_results = await self._entity_extraction_enrichment(query)
+                except Exception:
+                    logger.debug("Entity extraction enrichment failed", exc_info=True)
+
             # Step 5: Weighted multi-channel RRF merge
             from .merge import ChannelResults, weighted_rrf_merge  # noqa: PLC0415
 
@@ -458,6 +466,7 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
                 ChannelResults("temporal", temporal_results, weights.get("temporal", 0.3)),
                 ChannelResults("relational", relational_results, weights.get("relational", 0.3)),
                 ChannelResults("associative", associative_results, weights.get("associative", 0.3)),
+                ChannelResults("entity", entity_results, weights.get("entity", 0.6)),
             ]
             merged = weighted_rrf_merge(channels, limit=limit)
 

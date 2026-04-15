@@ -118,6 +118,50 @@ class SearchChannelsMixin:
             logger.warning("FTS search failed, returning empty", exc_info=True)
             return []
 
+    # ── Entity extraction channel (Tier 2.2) ─────────────────────────
+
+    async def _entity_extraction_enrichment(
+        self,
+        query: str,
+    ) -> list[dict[str, Any]]:
+        """NER-based entity retrieval channel.
+
+        Extracts named entities from the query using spaCy, then looks up
+        matching entity nodes in the graph by name. Returns found entities
+        as dicts compatible with the RRF merge pipeline.
+        """
+        if not query:
+            return []
+
+        try:
+            from .entity_extraction import extract_entities  # noqa: PLC0415
+
+            extracted = extract_entities(query)
+            if not extracted:
+                return []
+
+            # Look up each extracted name in the graph
+            names = [name for name, _ in extracted]
+            results: list[dict[str, Any]] = []
+
+            for name in names:
+                try:
+                    cypher = "MATCH (e:Entity) WHERE toLower(e.name) = toLower($name) RETURN e"
+                    res = self.repo.execute_cypher(cypher, {"name": name})
+                    for row in res.result_set:
+                        node = row[0]
+                        props = dict(node.properties)
+                        if "id" in props:
+                            results.append(props)
+                except Exception:
+                    logger.debug("Entity lookup failed for %r", name, exc_info=True)
+
+            return results
+
+        except Exception:
+            logger.warning("Entity extraction enrichment failed", exc_info=True)
+            return []
+
     # ── Graph enrichment helpers ─────────────────────────────────────
 
     async def _temporal_enrichment(
