@@ -171,15 +171,29 @@ class SearchChannelsMixin:
         project_id: str | None,
         temporal_window_days: int,
     ) -> tuple[list[dict[str, Any]], bool]:
-        """Run temporal graph query and return (results, exhausted)."""
+        """Run temporal graph query and return (results, exhausted).
+
+        If the query contains explicit/relative date signals (Tier 2.4),
+        uses the parsed range instead of the default window.
+        """
         from datetime import timedelta  # noqa: PLC0415
 
+        from .date_parser import parse_temporal_range  # noqa: PLC0415
         from .schema import TemporalQueryParams  # noqa: PLC0415
 
         now = datetime.now(UTC)
+
+        # Try to extract an explicit date range from the query
+        parsed_range = parse_temporal_range(query)
+        if parsed_range:
+            start, end = parsed_range
+        else:
+            start = now - timedelta(days=temporal_window_days)
+            end = now
+
         params = TemporalQueryParams(
-            start=now - timedelta(days=temporal_window_days),
-            end=now,
+            start=start,
+            end=end,
             limit=limit,
             project_id=project_id,
         )
