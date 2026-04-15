@@ -17,6 +17,30 @@ if TYPE_CHECKING:  # pragma: no cover
 
 logger = logging.getLogger(__name__)
 
+# Edge-type energy multipliers (Tier 2.3: SUPERSEDES Energy Valves)
+# Controls how much activation energy flows through each edge type.
+# Values < 1.0 dampen flow; values >= 1.0 preserve or amplify it.
+EDGE_WEIGHTS: dict[str, float] = {
+    # Core relationships — full propagation
+    "RELATES_TO": 1.0,
+    "DEPENDS_ON": 1.0,
+    "CONTAINS": 1.0,
+    "PART_OF": 1.0,
+    # Temporal — dampened (older context less relevant)
+    "EVOLVED_FROM": 0.5,
+    "SUPERSEDES": 0.3,
+    "PRECEDED_BY": 0.4,
+    "CONCURRENT_WITH": 0.8,
+    # Epistemic — heavily dampened (conflicting/rejected info)
+    "CONTRADICTS": 0.1,
+    "REJECTED_FOR": 0.2,
+    "SUPPORTS": 1.2,
+    "REVISITED_BECAUSE": 0.6,
+    # Boosters
+    "ENABLES": 1.1,
+    "BLOCKS": 0.5,
+}
+
 
 class ActivationEngine:
     """Spreading activation over the knowledge graph.
@@ -108,14 +132,18 @@ class ActivationEngine:
                 if src is None or tgt is None:
                     continue
 
+                # Edge-type-aware energy multiplier (Tier 2.3)
+                edge_type = edge.get("type", "")
+                edge_weight = EDGE_WEIGHTS.get(edge_type, 1.0)
+
                 # Energy flows in both directions (undirected spread)
                 if src in frontier:
-                    energy = frontier[src] * decay
+                    energy = frontier[src] * decay * edge_weight
                     next_frontier[tgt] = next_frontier.get(tgt, 0.0) + energy
                     total[tgt] = total.get(tgt, 0.0) + energy
 
                 if tgt in frontier:
-                    energy = frontier[tgt] * decay
+                    energy = frontier[tgt] * decay * edge_weight
                     next_frontier[src] = next_frontier.get(src, 0.0) + energy
                     total[src] = total.get(src, 0.0) + energy
 
