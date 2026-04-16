@@ -49,12 +49,28 @@ class TestBuildWeightOverride:
         assert weights["fts"] > 0
 
     def test_evil1_unknown_channel_ignored(self) -> None:
-        """Unknown channel name → silently ignored, no crash."""
+        """Unknown channel name -> silently ignored, no crash."""
         weights = build_weight_override(["nonexistent_channel"])
 
         # Should still have all known channels with positive weights
         for ch in ALL_CHANNELS:
             assert weights[ch] > 0
+
+    def test_evil2_all_channels_disabled(self) -> None:
+        """Disabling ALL channels -> all weights zero, no KeyError."""
+        weights = build_weight_override(ALL_CHANNELS)
+
+        for ch in ALL_CHANNELS:
+            assert weights[ch] == 0.0
+
+    def test_evil3_disable_vector_strongest_channel(self) -> None:
+        """Disabling vector (strongest channel) still preserves others."""
+        weights = build_weight_override(["vector"])
+
+        assert weights["vector"] == 0.0
+        # FTS should still be the next-highest
+        assert weights["fts"] > 0
+        assert weights["temporal"] > 0
 
 
 class TestAblationConfigs:
@@ -81,6 +97,29 @@ class TestAblationConfigs:
         for ch in ALL_CHANNELS:
             if ch != "vector":
                 assert ch in disabled, f"{ch} should be disabled in vector_only"
+
+    def test_evil2_no_graph_is_triple_disable(self) -> None:
+        """no_graph config disables exactly temporal+relational+associative."""
+        disabled = ABLATION_CONFIGS["no_graph"]
+        assert "temporal" in disabled
+        assert "relational" in disabled
+        assert "associative" in disabled
+        # Should NOT disable vector, fts, or entity
+        assert "vector" not in disabled
+        assert "fts" not in disabled
+        assert "entity" not in disabled
+
+    def test_evil3_config_values_are_lists(self) -> None:
+        """Every config value must be a list (not set, not tuple)."""
+        for name, disabled in ABLATION_CONFIGS.items():
+            assert isinstance(disabled, list), f"{name} has non-list: {type(disabled)}"
+
+    def test_sad1_disabled_channels_are_valid_names(self) -> None:
+        """All disabled channel names must exist in ALL_CHANNELS."""
+        valid = set(ALL_CHANNELS)
+        for name, disabled in ABLATION_CONFIGS.items():
+            for ch in disabled:
+                assert ch in valid, f"{name} disables unknown channel: {ch}"
 
 
 class TestFormatAblationTable:
@@ -147,3 +186,47 @@ class TestFormatAblationTable:
         assert "no_fts" in table
         # Delta column should be empty (no baseline to diff against)
         assert "pp" not in table
+
+    def test_evil2_zero_metrics_format_correctly(self) -> None:
+        """All-zero metrics don't crash or produce NaN output."""
+        results = [
+            {
+                "config": "baseline",
+                "disabled_channels": [],
+                "aggregate_metrics": {
+                    "recall_any_at_5": 0.0,
+                    "recall_any_at_10": 0.0,
+                    "recall_all_at_5": 0.0,
+                    "recall_all_at_10": 0.0,
+                },
+            },
+        ]
+
+        table = format_ablation_table(results)
+
+        assert "0.0%" in table
+        assert "NaN" not in table
+        assert "nan" not in table
+
+    def test_evil3_many_configs_table_rows_match(self) -> None:
+        """8 configs -> exactly 8 data rows + 2 header rows."""
+        results = []
+        for name, disabled in ABLATION_CONFIGS.items():
+            results.append(
+                {
+                    "config": name,
+                    "disabled_channels": disabled,
+                    "aggregate_metrics": {
+                        "recall_any_at_5": 0.5,
+                        "recall_any_at_10": 0.6,
+                        "recall_all_at_5": 0.4,
+                        "recall_all_at_10": 0.55,
+                    },
+                }
+            )
+
+        table = format_ablation_table(results)
+        lines = [ln for ln in table.strip().split("\n") if ln.strip()]
+
+        # 2 header rows + 8 data rows
+        assert len(lines) == 2 + len(ABLATION_CONFIGS)
