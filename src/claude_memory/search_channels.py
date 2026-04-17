@@ -207,9 +207,20 @@ class SearchChannelsMixin:
 
         quoted = re.findall(r'"([^"]+)"', query)
         if len(quoted) >= 2:  # noqa: PLR2004
-            path = await self.traverse_path(quoted[0], quoted[1])  # type: ignore[attr-defined]
-            # Convert path nodes to dict format with id keys
-            return [{"id": n.get("id", ""), **n} for n in path if isinstance(n, dict)]
+            # Resolve names → UUIDs via graph lookup
+            resolved_ids: list[str] = []
+            for name in quoted[:2]:
+                try:
+                    cypher = "MATCH (e:Entity) WHERE toLower(e.name) = toLower($name) RETURN e.id"
+                    res = self.repo.execute_cypher(cypher, {"name": name})  # type: ignore[attr-defined]
+                    if res.result_set:
+                        resolved_ids.append(str(res.result_set[0][0]))
+                except Exception:
+                    logger.debug("Name→ID lookup failed for %r", name, exc_info=True)
+
+            if len(resolved_ids) >= 2:  # noqa: PLR2004
+                path = await self.traverse_path(resolved_ids[0], resolved_ids[1])  # type: ignore[attr-defined]
+                return [{"id": n.get("id", ""), **n} for n in path if isinstance(n, dict)]
         return []
 
     async def _associative_enrichment(

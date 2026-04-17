@@ -46,9 +46,16 @@ class TestRelationalEnrichment:
         svc = _make_search_mixin()
         svc.traverse_path = AsyncMock(return_value=[{"id": "a"}, {"id": "b"}])
 
+        # Mock the name→UUID Cypher lookup (Fix #6: names resolved before traverse)
+        alice_res = MagicMock()
+        alice_res.result_set = [["uuid-alice"]]
+        bob_res = MagicMock()
+        bob_res.result_set = [["uuid-bob"]]
+        svc.repo.execute_cypher.side_effect = [alice_res, bob_res]
+
         result = await svc._relational_enrichment('How does "Alice" relate to "Bob"?')
         assert len(result) == 2
-        svc.traverse_path.assert_called_once_with("Alice", "Bob")
+        svc.traverse_path.assert_called_once_with("uuid-alice", "uuid-bob")
 
     @pytest.mark.asyncio()
     async def test_sad_one_quoted_entity_returns_empty(self) -> None:
@@ -72,6 +79,13 @@ class TestRelationalEnrichment:
         svc = _make_search_mixin()
         svc.traverse_path = AsyncMock(return_value=[{"id": "a"}, "not-a-dict", {"id": "b"}])
 
+        # Mock name→UUID lookup
+        res1 = MagicMock()
+        res1.result_set = [["uuid-e1"]]
+        res2 = MagicMock()
+        res2.result_set = [["uuid-e2"]]
+        svc.repo.execute_cypher.side_effect = [res1, res2]
+
         result = await svc._relational_enrichment('"Entity1" to "Entity2"')
         assert len(result) == 2  # non-dict filtered
 
@@ -80,6 +94,13 @@ class TestRelationalEnrichment:
         """Evil: traverse_path returns empty path."""
         svc = _make_search_mixin()
         svc.traverse_path = AsyncMock(return_value=[])
+
+        # Mock name→UUID lookup
+        res1 = MagicMock()
+        res1.result_set = [["uuid-alice"]]
+        res2 = MagicMock()
+        res2.result_set = [["uuid-bob"]]
+        svc.repo.execute_cypher.side_effect = [res1, res2]
 
         result = await svc._relational_enrichment('"Alice" to "Bob"')
         assert result == []
@@ -90,8 +111,15 @@ class TestRelationalEnrichment:
         svc = _make_search_mixin()
         svc.traverse_path = AsyncMock(return_value=[{"id": "a"}])
 
+        # Mock name→UUID lookup (only first two quoted names are used)
+        res1 = MagicMock()
+        res1.result_set = [["uuid-a"]]
+        res2 = MagicMock()
+        res2.result_set = [["uuid-b"]]
+        svc.repo.execute_cypher.side_effect = [res1, res2]
+
         _ = await svc._relational_enrichment('"A" then "B" then "C"')
-        svc.traverse_path.assert_called_once_with("A", "B")
+        svc.traverse_path.assert_called_once_with("uuid-a", "uuid-b")
 
 
 # ═══════════════════════════════════════════════════════════════

@@ -41,6 +41,18 @@ EDGE_WEIGHTS: dict[str, float] = {
     "BLOCKS": 0.5,
 }
 
+# Directional edges: energy only flows forward (src -> tgt), not backward.
+# If A SUPERSEDES B, querying A should NOT boost B's activation.
+DIRECTIONAL_EDGES: frozenset[str] = frozenset(
+    {
+        "SUPERSEDES",
+        "PRECEDED_BY",
+        "REJECTED_FOR",
+        "EVOLVED_FROM",
+        "CONTRADICTS",
+    }
+)
+
 
 class ActivationEngine:
     """Spreading activation over the knowledge graph.
@@ -135,14 +147,16 @@ class ActivationEngine:
                 # Edge-type-aware energy multiplier (Tier 2.3)
                 edge_type = edge.get("type", "")
                 edge_weight = EDGE_WEIGHTS.get(edge_type, 1.0)
+                is_directional = edge_type in DIRECTIONAL_EDGES
 
-                # Energy flows in both directions (undirected spread)
+                # Forward direction: src -> tgt
                 if src in frontier:
                     energy = frontier[src] * decay * edge_weight
                     next_frontier[tgt] = next_frontier.get(tgt, 0.0) + energy
                     total[tgt] = total.get(tgt, 0.0) + energy
 
-                if tgt in frontier:
+                # Reverse direction: tgt -> src (blocked for directional edges)
+                if tgt in frontier and not is_directional:
                     energy = frontier[tgt] * decay * edge_weight
                     next_frontier[src] = next_frontier.get(src, 0.0) + energy
                     total[src] = total.get(src, 0.0) + energy

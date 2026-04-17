@@ -83,9 +83,9 @@ async def ingest_sessions(
     Returns:
         Mapping of dataset session ID → Dragon Brain entity UUID.
     """
-    from claude_memory.schema import EntityCreateParams
+    from claude_memory.schema import EntityCreateParams, ObservationParams
 
-    id_map: dict[str, str] = {}  # dataset_session_id → entity_uuid
+    id_map: dict[str, str] = {}  # dataset_session_id -> entity_uuid
     sessions = instance.get("haystack_sessions", [])
     session_ids = instance.get("haystack_session_ids", [])
 
@@ -109,6 +109,16 @@ async def ingest_sessions(
             eid = result.id if hasattr(result, "id") else ""
             if eid:
                 id_map[dataset_sid] = eid
+
+                # Store full content as observation for deep hydration (Fix #5)
+                try:
+                    obs_params = ObservationParams(
+                        entity_id=eid,
+                        content=turns_text,
+                    )
+                    await service.add_observation(obs_params)
+                except Exception:
+                    logger.debug("Observation add failed for %s", eid, exc_info=True)
         except Exception:
             logger.exception("Failed to ingest session %d for %s", i, instance["question_id"])
 
