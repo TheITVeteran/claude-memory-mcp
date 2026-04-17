@@ -299,6 +299,11 @@ def main() -> None:
         default=None,
         help="Output path for results JSON",
     )
+    parser.add_argument(
+        "--no-rerank",
+        action="store_true",
+        help="Disable cross-encoder reranking (ablation test)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -309,6 +314,11 @@ def main() -> None:
 
     embedder = EmbeddingService()
     service = MemoryService(embedding_service=embedder)
+
+    # Optionally disable reranker for ablation
+    if args.no_rerank and hasattr(service, "reranker"):
+        logger.info("Reranker DISABLED (--no-rerank)")
+        delattr(service, "reranker")
 
     output_path = Path(args.output) if args.output else None
     asyncio.run(
