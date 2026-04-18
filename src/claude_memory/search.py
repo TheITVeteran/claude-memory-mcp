@@ -441,40 +441,44 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
             detected_intent = self.router.classify(query)
             weights = QueryRouter.get_channel_weights(detected_intent)
 
-            # Step 4: ALL enrichment channels fire (soft routing — no gate)
+            # Step 4: Enrichment channels — skip when weight is 0
             temporal_results: list[dict[str, Any]] = []
             temporal_exhausted = False
             relational_results: list[dict[str, Any]] = []
             associative_results: list[dict[str, Any]] = []
 
-            # Temporal — always fires (weight controls contribution in RRF)
-            try:
-                temporal_results, temporal_exhausted = await self._temporal_enrichment(
-                    query, limit, project_id, temporal_window_days
-                )
-            except Exception:
-                logger.debug("Temporal enrichment failed", exc_info=True)
+            # Temporal
+            if weights.get("temporal", 0) > 0:
+                try:
+                    temporal_results, temporal_exhausted = await self._temporal_enrichment(
+                        query, limit, project_id, temporal_window_days
+                    )
+                except Exception:
+                    logger.debug("Temporal enrichment failed", exc_info=True)
 
-            # Relational — always fires
-            try:
-                relational_results = await self._relational_enrichment(query)
-            except Exception:
-                logger.debug("Relational enrichment failed", exc_info=True)
+            # Relational
+            if weights.get("relational", 0) > 0:
+                try:
+                    relational_results = await self._relational_enrichment(query)
+                except Exception:
+                    logger.debug("Relational enrichment failed", exc_info=True)
 
-            # Associative — always fires
-            try:
-                associative_results = await self._associative_enrichment(
-                    query, vector_results, limit, project_id
-                )
-            except Exception:
-                logger.debug("Associative enrichment failed", exc_info=True)
+            # Associative
+            if weights.get("associative", 0) > 0:
+                try:
+                    associative_results = await self._associative_enrichment(
+                        query, vector_results, limit, project_id
+                    )
+                except Exception:
+                    logger.debug("Associative enrichment failed", exc_info=True)
 
-            # Entity extraction — always fires (Tier 2.2)
+            # Entity extraction (Tier 2.2)
             entity_results: list[dict[str, Any]] = []
-            try:
-                entity_results = await self._entity_extraction_enrichment(query)
-            except Exception:
-                logger.debug("Entity extraction enrichment failed", exc_info=True)
+            if weights.get("entity", 0) > 0:
+                try:
+                    entity_results = await self._entity_extraction_enrichment(query)
+                except Exception:
+                    logger.debug("Entity extraction enrichment failed", exc_info=True)
 
             # Step 5: Weighted multi-channel RRF merge
             from .merge import ChannelResults, weighted_rrf_merge  # noqa: PLC0415
