@@ -373,12 +373,20 @@ def main() -> None:
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-    # Import here to avoid import-time side effects
     from claude_memory.embedding import EmbeddingService
     from claude_memory.tools import MemoryService
+    from claude_memory.vector_store import QdrantVectorStore
 
     embedder = EmbeddingService()
-    service = MemoryService(embedding_service=embedder)
+
+    # Use an ISOLATED Qdrant collection so benchmarks never touch real memories
+    bench_vector_store = QdrantVectorStore(collection="longmemeval_bench")
+    service = MemoryService(embedding_service=embedder, vector_store=bench_vector_store)
+
+    # Override FTS to use a separate SQLite file
+    from claude_memory.fts_store import FTSStore
+
+    service.fts_store = FTSStore(db_path="longmemeval_fts.db")
 
     # Optionally disable reranker for ablation
     if args.no_rerank and hasattr(service, "reranker"):
