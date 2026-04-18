@@ -202,16 +202,13 @@ async def run_benchmark(
         qid = instance["question_id"]
         logger.info("[%d/%d] Processing %s", i + 1, len(dataset), qid)
 
-        # Use per-question project_id to isolate sessions
-        project_id = f"lme_{qid}"
-
         # Ingest -- returns mapping of dataset session IDs -> entity UUIDs
-        id_map = await ingest_sessions(service, instance, project_id=project_id)
+        id_map = await ingest_sessions(service, instance)
 
         # Query
-        response = await query_system(service, instance["question"], project_id=project_id)
+        response = await query_system(service, instance["question"])
 
-        # Translate answer_session_ids from dataset namespace → our UUIDs
+        # Translate answer_session_ids from dataset namespace -> our UUIDs
         answer_session_ids = instance.get("answer_session_ids", [])
         expected_uuids = [id_map[sid] for sid in answer_session_ids if sid in id_map]
 
@@ -259,6 +256,15 @@ async def run_benchmark(
                 "metrics": score,
             }
         )
+
+        # Cleanup: delete ingested sessions to prevent cross-question pollution
+        from claude_memory.schema import EntityDeleteParams
+
+        for eid in id_map.values():
+            try:
+                await service.delete_entity(EntityDeleteParams(id=eid))
+            except Exception:
+                logger.debug("Cleanup delete failed for %s", eid, exc_info=True)
 
     elapsed = time.monotonic() - start_time
     aggregated = aggregate_scores(question_scores)
