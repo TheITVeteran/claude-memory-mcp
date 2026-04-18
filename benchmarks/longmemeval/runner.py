@@ -68,6 +68,41 @@ def download_dataset(
 _STORE_OBSERVATIONS = True
 
 
+async def _flush_prior_entities(service: Any) -> None:
+    """Purge ALL existing entities from prior benchmark runs.
+
+    Ensures a clean slate by deleting every entity from graph, vector,
+    and FTS stores.  Errors on individual deletes are logged and skipped
+    since ghost entities may only exist in one store.
+    """
+    try:
+        all_ids = await service.vector_store.list_ids()
+    except Exception:
+        logger.warning("Could not list vector IDs — skipping flush", exc_info=True)
+        return
+
+    if not all_ids:
+        logger.info("No existing entities found — clean slate")
+        return
+
+    logger.info("Purging %d ghost entities from prior runs", len(all_ids))
+    for eid in all_ids:
+        try:
+            service.repo.delete_node(eid)
+        except Exception:
+            logger.debug("flush: graph delete skipped for %s", eid)
+        try:
+            await service.vector_store.delete(eid)
+        except Exception:
+            logger.debug("flush: vector delete skipped for %s", eid)
+        if hasattr(service, "fts_store"):
+            try:
+                service.fts_store.remove_entity(eid)
+            except Exception:
+                logger.debug("flush: FTS delete skipped for %s", eid)
+    logger.info("Flush complete — %d entities purged", len(all_ids))
+
+
 async def ingest_sessions(
     service: Any,
     instance: dict[str, Any],
@@ -193,6 +228,9 @@ async def run_benchmark(
         dataset = dataset[:limit]
 
     logger.info("Running LongMemEval (%s) on %d instances", variant, len(dataset))
+
+    # ── Initial flush: purge ALL existing entities from prior runs ──
+    await _flush_prior_entities(service)
 
     results: list[dict[str, Any]] = []
     question_scores: list[dict[str, float]] = []
