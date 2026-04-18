@@ -459,7 +459,9 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
             # Relational
             if weights.get("relational", 0) > 0:
                 try:
-                    relational_results = await self._relational_enrichment(query)
+                    relational_results = await self._relational_enrichment(
+                        query, project_id=project_id
+                    )
                 except Exception:
                     logger.debug("Relational enrichment failed", exc_info=True)
 

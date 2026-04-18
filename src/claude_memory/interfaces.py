@@ -69,6 +69,15 @@ class VectorStore(Protocol):
     async def retrieve_by_ids(
         self,
         ids: list[str],
-    ) -> list[dict[str, Any]]:
-        """Retrieve vectors and payloads by their IDs."""
+        query_vector: list[float] | None = None,
+    ) -> dict[str, float]:
+        """Retrieve vectors by ID and optionally compute similarity scores.
+
+        Args:
+            ids: List of entity IDs to retrieve.
+            query_vector: Optional query vector for cosine similarity scoring.
+
+        Returns:
+            Mapping of entity_id → similarity score (0-1).
+        """
         ...
