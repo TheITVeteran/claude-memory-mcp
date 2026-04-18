@@ -24,6 +24,7 @@ _PREFERENCE_PATTERNS = [
 ]
 
 # Lazy-loaded spaCy model
+_UNAVAILABLE = object()  # Sentinel: spaCy model failed to load
 _nlp: Any = None
 
 
@@ -41,7 +42,7 @@ def _get_nlp() -> Any:
                 "spaCy model 'en_core_web_sm' not found. "
                 "Install with: python -m spacy download en_core_web_sm"
             )
-            _nlp = False  # Mark as unavailable
+            _nlp = _UNAVAILABLE  # Mark as unavailable
     return _nlp
 
 
@@ -63,7 +64,7 @@ def extract_entities(text: str | None) -> list[tuple[str, str]]:
 
     # Phase 1: spaCy NER extraction
     nlp = _get_nlp()
-    if nlp:
+    if nlp is not None and nlp is not _UNAVAILABLE:
         doc = nlp(text)
         for ent in doc.ents:
             if ent.label_ in _RELEVANT_NER_LABELS:

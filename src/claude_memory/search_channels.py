@@ -426,52 +426,6 @@ class SearchChannelsMixin:
             vector=vec, limit=limit, filter=search_filter, offset=offset
         )
 
-    def _hydrate_search_results(
-        self,
-        vector_results: list[dict[str, Any]],
-        deep: bool,
-    ) -> list["SearchResult"]:
-        """Hydrate vector hits from graph and build SearchResult list."""
-        from .schema import SearchResult  # noqa: PLC0415
-
-        ids = [item["_id"] for item in vector_results]
-
-        graph_depth = 1 if deep else 0
-        graph_data = self.repo.get_subgraph(ids, depth=graph_depth)
-        nodes_map = {n["id"]: n for n in graph_data["nodes"]}
-
-        # Fire-and-forget salience update (non-blocking)
-        self._fire_salience_update(ids)  # type: ignore[attr-defined]
-        salience_map = {nid: props.get("salience_score", 0.0) for nid, props in nodes_map.items()}
-
-        results = []
-        for v_res in vector_results:
-            node_id = v_res["_id"]
-            if node_id not in nodes_map:
-                continue
-
-            node_props = nodes_map[node_id]
-            observations, relationships = self._deep_hydrate_node(node_id, graph_data, deep)
-
-            results.append(
-                SearchResult(
-                    id=node_id,
-                    name=node_props.get("name", "Unknown"),
-                    node_type=node_props.get("node_type", "Entity"),
-                    project_id=node_props.get("project_id", "unknown"),
-                    content=node_props.get("description", ""),
-                    score=v_res["_score"],
-                    distance=1.0 - v_res["_score"],
-                    salience_score=salience_map.get(
-                        node_id,
-                        node_props.get("salience_score", 0.0),
-                    ),
-                    observations=observations,
-                    relationships=relationships,
-                )
-            )
-        return results
-
     def _deep_hydrate_node(
         self,
         node_id: str,

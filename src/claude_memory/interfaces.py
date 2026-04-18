@@ -65,3 +65,10 @@ class VectorStore(Protocol):
     ) -> list[dict[str, Any]]:
         """Find entities similar to a given entity by vector proximity."""
         ...
+
+    async def retrieve_by_ids(
+        self,
+        ids: list[str],
+    ) -> list[dict[str, Any]]:
+        """Retrieve vectors and payloads by their IDs."""
+        ...

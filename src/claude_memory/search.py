@@ -516,6 +516,10 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
             )
 
             # Store temporal exhaustion info on the instance for server layer
+            # NOTE: TOCTOU-unsafe under concurrent requests. These instance
+            # attributes may be overwritten by a subsequent search() call
+            # before the server reads them. Acceptable for single-user MCP
+            # but would need request-scoped storage for multi-tenant use.
             self._last_temporal_exhausted = temporal_exhausted
             self._last_temporal_window_days = temporal_window_days
             self._last_temporal_result_count = (
