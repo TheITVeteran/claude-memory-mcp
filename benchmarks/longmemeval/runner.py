@@ -64,6 +64,10 @@ def download_dataset(
         return json.load(f)
 
 
+# Module-level flag for observation storage (toggled by --no-observations)
+_STORE_OBSERVATIONS = True
+
+
 async def ingest_sessions(
     service: Any,
     instance: dict[str, Any],
@@ -111,14 +115,15 @@ async def ingest_sessions(
                 id_map[dataset_sid] = eid
 
                 # Store full content as observation for deep hydration (Fix #5)
-                try:
-                    obs_params = ObservationParams(
-                        entity_id=eid,
-                        content=turns_text,
-                    )
-                    await service.add_observation(obs_params)
-                except Exception:
-                    logger.debug("Observation add failed for %s", eid, exc_info=True)
+                if _STORE_OBSERVATIONS:
+                    try:
+                        obs_params = ObservationParams(
+                            entity_id=eid,
+                            content=turns_text,
+                        )
+                        await service.add_observation(obs_params)
+                    except Exception:
+                        logger.debug("Observation add failed for %s", eid, exc_info=True)
         except Exception:
             logger.exception("Failed to ingest session %d for %s", i, instance["question_id"])
 
@@ -304,6 +309,17 @@ def main() -> None:
         action="store_true",
         help="Disable cross-encoder reranking (ablation test)",
     )
+    parser.add_argument(
+        "--disable-channels",
+        nargs="*",
+        default=None,
+        help="Zero out specific channels (e.g., temporal relational associative entity)",
+    )
+    parser.add_argument(
+        "--no-observations",
+        action="store_true",
+        help="Skip observation storage during ingestion (faster runs)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -319,6 +335,31 @@ def main() -> None:
     if args.no_rerank and hasattr(service, "reranker"):
         logger.info("Reranker DISABLED (--no-rerank)")
         delattr(service, "reranker")
+
+    # Optionally disable specific channels
+    if args.disable_channels:
+        from claude_memory.router import QueryRouter
+
+        original_get_weights = QueryRouter.get_channel_weights
+        disabled = set(args.disable_channels)
+        logger.info("Channels DISABLED: %s", disabled)
+
+        @staticmethod  # type: ignore[misc]
+        def patched_weights(intent):  # type: ignore[no-untyped-def]
+            base = original_get_weights(intent)
+            for ch in disabled:
+                if ch in base:
+                    base[ch] = 0.0
+            return base
+
+        QueryRouter.get_channel_weights = patched_weights  # type: ignore[assignment]
+
+    # Optionally skip observation storage
+    if args.no_observations:
+        import sys
+
+        sys.modules[__name__]._STORE_OBSERVATIONS = False  # type: ignore[attr-defined]
+        logger.info("Observation storage DISABLED (--no-observations)")
 
     output_path = Path(args.output) if args.output else None
     asyncio.run(
