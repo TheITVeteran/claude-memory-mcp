@@ -202,11 +202,14 @@ async def run_benchmark(
         qid = instance["question_id"]
         logger.info("[%d/%d] Processing %s", i + 1, len(dataset), qid)
 
-        # Ingest — returns mapping of dataset session IDs → entity UUIDs
-        id_map = await ingest_sessions(service, instance)
+        # Use per-question project_id to isolate sessions
+        project_id = f"lme_{qid}"
+
+        # Ingest -- returns mapping of dataset session IDs -> entity UUIDs
+        id_map = await ingest_sessions(service, instance, project_id=project_id)
 
         # Query
-        response = await query_system(service, instance["question"])
+        response = await query_system(service, instance["question"], project_id=project_id)
 
         # Translate answer_session_ids from dataset namespace → our UUIDs
         answer_session_ids = instance.get("answer_session_ids", [])
