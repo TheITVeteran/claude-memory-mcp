@@ -443,7 +443,11 @@ class SearchChannelsMixin:
         obs_res = self.repo.execute_cypher(obs_query, {"eid": node_id})
         observations = [row[0] for row in obs_res.result_set if row[0]]
         relationships = [
-            e
+            {
+                "source": str(e.get("source", "")),
+                "target": str(e.get("target", "")),
+                "type": str(e.get("type", "")),
+            }
             for e in graph_data["edges"]
             if e.get("source") == node_id or e.get("target") == node_id
         ]
