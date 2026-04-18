@@ -560,8 +560,8 @@ async def test_happy_search_deep_returns_relationships(service: MemoryService) -
             }
         ],
         "edges": [
-            {"src": ENTITY_ID, "dst": "other-1", "type": "RELATES_TO"},
-            {"src": "other-2", "dst": ENTITY_ID, "type": "DEPENDS_ON"},
+            {"source": ENTITY_ID, "target": "other-1", "type": "RELATES_TO"},
+            {"source": "other-2", "target": ENTITY_ID, "type": "DEPENDS_ON"},
         ],
     }
     obs_result = MagicMock()

@@ -139,14 +139,21 @@ class CrudMaintenanceMixin:
             try:
                 entity = entity if "entity" in dir() else self.repo.get_node(params.entity_id)
                 if entity:
-                    fts_text = _compute_entity_embedding_text(
-                        self.repo,
+                    # Fetch all observations for this entity
+                    obs_query = (
+                        "MATCH (e:Entity {id: $eid})-[:HAS_OBSERVATION]->(o) "
+                        "RETURN o.content ORDER BY o.created_at ASC"
+                    )
+                    obs_res = self.repo.execute_cypher(obs_query, {"eid": params.entity_id})
+                    obs_texts = [row[0] for row in obs_res.result_set if row[0]]
+
+                    self.fts_store.index_entity(
                         entity_id=params.entity_id,
                         name=entity.get("name", ""),
                         node_type=entity.get("node_type", "Entity"),
                         description=entity.get("description", ""),
+                        observations=" ".join(obs_texts),
                     )
-                    self.fts_store.index_entity(params.entity_id, fts_text)
             except Exception:
                 logger.debug(
                     "FTS re-index failed after observation add for %s",
