@@ -258,11 +258,13 @@ async def run_benchmark(
         )
 
         # Cleanup: delete ingested sessions to prevent cross-question pollution
-        from claude_memory.schema import EntityDeleteParams
-
         for eid in id_map.values():
             try:
-                await service.delete_entity(EntityDeleteParams(id=eid))
+                # Hard-delete from all stores
+                service.repo.delete_node(eid)
+                await service.vector_store.delete(eid)
+                if hasattr(service, "fts_store"):
+                    service.fts_store.remove_entity(eid)
             except Exception:
                 logger.debug("Cleanup delete failed for %s", eid, exc_info=True)
 
