@@ -98,6 +98,7 @@ class SearchChannelsMixin:
         self,
         query: str,
         limit: int = 10,
+        project_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """Run FTS5 BM25 search as a lexical retrieval channel.
 
@@ -111,7 +112,7 @@ class SearchChannelsMixin:
             return []
 
         try:
-            fts_results = self.fts_store.search(query=query, limit=limit)
+            fts_results = self.fts_store.search(query=query, limit=limit, project_id=project_id)
             # Convert to the dict format expected by rrf_merge
             return [{"_id": r["entity_id"], "_score": r["bm25_score"], **r} for r in fts_results]
         except Exception:
@@ -123,6 +124,7 @@ class SearchChannelsMixin:
     async def _entity_extraction_enrichment(
         self,
         query: str,
+        project_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """NER-based entity retrieval channel.
 
@@ -146,8 +148,16 @@ class SearchChannelsMixin:
 
             for name in names:
                 try:
-                    cypher = "MATCH (e:Entity) WHERE toLower(e.name) = toLower($name) RETURN e"
-                    res = self.repo.execute_cypher(cypher, {"name": name})
+                    if project_id:
+                        cypher = (
+                            "MATCH (e:Entity) "
+                            "WHERE toLower(e.name) = toLower($name) "
+                            "AND e.project_id = $pid RETURN e"
+                        )
+                        res = self.repo.execute_cypher(cypher, {"name": name, "pid": project_id})
+                    else:
+                        cypher = "MATCH (e:Entity) WHERE toLower(e.name) = toLower($name) RETURN e"
+                        res = self.repo.execute_cypher(cypher, {"name": name})
                     for row in res.result_set:
                         node = row[0]
                         props = dict(node.properties)

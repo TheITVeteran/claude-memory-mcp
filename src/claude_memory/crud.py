@@ -149,6 +149,7 @@ class CrudMixin:
                         name=params.name,
                         node_type=params.node_type,
                         description=props.get("description", ""),
+                        project_id=params.project_id,
                     )
                 except Exception:
                     logger.warning("FTS index failed for %s — non-fatal", node_id, exc_info=True)

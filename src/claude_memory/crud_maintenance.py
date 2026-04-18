@@ -153,6 +153,7 @@ class CrudMaintenanceMixin:
                         node_type=entity.get("node_type", "Entity"),
                         description=entity.get("description", ""),
                         observations=" ".join(obs_texts),
+                        project_id=entity.get("project_id", ""),
                     )
             except Exception:
                 logger.debug(

@@ -433,7 +433,7 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
             )
 
             # Step 2: FTS5 lexical search (always — complements vector)
-            fts_results = await self._fts_enrichment(query, limit=limit)
+            fts_results = await self._fts_enrichment(query, limit=limit, project_id=project_id)
 
             # Step 3: Intent classification → soft channel weights
             from .router import QueryIntent, QueryRouter  # noqa: PLC0415
@@ -476,7 +476,9 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
             entity_results: list[dict[str, Any]] = []
             if weights.get("entity", 0) > 0:
                 try:
-                    entity_results = await self._entity_extraction_enrichment(query)
+                    entity_results = await self._entity_extraction_enrichment(
+                        query, project_id=project_id
+                    )
                 except Exception:
                     logger.debug("Entity extraction enrichment failed", exc_info=True)
 

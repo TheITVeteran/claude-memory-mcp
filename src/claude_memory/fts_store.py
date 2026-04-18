@@ -64,11 +64,26 @@ class FTSStore:
         return self._local.conn
 
     def _init_schema(self) -> None:
-        """Create the FTS5 virtual table if it doesn't exist."""
+        """Create the FTS5 virtual table if it doesn't exist.
+
+        Includes migration: if the old schema (without project_id) is
+        detected, drops and recreates with the new column.
+        """
         conn = self._get_conn()
+
+        # Check if table exists and has the project_id column
+        cursor = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='entities_fts'"
+        )
+        row = cursor.fetchone()
+        if row and "project_id" not in row[0]:
+            logger.info("Migrating FTS schema to add project_id column")
+            conn.execute("DROP TABLE entities_fts")
+
         conn.execute("""
             CREATE VIRTUAL TABLE IF NOT EXISTS entities_fts USING fts5(
                 entity_id UNINDEXED,
+                project_id UNINDEXED,
                 name,
                 node_type,
                 description,
@@ -78,13 +93,14 @@ class FTSStore:
         """)
         conn.commit()
 
-    def index_entity(
+    def index_entity(  # noqa: PLR0913
         self,
         entity_id: str,
         name: str,
         node_type: str = "Entity",
         description: str = "",
         observations: str = "",
+        project_id: str = "",
     ) -> None:
         """Index or update an entity in the FTS store.
 
@@ -97,6 +113,7 @@ class FTSStore:
             node_type: Entity type label.
             description: Entity description/content.
             observations: Concatenated observation text.
+            project_id: Project scope for filtering.
         """
         conn = self._get_conn()
         try:
@@ -107,10 +124,12 @@ class FTSStore:
             )
             # Insert new entry
             conn.execute(
-                """INSERT INTO entities_fts (entity_id, name, node_type, description, observations)
-                   VALUES (?, ?, ?, ?, ?)""",
+                """INSERT INTO entities_fts
+                   (entity_id, project_id, name, node_type, description, observations)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
                 (
                     entity_id,
+                    project_id or "",
                     name or "",
                     node_type or "Entity",
                     description or "",
@@ -141,12 +160,14 @@ class FTSStore:
         self,
         query: str,
         limit: int = 10,
+        project_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """Search for entities matching the query using BM25.
 
         Args:
             query: Free-text search query.
             limit: Maximum number of results.
+            project_id: Optional project scope filter.
 
         Returns:
             List of dicts with keys: entity_id, name, node_type,
@@ -162,16 +183,28 @@ class FTSStore:
             if not safe_query:
                 return []
 
-            cursor = conn.execute(
-                """SELECT entity_id, name, node_type,
-                          snippet(entities_fts, 3, '<b>', '</b>', '...', 32) as snippet,
-                          bm25(entities_fts) as score
-                   FROM entities_fts
-                   WHERE entities_fts MATCH ?
-                   ORDER BY score
-                   LIMIT ?""",
-                (safe_query, limit),
-            )
+            if project_id:
+                cursor = conn.execute(
+                    """SELECT entity_id, name, node_type,
+                              snippet(entities_fts, 4, '<b>', '</b>', '...', 32) as snippet,
+                              bm25(entities_fts) as score
+                       FROM entities_fts
+                       WHERE entities_fts MATCH ? AND project_id = ?
+                       ORDER BY score
+                       LIMIT ?""",
+                    (safe_query, project_id, limit),
+                )
+            else:
+                cursor = conn.execute(
+                    """SELECT entity_id, name, node_type,
+                              snippet(entities_fts, 4, '<b>', '</b>', '...', 32) as snippet,
+                              bm25(entities_fts) as score
+                       FROM entities_fts
+                       WHERE entities_fts MATCH ?
+                       ORDER BY score
+                       LIMIT ?""",
+                    (safe_query, limit),
+                )
             results = []
             for row in cursor:
                 results.append(
