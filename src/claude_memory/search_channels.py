@@ -334,8 +334,11 @@ class SearchChannelsMixin:
             return []
 
         ids = [m.entity_id for m in merged]
-        graph_depth = 1 if deep else 0
-        graph_data = self.repo.get_subgraph(ids, depth=graph_depth)
+        # Always use depth=0 for the node lookup — deep hydration
+        # (observations, relationships) is handled by _deep_hydrate_node.
+        # depth=1 causes get_subgraph to fail on isolated nodes due to
+        # UNWIND relationships(path) producing zero rows for unconnected nodes.
+        graph_data = self.repo.get_subgraph(ids, depth=0)
         nodes_map = {n["id"]: n for n in graph_data["nodes"]}
 
         # Fire-and-forget salience update

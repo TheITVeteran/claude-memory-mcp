@@ -550,6 +550,6 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
             )
 
             return search_results
-        except (ConnectionError, TimeoutError, OSError, ValueError):
+        except Exception:
             logger.error("search failed for query=%r", query, exc_info=True)
             return []
