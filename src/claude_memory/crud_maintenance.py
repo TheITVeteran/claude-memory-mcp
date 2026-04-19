@@ -127,11 +127,38 @@ class CrudMaintenanceMixin:
                 )
         except Exception:
             logger.error(
-                "entity_re_embed_failed after observation add for %s — "
+                "entity_re_embed_failed after observation add for %s -- "
                 "observation was stored, but entity embedding is stale",
                 params.entity_id,
             )
-            # Do NOT raise — observation was successfully stored
+            # Do NOT raise -- observation was successfully stored
             # Stale entity embedding is degraded quality, not data loss
+
+        # Re-index FTS with updated content (Tier 2.4 fix)
+        if hasattr(self, "fts_store"):
+            try:
+                entity = entity if "entity" in dir() else self.repo.get_node(params.entity_id)
+                if entity:
+                    # Fetch all observations for this entity
+                    obs_query = (
+                        "MATCH (e:Entity {id: $eid})-[:HAS_OBSERVATION]->(o) "
+                        "RETURN o.content ORDER BY o.created_at ASC"
+                    )
+                    obs_res = self.repo.execute_cypher(obs_query, {"eid": params.entity_id})
+                    obs_texts = [row[0] for row in obs_res.result_set if row[0]]
+
+                    self.fts_store.index_entity(
+                        entity_id=params.entity_id,
+                        name=entity.get("name", ""),
+                        node_type=entity.get("node_type", "Entity"),
+                        description=entity.get("description", ""),
+                        observations=" ".join(obs_texts),
+                        project_id=entity.get("project_id", ""),
+                    )
+            except Exception:
+                logger.debug(
+                    "FTS re-index failed after observation add for %s",
+                    params.entity_id,
+                )
 
         return obs_props

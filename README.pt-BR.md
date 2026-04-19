@@ -4,16 +4,18 @@
 
 **Infraestrutura de memória persistente para agentes de IA.**
 
+[![LongMemEval](https://img.shields.io/badge/LongMemEval_R%405-100%25-gold?style=for-the-badge)](benchmarks/longmemeval/RESULTS.md)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](docker-compose.yml)
 [![Ferramentas MCP](https://img.shields.io/badge/MCP%20tools-34-green.svg)]()
-[![Testes](https://img.shields.io/badge/tests-1%2C166%20passing-brightgreen)]()
+[![Testes](https://img.shields.io/badge/tests-1%2C281%20passing-brightgreen)]()
 [![Qualidade](https://img.shields.io/badge/gauntlet-A%E2%88%92%20(95%2F100)-blue)]()
 [![GPU](https://img.shields.io/badge/GPU-CUDA%20supported-orange.svg)]()
 [![GitHub stars](https://img.shields.io/github/stars/iikarus/Dragon-Brain)](https://github.com/iikarus/Dragon-Brain/stargazers)
 
-> **1.599 memórias** · **34 ferramentas MCP** · **Grafo de conhecimento + busca vetorial híbrida** · **busca <200ms** · **1.166 testes**
+> **LongMemEval R@5 100%** · **1.599 memórias** · **34 ferramentas MCP** · **Grafo + Vetor híbrido** · **busca <200ms** · **Sem LLM necessário**
 
 Um servidor MCP de código aberto que fornece memória de longo prazo a qualquer LLM usando um grafo de conhecimento + busca vetorial híbrida. Armazene entidades, observações e relacionamentos — depois recupere-os semanticamente entre sessões. Funciona com qualquer cliente MCP: Claude Code, Claude Desktop, Cursor, Windsurf, Cline, Gemini CLI.
 

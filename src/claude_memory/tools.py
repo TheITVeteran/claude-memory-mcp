@@ -1,8 +1,8 @@
 """Core business logic for the Claude Memory system.
 
-MemoryService is the public facade — it composes four focused mixins
-(CrudMixin, SearchMixin, TemporalMixin, AnalysisMixin) into a single
-class that ``server.py`` and tests can import without knowing the split.
+MemoryService is the public facade — it composes focused mixins
+(CrudMixin, SearchMixin, TemporalMixin, AnalysisMixin, SearchRadarMixin)
+into a single class that ``server.py`` and tests can import.
 
 All actual method implementations live in their respective modules.
 """
@@ -18,6 +18,7 @@ from claude_memory.crud_maintenance import CrudMaintenanceMixin
 from claude_memory.interfaces import Embedder, VectorStore
 from claude_memory.router import QueryRouter
 from claude_memory.search import SearchMixin
+from claude_memory.search_radar import SearchRadarMixin
 from claude_memory.temporal import TemporalMixin
 
 from .lock_manager import LockManager
@@ -46,15 +47,19 @@ from .vector_store import QdrantVectorStore
 logger = logging.getLogger(__name__)
 
 
-class MemoryService(CrudMixin, CrudMaintenanceMixin, SearchMixin, TemporalMixin, AnalysisMixin):
+class MemoryService(
+    CrudMixin, CrudMaintenanceMixin, SearchMixin, TemporalMixin, AnalysisMixin, SearchRadarMixin
+):
     """Orchestrates graph, vector, and ontology operations for memory management.
 
     This is a thin facade — all method implementations are in:
-      - crud.py            (entity / relationship CRUD)
-      - crud_maintenance.py (observation CRUD, background salience)
-      - search.py          (vector search, spreading activation, hologram)
-      - temporal.py        (sessions, breakthroughs, timeline)
-      - analysis.py        (graph health, gaps, stale, consolidation)
+      - crud.py              (entity / relationship CRUD)
+      - crud_maintenance.py  (observation CRUD, background salience)
+      - search.py            (search orchestration + graph queries)
+      - search_channels.py   (individual retrieval channels)
+      - search_radar.py      (semantic radar / batch gap scanner)
+      - temporal.py          (sessions, breakthroughs, timeline)
+      - analysis.py          (graph health, gaps, stale, consolidation)
     """
 
     def __init__(
@@ -84,3 +89,13 @@ class MemoryService(CrudMixin, CrudMaintenanceMixin, SearchMixin, TemporalMixin,
         from claude_memory.stats import create_accumulator  # noqa: PLC0415
 
         self._stats = create_accumulator()
+
+        # FTS5 lexical search index (Tier 1.2)
+        from claude_memory.fts_store import FTSStore  # noqa: PLC0415
+
+        self.fts_store = FTSStore()
+
+        # Cross-encoder reranker client (Tier 1.3)
+        from claude_memory.reranker import RerankerClient  # noqa: PLC0415
+
+        self.reranker = RerankerClient()

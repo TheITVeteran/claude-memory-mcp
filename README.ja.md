@@ -4,16 +4,18 @@
 
 **AIエージェントのための永続メモリインフラストラクチャ。**
 
+[![LongMemEval](https://img.shields.io/badge/LongMemEval_R%405-100%25-gold?style=for-the-badge)](benchmarks/longmemeval/RESULTS.md)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](docker-compose.yml)
 [![MCP ツール](https://img.shields.io/badge/MCP%20tools-34-green.svg)]()
-[![テスト](https://img.shields.io/badge/tests-1%2C166%20passing-brightgreen)]()
+[![テスト](https://img.shields.io/badge/tests-1%2C281%20passing-brightgreen)]()
 [![品質スコア](https://img.shields.io/badge/gauntlet-A%E2%88%92%20(95%2F100)-blue)]()
 [![GPU](https://img.shields.io/badge/GPU-CUDA%20supported-orange.svg)]()
 [![GitHub stars](https://img.shields.io/github/stars/iikarus/Dragon-Brain)](https://github.com/iikarus/Dragon-Brain/stargazers)
 
-> **1,599件のメモリ** · **34個のMCPツール** · **ナレッジグラフ + ベクトル検索ハイブリッド** · **200ms未満の検索** · **1,166個のテスト**
+> **LongMemEval R@5 100%** · **1,599 メモリ** · **34 MCP ツール** · **グラフ + ベクトル ハイブリッド検索** · **200ms未満の検索** · **LLM不要**
 
 あらゆるLLMにナレッジグラフ + ベクトル検索ハイブリッドによる長期記憶を提供するオープンソースMCPサーバー。エンティティ、観察、関係を保存し、セッションをまたいでセマンティックに想起できます。すべてのMCPクライアントに対応：Claude Code、Claude Desktop、Cursor、Windsurf、Cline、Gemini CLI。
 
@@ -108,6 +110,20 @@ AI:    「RustでAtlasを関数型アプローチで構築しています...」[
 | 自動クラスタリング | いいえ | いいえ | **はい（ライブラリアン）** |
 | 関係発見 | いいえ | いいえ | **はい（セマンティックレーダー）** |
 | 任意のMCPクライアント対応 | 該当なし | まちまち | **はい** |
+
+
+## ベンチマーク
+
+Dragon Brain は [LongMemEval](https://arxiv.org/abs/2410.10813)（ICLR 2025）で **100% recall@5** を達成しました——AI メモリシステムの業界標準ベンチマーク、500問、6カテゴリ、LLM不要。
+
+| システム | スコア | 指標 | LLM必要 | ローカル |
+|---------|:-----:|------|:---:|:---:|
+| **Dragon Brain v1.1.0** | **100%** | **R@5** | **不要** | **可** |
+| MemPalace (Haiku rerank) | 100% | R@5 | 必要 | 可 |
+| MemPalace (raw) | 96.6% | R@5 | 不要 | 可 |
+| Mem0 | ~85% | R@5 | 必要 | 不可 |
+
+詳細な方法論と生データ：**[RESULTS.md](benchmarks/longmemeval/RESULTS.md)**
 
 ## 機能一覧
 

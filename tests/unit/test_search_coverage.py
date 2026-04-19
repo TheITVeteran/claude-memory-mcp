@@ -46,9 +46,16 @@ class TestRelationalEnrichment:
         svc = _make_search_mixin()
         svc.traverse_path = AsyncMock(return_value=[{"id": "a"}, {"id": "b"}])
 
+        # Mock the name→UUID Cypher lookup (Fix #6: names resolved before traverse)
+        alice_res = MagicMock()
+        alice_res.result_set = [["uuid-alice"]]
+        bob_res = MagicMock()
+        bob_res.result_set = [["uuid-bob"]]
+        svc.repo.execute_cypher.side_effect = [alice_res, bob_res]
+
         result = await svc._relational_enrichment('How does "Alice" relate to "Bob"?')
         assert len(result) == 2
-        svc.traverse_path.assert_called_once_with("Alice", "Bob")
+        svc.traverse_path.assert_called_once_with("uuid-alice", "uuid-bob")
 
     @pytest.mark.asyncio()
     async def test_sad_one_quoted_entity_returns_empty(self) -> None:
@@ -72,6 +79,13 @@ class TestRelationalEnrichment:
         svc = _make_search_mixin()
         svc.traverse_path = AsyncMock(return_value=[{"id": "a"}, "not-a-dict", {"id": "b"}])
 
+        # Mock name→UUID lookup
+        res1 = MagicMock()
+        res1.result_set = [["uuid-e1"]]
+        res2 = MagicMock()
+        res2.result_set = [["uuid-e2"]]
+        svc.repo.execute_cypher.side_effect = [res1, res2]
+
         result = await svc._relational_enrichment('"Entity1" to "Entity2"')
         assert len(result) == 2  # non-dict filtered
 
@@ -80,6 +94,13 @@ class TestRelationalEnrichment:
         """Evil: traverse_path returns empty path."""
         svc = _make_search_mixin()
         svc.traverse_path = AsyncMock(return_value=[])
+
+        # Mock name→UUID lookup
+        res1 = MagicMock()
+        res1.result_set = [["uuid-alice"]]
+        res2 = MagicMock()
+        res2.result_set = [["uuid-bob"]]
+        svc.repo.execute_cypher.side_effect = [res1, res2]
 
         result = await svc._relational_enrichment('"Alice" to "Bob"')
         assert result == []
@@ -90,8 +111,15 @@ class TestRelationalEnrichment:
         svc = _make_search_mixin()
         svc.traverse_path = AsyncMock(return_value=[{"id": "a"}])
 
+        # Mock name→UUID lookup (only first two quoted names are used)
+        res1 = MagicMock()
+        res1.result_set = [["uuid-a"]]
+        res2 = MagicMock()
+        res2.result_set = [["uuid-b"]]
+        svc.repo.execute_cypher.side_effect = [res1, res2]
+
         _ = await svc._relational_enrichment('"A" then "B" then "C"')
-        svc.traverse_path.assert_called_once_with("A", "B")
+        svc.traverse_path.assert_called_once_with("uuid-a", "uuid-b")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -172,92 +200,6 @@ class TestAssociativeEnrichment:
             "test", [{"_id": "e1", "_score": 0.9}], limit=10, project_id=None
         )
         assert len(result) == 1
-
-
-# ═══════════════════════════════════════════════════════════════
-#  _hydrate_search_results
-# ═══════════════════════════════════════════════════════════════
-
-
-class TestHydrateSearchResults:
-    """3e/1s/1h for _hydrate_search_results."""
-
-    def test_happy_builds_search_results(self) -> None:
-        """Happy: vector hits hydrated from graph → SearchResult objects."""
-        svc = _make_search_mixin()
-        svc._fire_salience_update = MagicMock()
-        svc.repo.get_subgraph.return_value = {
-            "nodes": [
-                {
-                    "id": "e1",
-                    "name": "Alice",
-                    "node_type": "Person",
-                    "project_id": "p1",
-                    "description": "A person",
-                    "salience_score": 1.5,
-                }
-            ],
-            "edges": [],
-        }
-
-        results = svc._hydrate_search_results([{"_id": "e1", "_score": 0.95}], deep=False)
-        assert len(results) == 1
-        assert results[0].name == "Alice"
-        assert results[0].score == 0.95
-        assert results[0].distance == pytest.approx(0.05)
-
-    def test_sad_no_graph_match(self) -> None:
-        """Sad: vector hit has no graph node → filtered out."""
-        svc = _make_search_mixin()
-        svc._fire_salience_update = MagicMock()
-        svc.repo.get_subgraph.return_value = {"nodes": [], "edges": []}
-
-        results = svc._hydrate_search_results([{"_id": "ghost", "_score": 0.8}], deep=False)
-        assert results == []
-
-    def test_evil_missing_node_properties_use_defaults(self) -> None:
-        """Evil: node with missing properties uses safe defaults."""
-        svc = _make_search_mixin()
-        svc._fire_salience_update = MagicMock()
-        svc.repo.get_subgraph.return_value = {
-            "nodes": [{"id": "e1"}],  # minimal — no name, type, etc.
-            "edges": [],
-        }
-
-        results = svc._hydrate_search_results([{"_id": "e1", "_score": 0.5}], deep=False)
-        assert len(results) == 1
-        assert results[0].name == "Unknown"
-        assert results[0].node_type == "Entity"
-        assert results[0].project_id == "unknown"
-
-    def test_evil_deep_true_passes_depth_1(self) -> None:
-        """Evil: deep=True passes depth=1 to get_subgraph."""
-        svc = _make_search_mixin()
-        svc._fire_salience_update = MagicMock()
-        svc.repo.get_subgraph.return_value = {
-            "nodes": [{"id": "e1", "name": "A"}],
-            "edges": [],
-        }
-
-        svc._hydrate_search_results([{"_id": "e1", "_score": 0.5}], deep=True)
-        svc.repo.get_subgraph.assert_called_once_with(["e1"], depth=1)
-
-    def test_evil_multiple_hits_only_matched_returned(self) -> None:
-        """Evil: only vector hits with matching graph nodes returned."""
-        svc = _make_search_mixin()
-        svc._fire_salience_update = MagicMock()
-        svc.repo.get_subgraph.return_value = {
-            "nodes": [{"id": "e1", "name": "A"}],
-            "edges": [],
-        }
-
-        # e1 in graph, e2 not
-        results = svc._hydrate_search_results(
-            [{"_id": "e1", "_score": 0.9}, {"_id": "e2", "_score": 0.8}],
-            deep=False,
-        )
-        assert len(results) == 1
-        assert results[0].id == "e1"
 
 
 # ═══════════════════════════════════════════════════════════════

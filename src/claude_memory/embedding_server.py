@@ -69,7 +69,74 @@ async def embed_texts(request: EmbedRequest) -> dict[str, Any]:
 async def health() -> dict[str, str]:
     """Health check endpoint returning service status and device info."""
     device = service.device if service else "unknown"
-    return {"status": "ok", "device": device}
+    reranker_status = "loaded" if _reranker is not None else "not loaded"
+    return {"status": "ok", "device": device, "reranker": reranker_status}
+
+
+# ── Reranker ────────────────────────────────────────────────────
+
+_reranker: Any = None
+
+
+class RerankRequest(BaseModel):
+    """Request payload for cross-encoder reranking."""
+
+    query: str
+    documents: list[str]
+    top_k: int | None = None
+
+
+class RerankResponse(BaseModel):
+    """Response payload with reranked document indices and scores."""
+
+    scores: list[float]
+    indices: list[int]
+
+
+def _get_reranker() -> Any:
+    """Lazy-load the cross-encoder reranker model."""
+    global _reranker  # noqa: PLW0603
+    if _reranker is None:
+        from FlagEmbedding import FlagReranker  # noqa: PLC0415
+
+        reranker_model = os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
+        logger.info("Loading reranker model: %s", reranker_model)
+        _reranker = FlagReranker(reranker_model, use_fp16=True)
+        logger.info("Reranker loaded")
+    return _reranker
+
+
+@app.post("/rerank", response_model=RerankResponse)  # type: ignore[misc, unused-ignore]
+async def rerank(request: RerankRequest) -> dict[str, Any]:
+    """Rerank documents by cross-encoder relevance to the query."""
+    if not request.documents:
+        return {"scores": [], "indices": []}
+
+    try:
+        reranker = _get_reranker()
+        pairs = [[request.query, doc] for doc in request.documents]
+        scores = reranker.compute_score(pairs)
+
+        # compute_score returns a float for single pair, list for multiple
+        if isinstance(scores, (int, float)):
+            scores = [float(scores)]
+        else:
+            scores = [float(s) for s in scores]
+
+        # Sort by score descending, return top_k
+        indexed_scores = list(enumerate(scores))
+        indexed_scores.sort(key=lambda x: x[1], reverse=True)
+
+        top_k = request.top_k or len(scores)
+        top = indexed_scores[:top_k]
+
+        return {
+            "scores": [s for _, s in top],
+            "indices": [i for i, _ in top],
+        }
+    except Exception as e:
+        logger.error("Reranking failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 if __name__ == "__main__":

@@ -4,16 +4,18 @@
 
 **Инфраструктура постоянной памяти для ИИ-агентов.**
 
+[![LongMemEval](https://img.shields.io/badge/LongMemEval_R%405-100%25-gold?style=for-the-badge)](benchmarks/longmemeval/RESULTS.md)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](docker-compose.yml)
 [![Инструменты MCP](https://img.shields.io/badge/MCP%20tools-34-green.svg)]()
-[![Тесты](https://img.shields.io/badge/tests-1%2C166%20passing-brightgreen)]()
+[![Тесты](https://img.shields.io/badge/tests-1%2C281%20passing-brightgreen)]()
 [![Качество](https://img.shields.io/badge/gauntlet-A%E2%88%92%20(95%2F100)-blue)]()
 [![GPU](https://img.shields.io/badge/GPU-CUDA%20supported-orange.svg)]()
 [![GitHub stars](https://img.shields.io/github/stars/iikarus/Dragon-Brain)](https://github.com/iikarus/Dragon-Brain/stargazers)
 
-> **1 599 воспоминаний** · **34 инструмента MCP** · **Граф знаний + векторный поиск** · **поиск <200мс** · **1 166 тестов**
+> **LongMemEval R@5 100%** · **1,599 воспоминаний** · **34 MCP инструмента** · **Граф + Вектор гибрид** · **поиск <200мс** · **LLM не требуется**
 
 Открытый MCP-сервер, предоставляющий любой LLM долгосрочную память через гибрид графа знаний и векторного поиска. Сохраняйте сущности, наблюдения и связи — затем извлекайте их семантически между сессиями. Работает с любым MCP-клиентом: Claude Code, Claude Desktop, Cursor, Windsurf, Cline, Gemini CLI.
 
@@ -108,6 +110,20 @@ claude mcp add dragon-brain -- python -m claude_memory.server
 | Авто-кластеризация | Нет | Нет | **Да (Библиотекарь)** |
 | Обнаружение связей | Нет | Нет | **Да (Семантический Радар)** |
 | Работает с любым MCP-клиентом | Н/Д | Зависит | **Да** |
+
+
+## Бенчмарк
+
+Dragon Brain набирает **100% recall@5** на [LongMemEval](https://arxiv.org/abs/2410.10813) (ICLR 2025), отраслевом стандарте для систем памяти ИИ — 500 вопросов, 6 категорий, без LLM.
+
+| Система | Результат | Метрика | Требуется LLM | Локально |
+|---------|:---------:|---------|:---:|:---:|
+| **Dragon Brain v1.1.0** | **100%** | **R@5** | **Нет** | **Да** |
+| MemPalace (Haiku rerank) | 100% | R@5 | Да | Да |
+| MemPalace (raw) | 96.6% | R@5 | Нет | Да |
+| Mem0 | ~85% | R@5 | Да | Нет |
+
+Полная методология и данные: **[RESULTS.md](benchmarks/longmemeval/RESULTS.md)**
 
 ## Возможности
 

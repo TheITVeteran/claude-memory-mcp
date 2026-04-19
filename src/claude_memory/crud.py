@@ -141,7 +141,20 @@ class CrudMixin:
                 )
                 raise
 
-            # 3. Link to most recent entity in same project via PRECEDED_BY
+            # 3. Index in FTS5 (lexical search channel)
+            if hasattr(self, "fts_store"):
+                try:
+                    self.fts_store.index_entity(
+                        entity_id=node_id,
+                        name=params.name,
+                        node_type=params.node_type,
+                        description=props.get("description", ""),
+                        project_id=params.project_id,
+                    )
+                except Exception:
+                    logger.warning("FTS index failed for %s — non-fatal", node_id, exc_info=True)
+
+            # 4. Link to most recent entity in same project via PRECEDED_BY
             warnings: list[str] = []
             try:
                 prev = self.repo.get_most_recent_entity(project_id)
@@ -286,6 +299,14 @@ class CrudMixin:
             logger.error("vector_delete_failed for %s — raising to prevent split-brain", entity_id)
             raise
 
+    def _safe_fts_delete(self, entity_id: str) -> None:
+        """Remove entity from FTS index — non-fatal on failure."""
+        if hasattr(self, "fts_store"):
+            try:
+                self.fts_store.remove_entity(entity_id)
+            except Exception:
+                logger.debug("FTS delete failed for %s — non-fatal", entity_id, exc_info=True)
+
     async def delete_entity(self, params: "EntityDeleteParams") -> dict[str, Any]:
         """Deletes an entity."""
 
@@ -305,10 +326,12 @@ class CrudMixin:
                     {"status": "archived", "archived_at": datetime.now(UTC).isoformat()},
                 )
                 await self._safe_vector_delete(params.entity_id)
+                self._safe_fts_delete(params.entity_id)
                 return {"status": "archived", "id": params.entity_id}
             else:
                 self.repo.delete_node(params.entity_id)
                 await self._safe_vector_delete(params.entity_id)
+                self._safe_fts_delete(params.entity_id)
                 return {"status": "deleted", "id": params.entity_id}
 
         if project_id:

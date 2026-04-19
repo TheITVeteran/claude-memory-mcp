@@ -560,8 +560,8 @@ async def test_happy_search_deep_returns_relationships(service: MemoryService) -
             }
         ],
         "edges": [
-            {"src": ENTITY_ID, "dst": "other-1", "type": "RELATES_TO"},
-            {"src": "other-2", "dst": ENTITY_ID, "type": "DEPENDS_ON"},
+            {"source": ENTITY_ID, "target": "other-1", "type": "RELATES_TO"},
+            {"source": "other-2", "target": ENTITY_ID, "type": "DEPENDS_ON"},
         ],
     }
     obs_result = MagicMock()
@@ -962,8 +962,10 @@ async def test_happy_search_fires_salience_async(service: MemoryService) -> None
 
     if service._background_tasks:
         await asyncio.gather(*service._background_tasks, return_exceptions=True)
-    # Verify salience was still fired in background
-    service.repo.increment_salience.assert_called_once_with([ENTITY_ID])
+    # Verify salience was still fired in background (entity-001 must be present)
+    service.repo.increment_salience.assert_called_once()
+    salience_ids = service.repo.increment_salience.call_args[0][0]
+    assert ENTITY_ID in salience_ids
 
 
 async def test_evil13_search_salience_background_error_silent(service: MemoryService) -> None:

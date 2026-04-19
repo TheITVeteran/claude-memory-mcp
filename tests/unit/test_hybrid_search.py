@@ -43,6 +43,16 @@ def service():
     svc.activation_engine.repo = svc.repo
     svc.vector_store = AsyncMock()
     svc.router = MagicMock(spec=QueryRouter)
+    # Reranker: pass-through (return candidates unchanged)
+    svc.reranker = MagicMock()
+    svc.reranker.rerank = AsyncMock(side_effect=lambda q, c, **kw: c)
+    # Soft routing: all channels fire, so mock default returns for all enrichments
+    svc.query_timeline = AsyncMock(return_value=[])
+    svc.traverse_path = AsyncMock(return_value=[])
+    svc.search_associative = AsyncMock(return_value=[])
+    # Activation engine defaults
+    svc.activation_engine.activate = MagicMock(return_value={})
+    svc.activation_engine.spread = MagicMock(return_value={})
     return svc
 
 
@@ -147,21 +157,17 @@ class TestHybridSearchPipeline:
         assert len(results) > 0
 
     @pytest.mark.asyncio()
-    async def test_sad2_semantic_intent_skips_graph_enrichment(
-        self, service: MemoryService
-    ) -> None:
-        """SEMANTIC intent → vector-only, no graph enrichment methods called."""
+    async def test_sad2_semantic_intent_vectors_dominate(self, service: MemoryService) -> None:
+        """SEMANTIC intent: vector channel gets full weight, graph channels get base weight."""
         service.vector_store.search.return_value = _vector_results("a")
         service.router.classify.return_value = QueryIntent.SEMANTIC
         service.repo.get_subgraph.return_value = _graph_nodes("a")
 
-        with patch.object(service, "query_timeline", new_callable=AsyncMock) as mock_tl:
-            with patch.object(service, "traverse_path", new_callable=AsyncMock) as mock_tp:
-                results = await service.search("what is Python")
+        results = await service.search("what is Python")
 
-        mock_tl.assert_not_called()
-        mock_tp.assert_not_called()
+        # Under soft routing, all channels fire — vector still dominates
         assert len(results) == 1
+        service.vector_store.search.assert_called_once()
 
     @pytest.mark.asyncio()
     async def test_happy_retrieval_strategy_always_populated(self, service: MemoryService) -> None:

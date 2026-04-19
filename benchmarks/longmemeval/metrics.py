@@ -32,6 +32,32 @@ def recall_at_k(
     return len(top_k & relevant) / len(relevant)
 
 
+def recall_any_at_k(
+    retrieved_ids: list[str],
+    relevant_ids: list[str],
+    k: int = 5,
+) -> float:
+    """Compute Recall-Any@K — binary hit: is ANY relevant item in top-K?
+
+    This is the metric MemPalace uses for their LongMemEval scores.
+    Returns 1.0 if at least one relevant item is in top-K, else 0.0.
+
+    Args:
+        retrieved_ids: IDs ranked by retrieval score (best first).
+        relevant_ids: Ground-truth relevant IDs.
+        k: Cutoff rank.
+
+    Returns:
+        1.0 if any relevant item found in top-K, else 0.0.
+        Returns 0.0 if relevant_ids is empty.
+    """
+    if not relevant_ids:
+        return 0.0
+    top_k = set(retrieved_ids[:k])
+    relevant = set(relevant_ids)
+    return 1.0 if (top_k & relevant) else 0.0
+
+
 def ndcg_at_k(
     retrieved_ids: list[str],
     relevant_ids: list[str],
