@@ -12,7 +12,11 @@ The entity_extraction module should:
 
 from __future__ import annotations
 
-from claude_memory.entity_extraction import extract_entities
+import pytest
+
+spacy = pytest.importorskip("spacy", reason="spaCy not installed")
+
+from claude_memory.entity_extraction import extract_entities  # noqa: E402
 
 # ═══════════════════════════════════════════════════════════════
 #  extract_entities: 3-evil / 1-sad / 1-happy

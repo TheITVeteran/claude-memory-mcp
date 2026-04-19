@@ -65,6 +65,7 @@ class TestEntityExtractionChannel:
     @pytest.mark.asyncio()
     async def test_happy_entity_names_lookup_graph(self, service) -> None:
         """NER extracts 'Google' from query → Cypher finds it → returns as channel result."""
+        pytest.importorskip("spacy", reason="spaCy not installed")
         # Mock: Cypher finds a node named "Google"
         mock_node = MagicMock()
         mock_node.properties = {"id": "google-001", "name": "Google"}
