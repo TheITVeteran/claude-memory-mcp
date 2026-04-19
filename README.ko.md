@@ -4,16 +4,18 @@
 
 **AI 에이전트를 위한 영구 메모리 인프라.**
 
+[![LongMemEval](https://img.shields.io/badge/LongMemEval_R%405-100%25-gold?style=for-the-badge)](benchmarks/longmemeval/RESULTS.md)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](docker-compose.yml)
 [![MCP 도구](https://img.shields.io/badge/MCP%20tools-34-green.svg)]()
-[![테스트](https://img.shields.io/badge/tests-1%2C166%20passing-brightgreen)]()
+[![테스트](https://img.shields.io/badge/tests-1%2C281%20passing-brightgreen)]()
 [![품질](https://img.shields.io/badge/gauntlet-A%E2%88%92%20(95%2F100)-blue)]()
 [![GPU](https://img.shields.io/badge/GPU-CUDA%20supported-orange.svg)]()
 [![GitHub stars](https://img.shields.io/github/stars/iikarus/Dragon-Brain)](https://github.com/iikarus/Dragon-Brain/stargazers)
 
-> **1,599개의 기억** · **34개의 MCP 도구** · **지식 그래프 + 벡터 검색 하이브리드** · **200ms 미만 검색** · **1,166개 테스트**
+> **LongMemEval R@5 100%** · **1,599 메모리** · **34 MCP 도구** · **그래프 + 벡터 하이브리드** · **200ms 미만 검색** · **LLM 불필요**
 
 지식 그래프 + 벡터 검색 하이브리드를 통해 모든 LLM에 장기 기억을 제공하는 오픈소스 MCP 서버입니다. 엔티티, 관찰, 관계를 저장하고 세션 간에 시맨틱하게 검색합니다. 모든 MCP 클라이언트와 호환: Claude Code, Claude Desktop, Cursor, Windsurf, Cline, Gemini CLI.
 

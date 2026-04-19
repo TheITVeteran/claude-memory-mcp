@@ -4,16 +4,18 @@
 
 **Infraestructura de memoria persistente para agentes de IA.**
 
+[![LongMemEval](https://img.shields.io/badge/LongMemEval_R%405-100%25-gold?style=for-the-badge)](benchmarks/longmemeval/RESULTS.md)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](docker-compose.yml)
 [![Herramientas MCP](https://img.shields.io/badge/MCP%20tools-34-green.svg)]()
-[![Tests](https://img.shields.io/badge/tests-1%2C166%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-1%2C281%20passing-brightgreen)]()
 [![Calidad](https://img.shields.io/badge/gauntlet-A%E2%88%92%20(95%2F100)-blue)]()
 [![GPU](https://img.shields.io/badge/GPU-CUDA%20supported-orange.svg)]()
 [![GitHub stars](https://img.shields.io/github/stars/iikarus/Dragon-Brain)](https://github.com/iikarus/Dragon-Brain/stargazers)
 
-> **1,599 memorias** · **34 herramientas MCP** · **Grafo de conocimiento + búsqueda vectorial híbrida** · **búsqueda <200ms** · **1,166 tests**
+> **LongMemEval R@5 100%** · **1,599 memorias** · **34 herramientas MCP** · **Grafo + Vector híbrido** · **búsqueda <200ms** · **Sin LLM requerido**
 
 Un servidor MCP de código abierto que proporciona memoria a largo plazo a cualquier LLM mediante un grafo de conocimiento + búsqueda vectorial híbrida. Almacena entidades, observaciones y relaciones — luego las recupera semánticamente entre sesiones. Compatible con cualquier cliente MCP: Claude Code, Claude Desktop, Cursor, Windsurf, Cline, Gemini CLI.
 
@@ -174,7 +176,7 @@ Claude es brillante pero olvida todo entre conversaciones. Cada nuevo chat comie
 
 ## Calidad
 
-Testing de grado productivo: **1,166 tests** · testing de mutaciones (3-evil/1-sad/1-happy) · testing basado en propiedades (38 propiedades Hypothesis) · fuzz testing (30K+ entradas, 0 crashes) · análisis estático (mypy modo estricto, ruff) · auditoría de seguridad · **Puntuación Gauntlet: A- (95/100)**.
+Testing de grado productivo: **1,281 tests** · testing de mutaciones (3-evil/1-sad/1-happy) · testing basado en propiedades (38 propiedades Hypothesis) · fuzz testing (30K+ entradas, 0 crashes) · análisis estático (mypy modo estricto, ruff) · auditoría de seguridad · **Puntuación Gauntlet: A- (95/100)**.
 
 Resultados completos: [GAUNTLET_RESULTS.md](docs/GAUNTLET_RESULTS.md)
 

@@ -4,17 +4,19 @@
 
 **Persistent memory infrastructure for AI agents.**
 
+[![LongMemEval](https://img.shields.io/badge/LongMemEval_R%405-100%25-gold?style=for-the-badge)](benchmarks/longmemeval/RESULTS.md)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI](https://github.com/iikarus/Dragon-Brain/actions/workflows/ci.yml/badge.svg)](https://github.com/iikarus/Dragon-Brain/actions/workflows/ci.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](docker-compose.yml)
 [![MCP Tools](https://img.shields.io/badge/MCP%20tools-34-green.svg)]()
-[![Tests](https://img.shields.io/badge/tests-1%2C166%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-1%2C281%20passing-brightgreen)]()
 [![Gauntlet](https://img.shields.io/badge/gauntlet-A%E2%88%92%20(95%2F100)-blue)]()
 [![GPU](https://img.shields.io/badge/GPU-CUDA%20supported-orange.svg)]()
 [![GitHub stars](https://img.shields.io/github/stars/iikarus/Dragon-Brain)](https://github.com/iikarus/Dragon-Brain/stargazers)
 
-> **1,599 memories** · **34 MCP tools** · **Graph + Vector hybrid retrieval** · **sub-200ms search** · **1,166 tests**
+> **100% LongMemEval R@5** · **1,599 memories** · **34 MCP tools** · **Graph + Vector hybrid** · **sub-200ms search** · **No LLM required**
 
 An open-source MCP server that gives any LLM long-term memory using a knowledge graph + vector search hybrid. Store entities, observations, and relationships — then recall them semantically across sessions. Works with any MCP client: Claude Code, Claude Desktop, Cursor, Windsurf, Cline, Gemini CLI, VS Code Copilot, or any LLM that speaks [Model Context Protocol](https://modelcontextprotocol.io/).
 
@@ -129,12 +131,51 @@ AI:  "You're building Atlas in Rust with a functional approach..." [recalled fro
 | **Typed Relationships** | Weighted edges | — | — | Edges | — | — |
 | **Session Tracking** | ✓ | — | — | — | ✓ | — |
 | **Model Agnostic** | Any MCP client | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Test Suite** | 1,166 tests | — | — | — | — | — |
+| **Test Suite** | 1,281 tests | — | — | — | — | — |
 | **Mutation Testing** | ✓ | — | — | — | — | — |
 | **Dashboard** | Streamlit | — | — | — | — | ✓ |
 | **MCP Tools** | 34 | — | — | — | — | — |
 
 > *Feature comparison based on public READMEs as of March 2026. Open an issue if anything is inaccurate.*
+
+## Benchmark
+
+Dragon Brain scores **100% recall@5** on [LongMemEval](https://arxiv.org/abs/2410.10813) (ICLR 2025), the industry-standard benchmark for AI memory systems — 500 questions across 6 categories, no LLM required for retrieval.
+
+| System | Score | Metric | LLM Required | Local |
+|--------|:-----:|--------|:---:|:---:|
+| **Dragon Brain v1.1.0** | **100%** | **R@5** | **No** | **Yes** |
+| MemPalace (Haiku rerank) | 100% | R@5 | Yes | Yes |
+| MemPalace (raw) | 96.6% | R@5 | No | Yes |
+| OMEGA | 95.4% | QA accuracy | No | Yes |
+| Mastra OM | 94.87% | QA accuracy | Yes | No |
+| Hindsight | 91.4% | QA accuracy | No | No |
+| Mem0 | ~85% | R@5 | Yes | No |
+
+> **Note:** R@5 (retrieval recall) and QA accuracy are different metrics — shown together for context.
+> Systems marked with QA accuracy use an LLM to generate answers; R@5 measures retrieval only.
+> Dragon Brain's 100% R@5 means the correct evidence sessions appear in the top 5 results for every question.
+
+### Per-Category Breakdown
+
+| Category | Questions | R@5 |
+|----------|:---------:|:---:|
+| Knowledge update | 78 | 100% |
+| Multi-session | 133 | 100% |
+| Temporal reasoning | 133 | 100% |
+| Single-session assistant | 56 | 100% |
+| Single-session preference | 30 | 100% |
+| Single-session user | 70 | 100% |
+
+### Reproduce It
+
+```bash
+pip install dragon-brain
+docker compose up -d
+python -m benchmarks.longmemeval.runner --dataset oracle
+```
+
+Full methodology, raw data, and the journey from 25% to 100%: **[RESULTS.md](benchmarks/longmemeval/RESULTS.md)**
 
 ## 🔥 Use Cases — See It In Action
 
@@ -300,7 +341,7 @@ All 34 tools are documented in [docs/MCP_TOOL_REFERENCE.md](docs/MCP_TOOL_REFERE
 
 This isn't a weekend hack. It's tested like production software:
 
-- **1,166 tests** across 76 test files, 0 failures, 0 skipped
+- **1,281 tests** across 76 test files, 0 failures, 0 skipped
 - **Mutation testing** — 2,270 mutants, 1,184 killed across 27 source files (3-evil/1-sad/1-happy per function)
 - **Property-based testing** — 38 Hypothesis properties
 - **Fuzz testing** — 30K+ inputs, 0 crashes

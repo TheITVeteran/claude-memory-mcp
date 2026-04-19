@@ -166,6 +166,12 @@ After running `search_associative()`, you can pipe the activation map and vector
 
 This is a standalone utility, not an MCP tool. Use it programmatically when doing deep graph analysis.
 
+## Benchmark
+
+Dragon Brain scores **100% recall@5** on LongMemEval (ICLR 2025), the industry-standard AI memory benchmark. 500 questions, 6 categories, no LLM required.
+
+Full results: [benchmarks/longmemeval/RESULTS.md](benchmarks/longmemeval/RESULTS.md)
+
 ### Environment Variables
 
 | Variable | Default | Purpose |

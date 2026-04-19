@@ -1,12 +1,12 @@
 [project]
 name = "dragon-brain"
-version = "1.0.1"
-description = "Open-source long-term memory MCP server with knowledge graph and vector search"
+version = "1.1.0"
+description = "Open-source AI memory server — 100% on LongMemEval, knowledge graph + vector search, no LLM required"
 requires-python = ">=3.12"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [{name = "iikarus"}]
-keywords = ["dragon-brain", "mcp", "mcp-server", "ai-memory", "persistent-memory", "knowledge-graph", "vector-search", "falkordb", "qdrant", "ai-agent", "claude", "llm"]
+keywords = ["dragon-brain", "mcp", "mcp-server", "ai-memory", "persistent-memory", "knowledge-graph", "vector-search", "falkordb", "qdrant", "ai-agent", "claude", "llm", "longmemeval", "benchmark"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
