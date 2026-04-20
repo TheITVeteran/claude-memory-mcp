@@ -8,7 +8,19 @@ Drop this file into your project root or reference it from your Claude Code conf
 
 ## What This Is
 
-A persistent memory system for AI agents. Knowledge graph (FalkorDB) + vector search (Qdrant) + MCP server. Any MCP-compatible client can store entities, observations, and relationships — then recall them semantically across sessions. Published on PyPI as `dragon-brain`.
+A persistent memory system for AI agents. Knowledge graph (FalkorDB) + vector search (Qdrant) + MCP server. Any MCP-compatible client can store entities, observations, and relationships — then recall them semantically across sessions. Published on PyPI as `dragon-brain`. **v1.1.0 — 100% recall@5 on LongMemEval (ICLR 2025), no LLM required.**
+
+## Current Architecture
+
+6-channel parallel retrieval pipeline, all channels fire on every query:
+- **Dense vector** (Qdrant, BGE-M3 1024d) — semantic similarity
+- **FTS5 lexical** (SQLite BM25) — keyword matches embeddings miss
+- **Entity-first** (spaCy NER → FalkorDB graph) — entity → MENTIONED_IN → sessions
+- **Temporal** (date parser → timeline query) — time-window filtering
+- **Relational** (graph traversal) — shared entity connections
+- **Associative** (spreading activation) — energy propagation through graph
+
+Fusion: weighted RRF (k=35, PIT percentile normalization). Intent classifier sets per-channel weights (soft routing, no hard gate). Optional cross-encoder reranking (ms-marco-MiniLM, GPU/CPU auto-detect).
 
 ## Setup Verification
 
