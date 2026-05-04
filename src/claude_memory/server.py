@@ -7,6 +7,7 @@ from mcp.server.fastmcp import FastMCP
 
 from claude_memory.clustering import ClusteringService
 from claude_memory.embedding import EmbeddingService
+from claude_memory.exceptions import SearchError
 from claude_memory.librarian import LibrarianAgent
 from claude_memory.schema import (
     BreakthroughParams,
@@ -36,6 +37,8 @@ from claude_memory.tools_extra import (
     run_librarian_cycle,  # noqa: F401
     search_associative,  # noqa: F401
 )
+
+logger = logging.getLogger(__name__)
 
 # Initialize MCP Server
 mcp = FastMCP("claude-memory")
@@ -261,15 +264,23 @@ async def search_memory(  # noqa: PLR0913
     temporal_window_days: lookback window for temporal queries (default 7).
     include_meta: when True, wraps results with temporal exhaustion metadata.
     """
-    results = await service.search(
-        query,
-        limit,
-        project_id,
-        offset,
-        mmr=mmr,
-        strategy=strategy,
-        temporal_window_days=temporal_window_days,
-    )
+    try:
+        results = await service.search(
+            query,
+            limit,
+            project_id,
+            offset,
+            mmr=mmr,
+            strategy=strategy,
+            temporal_window_days=temporal_window_days,
+        )
+    except SearchError:
+        logger.error("search_memory: infrastructure error for query=%r", query, exc_info=True)
+        return {
+            "error": "MEMORY_LAYER_DEGRADED",
+            "message": "Memory retrieval unavailable",
+            "retry_safe": True,
+        }
     if not results:
         return "No results found."
 

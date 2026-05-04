@@ -112,9 +112,13 @@ class SearchAdvancedMixin:
                     )
                 )
             return results
-        except (ConnectionError, TimeoutError, OSError, ValueError):
-            logger.error("search_associative failed for query=%r", query, exc_info=True)
-            return []
+        except (ConnectionError, TimeoutError, OSError) as exc:
+            from .exceptions import SearchError  # noqa: PLC0415
+
+            logger.error(
+                "search_associative: infrastructure error for query=%r", query, exc_info=True
+            )
+            raise SearchError("Memory retrieval unavailable") from exc
 
     async def get_hologram(
         self, query: str, depth: int = 1, max_tokens: int = 8000

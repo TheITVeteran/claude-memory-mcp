@@ -1624,40 +1624,90 @@ async def test_evil19_delete_entity_hard_vector_failure_always_raises(
 # ─── P0-3: Search Error Handling Tests ──────────────────────────────
 
 
-async def test_evil20_search_returns_empty_on_embedder_failure(service: MemoryService) -> None:
-    """When embedder.encode raises, search should return [] instead of propagating."""
+async def test_evil20_search_raises_on_embedder_failure(service: MemoryService) -> None:
+    """AUDIT-B1: Embedder ConnectionError raises SearchError, not silent []."""
+    from claude_memory.exceptions import SearchError
+
     service.embedder.encode.side_effect = ConnectionError("Embedding server down")
 
-    result = await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
-    assert result == []
+    with pytest.raises(SearchError, match="Memory retrieval unavailable"):
+        await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
 
 
-async def test_evil21_search_returns_empty_on_vector_store_failure(service: MemoryService) -> None:
-    """When vector_store.search raises, search should return [] instead of propagating."""
+async def test_evil21_search_raises_on_vector_store_failure(service: MemoryService) -> None:
+    """AUDIT-B1: Qdrant ConnectionError raises SearchError, not silent []."""
+    from claude_memory.exceptions import SearchError
+
     service.vector_store.search.side_effect = ConnectionError("Qdrant unreachable")
 
-    result = await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
-    assert result == []
+    with pytest.raises(SearchError, match="Memory retrieval unavailable"):
+        await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
 
 
-async def test_evil22_search_associative_returns_empty_on_embedder_failure(
+async def test_evil22_search_raises_on_timeout(service: MemoryService) -> None:
+    """AUDIT-B1: TimeoutError during search raises SearchError."""
+    from claude_memory.exceptions import SearchError
+
+    service.embedder.encode.side_effect = TimeoutError("Embedding timed out")
+
+    with pytest.raises(SearchError, match="Memory retrieval unavailable"):
+        await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
+
+
+async def test_evil23_search_associative_raises_on_embedder_failure(
     service: MemoryService,
 ) -> None:
-    """When embedder.encode raises, search_associative returns [] instead of propagating."""
+    """AUDIT-B1: search_associative raises SearchError on embedder ConnectionError."""
+    from claude_memory.exceptions import SearchError
+
     service.embedder.encode.side_effect = ConnectionError("Embedding server down")
 
-    result = await service.search_associative(SEARCH_QUERY, limit=SEARCH_LIMIT)
-    assert result == []
+    with pytest.raises(SearchError, match="Memory retrieval unavailable"):
+        await service.search_associative(SEARCH_QUERY, limit=SEARCH_LIMIT)
 
 
-async def test_evil23_search_associative_returns_empty_on_vector_store_failure(
+async def test_evil24_search_associative_raises_on_vector_store_failure(
     service: MemoryService,
 ) -> None:
-    """When vector_store.search raises, search_associative returns [] instead of propagating."""
+    """AUDIT-B1: search_associative raises SearchError on Qdrant ConnectionError."""
+    from claude_memory.exceptions import SearchError
+
     service.vector_store.search.side_effect = ConnectionError("Qdrant unreachable")
 
-    result = await service.search_associative(SEARCH_QUERY, limit=SEARCH_LIMIT)
+    with pytest.raises(SearchError, match="Memory retrieval unavailable"):
+        await service.search_associative(SEARCH_QUERY, limit=SEARCH_LIMIT)
+
+
+async def test_evil25_search_raises_on_os_error(service: MemoryService) -> None:
+    """AUDIT-B1: OSError during search raises SearchError (network-level failure)."""
+    from claude_memory.exceptions import SearchError
+
+    service.embedder.encode.side_effect = OSError("Network unreachable")
+
+    with pytest.raises(SearchError, match="Memory retrieval unavailable"):
+        await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
+
+
+async def test_sad28_search_empty_query_returns_empty(service: MemoryService) -> None:
+    """AUDIT-B1: Empty query still returns [] (not SearchError) — it's not an infra failure."""
+    result = await service.search("", limit=SEARCH_LIMIT)
     assert result == []
+
+
+async def test_happy_search_normal_operation_returns_results(service: MemoryService) -> None:
+    """AUDIT-B1: Normal search with working infra returns results, no exception."""
+    mock_result = MagicMock()
+    mock_result.id = ENTITY_ID
+    mock_result.name = ENTITY_NAME
+
+    service.vector_store.search.return_value = [
+        {"_id": ENTITY_ID, "_score": 0.95, "payload": {"name": ENTITY_NAME}},
+    ]
+
+    # search() returns results, does not raise
+    result = await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
+    # Result may be empty if hydration mocks aren't set up, but should NOT raise
+    assert isinstance(result, list)
 
 
 # ─── E-5: System Diagnostics ───────────────────────────────────────

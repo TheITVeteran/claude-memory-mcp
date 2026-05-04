@@ -12,9 +12,13 @@ import time
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from claude_memory.exceptions import SearchError
 from claude_memory.merge import MergedResult
 from claude_memory.search_advanced import SearchAdvancedMixin
 from claude_memory.search_channels import SearchChannelsMixin
+
+# Infrastructure exceptions: indicate the system is degraded, not a bug.
+INFRA_ERRORS = (ConnectionError, TimeoutError, OSError)
 
 if TYPE_CHECKING:  # pragma: no cover
     from .activation import ActivationEngine
@@ -536,20 +540,24 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
             self._last_detected_intent = detected_intent
 
             # DRIFT-002: record search stats
-            from claude_memory.stats import record_search  # noqa: PLC0415
+            # Wrapped in its own try/except — stats failure must not kill pipeline
+            try:
+                from claude_memory.stats import record_search  # noqa: PLC0415
 
-            record_search(
-                getattr(self, "_stats", None),
-                query=query,
-                detected_intent=detected_intent.value,
-                results=search_results,
-                latency_ms=(time.perf_counter() - _t0) * 1000,
-                temporal_exhausted=(
-                    temporal_exhausted if detected_intent == QueryIntent.TEMPORAL else None
-                ),
-            )
+                record_search(
+                    getattr(self, "_stats", None),
+                    query=query,
+                    detected_intent=detected_intent.value,
+                    results=search_results,
+                    latency_ms=(time.perf_counter() - _t0) * 1000,
+                    temporal_exhausted=(
+                        temporal_exhausted if detected_intent == QueryIntent.TEMPORAL else None
+                    ),
+                )
+            except Exception:
+                logger.debug("Stats recording failed", exc_info=True)
 
             return search_results
-        except Exception:
-            logger.error("search failed for query=%r", query, exc_info=True)
-            return []
+        except INFRA_ERRORS as exc:
+            logger.error("search: infrastructure error for query=%r", query, exc_info=True)
+            raise SearchError("Memory retrieval unavailable") from exc

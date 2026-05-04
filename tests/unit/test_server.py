@@ -307,8 +307,39 @@ async def test_sad9_prune_stale() -> None:
 
 
 async def test_sad10_search_memory_no_results() -> None:
+    """Empty results (not infra error) still returns 'No results found.'"""
     result = await server.search_memory(query=SEARCH_QUERY)
     assert result == "No results found."
+
+
+async def test_evil11_search_memory_returns_error_on_search_error() -> None:
+    """AUDIT-B1: SearchError from service → structured error dict, not string."""
+    from claude_memory.exceptions import SearchError
+
+    server.service.search = AsyncMock(side_effect=SearchError("Infrastructure down"))
+    result = await server.search_memory(query=SEARCH_QUERY)
+    assert isinstance(result, dict)
+    assert result["error"] == "MEMORY_LAYER_DEGRADED"
+    assert result["retry_safe"] is True
+    assert "message" in result
+
+
+async def test_evil12_search_memory_error_message_sanitized() -> None:
+    """AUDIT-B1: Error message doesn't leak internal details (hostnames, URLs)."""
+    from claude_memory.exceptions import SearchError
+
+    server.service.search = AsyncMock(side_effect=SearchError("Connection refused to qdrant:6333"))
+    result = await server.search_memory(query=SEARCH_QUERY)
+    assert isinstance(result, dict)
+    # Message should be the generic one, not the internal str(e)
+    assert result["message"] == "Memory retrieval unavailable"
+
+
+async def test_evil13_search_memory_non_search_error_propagates() -> None:
+    """AUDIT-B1: Non-SearchError exceptions propagate (they're bugs, not infra failures)."""
+    server.service.search = AsyncMock(side_effect=KeyError("bad_key"))
+    with pytest.raises(KeyError, match="bad_key"):
+        await server.search_memory(query=SEARCH_QUERY)
 
 
 async def test_happy_search_memory_with_results() -> None:
