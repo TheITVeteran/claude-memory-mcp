@@ -185,8 +185,15 @@ class AnalysisMixin:
     async def archive_entity(self, entity_id: str) -> dict[str, Any]:
         """Archive an entity (logical hide).
 
-        Deletes Qdrant vector BEFORE graph update to prevent ghost search results.
+        Checks entity existence first, then deletes Qdrant vector BEFORE
+        graph update to prevent ghost search results.
         """
+        existing = self.repo.get_node(entity_id)
+        if not existing:
+            return {"error": f"Entity {entity_id} not found"}
+        if existing.get("status") == "archived":
+            return {"error": f"Entity {entity_id} is already archived"}
+
         await self.vector_store.delete(entity_id)
         return self.repo.update_node(entity_id, {"status": "archived"})  # type: ignore[no-any-return]
 

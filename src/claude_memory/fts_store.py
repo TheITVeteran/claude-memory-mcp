@@ -139,6 +139,7 @@ class FTSStore:
             conn.commit()
         except sqlite3.Error:
             logger.error("FTS index_entity failed for %s", entity_id, exc_info=True)
+            raise
 
     def remove_entity(self, entity_id: str) -> None:
         """Remove an entity from the FTS index.
@@ -155,6 +156,7 @@ class FTSStore:
             conn.commit()
         except sqlite3.Error:
             logger.error("FTS remove_entity failed for %s", entity_id, exc_info=True)
+            raise
 
     def search(
         self,

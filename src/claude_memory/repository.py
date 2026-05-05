@@ -149,14 +149,17 @@ class MemoryRepository(RepositoryQueryMixin, RepositoryTraversalMixin):
     def create_edge(
         self, from_id: str, to_id: str, relation_type: str, properties: dict[str, Any]
     ) -> dict[str, Any]:
-        """Creates a relationship between two nodes."""
+        """Creates or merges a relationship between two nodes.
+
+        Uses MERGE to prevent duplicate edges on retry.
+        """
         graph = self.select_graph()
 
         query = f"""
         MATCH (a), (b)
         WHERE a.id = $from AND b.id = $to
-        CREATE (a)-[r:{relation_type}]->(b)
-        SET r = $props
+        MERGE (a)-[r:{relation_type}]->(b)
+        ON CREATE SET r = $props
         RETURN r
         """
         result = graph.query(query, {"from": from_id, "to": to_id, "props": properties})

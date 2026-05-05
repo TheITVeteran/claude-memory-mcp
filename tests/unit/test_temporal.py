@@ -83,6 +83,9 @@ async def test_happy_point_in_time_query(memory_service: Any, mock_vector_store:
 async def test_happy_archive_entity(memory_service: MemoryService) -> None:
     graph = memory_service.repo.client.select_graph.return_value
 
+    # AUDIT-B2: archive_entity now checks existence first
+    memory_service.repo.get_node = MagicMock(return_value={"id": "e1", "name": "Test Entity"})
+
     mock_node = MagicMock()
     mock_node.properties = {"id": "e1", "status": "archived"}
     graph.query.return_value.result_set = [[mock_node]]
