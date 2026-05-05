@@ -217,7 +217,7 @@ class RepositoryTraversalMixin:
             if res.result_set and res.result_set[0][0] is not None:
                 return int(res.result_set[0][0])
         except Exception:
-            logger.debug(
+            logger.warning(
                 "shortest_path_length forward query failed for %s->%s",
                 from_id,
                 to_id,
@@ -235,7 +235,7 @@ class RepositoryTraversalMixin:
             if res.result_set and res.result_set[0][0] is not None:
                 return int(res.result_set[0][0])
         except Exception:
-            logger.debug(
+            logger.warning(
                 "shortest_path_length reverse query failed for %s->%s",
                 from_id,
                 to_id,

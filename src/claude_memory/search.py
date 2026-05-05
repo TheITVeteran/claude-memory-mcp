@@ -613,7 +613,7 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
                     ),
                 )
             except Exception:
-                logger.debug("Stats recording failed", exc_info=True)
+                logger.warning("Stats recording failed", exc_info=True)
 
             return search_results
         except INFRA_ERRORS as exc:

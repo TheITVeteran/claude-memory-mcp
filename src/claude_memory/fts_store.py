@@ -223,7 +223,7 @@ class FTSStore:
             return results
         except sqlite3.OperationalError:
             # Malformed query or FTS error — return empty gracefully
-            logger.debug("FTS search failed for query=%r", query, exc_info=True)
+            logger.warning("FTS search failed for query=%r", query, exc_info=True)
             return []
 
     def count(self) -> int:

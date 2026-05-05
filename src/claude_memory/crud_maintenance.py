@@ -156,7 +156,7 @@ class CrudMaintenanceMixin:
                         project_id=entity.get("project_id", ""),
                     )
             except Exception:
-                logger.debug(
+                logger.warning(
                     "FTS re-index failed after observation add for %s",
                     params.entity_id,
                 )

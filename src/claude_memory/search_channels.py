@@ -160,7 +160,7 @@ class SearchChannelsMixin:
                         if "id" in props:
                             results.append(props)
                 except Exception:
-                    logger.debug("Entity lookup failed for %r", name, exc_info=True)
+                    logger.warning("Entity lookup failed for %r", name, exc_info=True)
 
             return results
 
@@ -235,7 +235,7 @@ class SearchChannelsMixin:
                     if res.result_set:
                         resolved_ids.append(str(res.result_set[0][0]))
                 except Exception:
-                    logger.debug("Name→ID lookup failed for %r", name, exc_info=True)
+                    logger.warning("Name→ID lookup failed for %r", name, exc_info=True)
 
             if len(resolved_ids) >= 2:  # noqa: PLR2004
                 path = await self.traverse_path(resolved_ids[0], resolved_ids[1])  # type: ignore[attr-defined]
@@ -422,7 +422,7 @@ class SearchChannelsMixin:
                 return 1.0  # future timestamps → max recency
             return float(2.0 ** (-age_days / half_life))
         except (ValueError, TypeError):
-            logger.debug("Invalid occurred_at '%s', falling back to default", occurred_at)
+            logger.warning("Invalid occurred_at '%s', falling back to default", occurred_at)
             return result.recency_score
 
     # ── Existing helpers (unchanged) ─────────────────────────────────

@@ -305,7 +305,7 @@ class CrudMixin:
             try:
                 self.fts_store.remove_entity(entity_id)
             except Exception:
-                logger.debug("FTS delete failed for %s — non-fatal", entity_id, exc_info=True)
+                logger.warning("FTS delete failed for %s — non-fatal", entity_id, exc_info=True)
 
     async def delete_entity(self, params: "EntityDeleteParams") -> dict[str, Any]:
         """Deletes an entity."""
