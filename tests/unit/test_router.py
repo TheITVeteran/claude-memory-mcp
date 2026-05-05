@@ -258,8 +258,9 @@ class TestSearchStrategy:
         with patch.object(logging.getLogger("claude_memory.search"), "warning") as mock_warn:
             _ = await SearchMixin.search(svc, "plain query", strategy="auto")
 
-        mock_warn.assert_called_once()
-        assert "deprecated" in mock_warn.call_args[0][0].lower()
+        mock_warn.assert_called()
+        deprecation_calls = [c for c in mock_warn.call_args_list if "deprecated" in c[0][0].lower()]
+        assert len(deprecation_calls) == 1
 
     @pytest.mark.asyncio()
     async def test_happy_search_strategy_explicit_semantic(self) -> None:

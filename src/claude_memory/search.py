@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 from claude_memory.exceptions import SearchError
 from claude_memory.merge import MergedResult
+from claude_memory.schema import ChannelStatus
 from claude_memory.search_advanced import SearchAdvancedMixin
 from claude_memory.search_channels import SearchChannelsMixin
 
@@ -431,13 +432,29 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
 
             # ── HYBRID DEFAULT PATH ──
 
+            # Channel health accumulator (AUDIT-B3)
+            channel_status: list[ChannelStatus] = []
+
             # Step 1: Vector search (always)
             vector_results = await self._execute_vector_search(
                 query, limit, project_id, offset, mmr
             )
+            channel_status.append(
+                ChannelStatus(channel="vector", status="ok", result_count=len(vector_results))
+            )
 
             # Step 2: FTS5 lexical search (always — complements vector)
-            fts_results = await self._fts_enrichment(query, limit=limit, project_id=project_id)
+            try:
+                fts_results = await self._fts_enrichment(query, limit=limit, project_id=project_id)
+                channel_status.append(
+                    ChannelStatus(channel="fts", status="ok", result_count=len(fts_results))
+                )
+            except Exception as exc:
+                fts_results = []
+                channel_status.append(
+                    ChannelStatus(channel="fts", status="degraded", error=str(exc))
+                )
+                logger.warning("FTS enrichment failed", exc_info=True)
 
             # Step 3: Intent classification → soft channel weights
             from .router import QueryIntent, QueryRouter  # noqa: PLC0415
@@ -457,8 +474,18 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
                     temporal_results, temporal_exhausted = await self._temporal_enrichment(
                         query, limit, project_id, temporal_window_days
                     )
-                except Exception:
-                    logger.debug("Temporal enrichment failed", exc_info=True)
+                    channel_status.append(
+                        ChannelStatus(
+                            channel="temporal",
+                            status="ok",
+                            result_count=len(temporal_results),
+                        )
+                    )
+                except Exception as exc:
+                    logger.warning("Temporal enrichment failed", exc_info=True)
+                    channel_status.append(
+                        ChannelStatus(channel="temporal", status="degraded", error=str(exc))
+                    )
 
             # Relational
             if weights.get("relational", 0) > 0:
@@ -466,8 +493,18 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
                     relational_results = await self._relational_enrichment(
                         query, project_id=project_id
                     )
-                except Exception:
-                    logger.debug("Relational enrichment failed", exc_info=True)
+                    channel_status.append(
+                        ChannelStatus(
+                            channel="relational",
+                            status="ok",
+                            result_count=len(relational_results),
+                        )
+                    )
+                except Exception as exc:
+                    logger.warning("Relational enrichment failed", exc_info=True)
+                    channel_status.append(
+                        ChannelStatus(channel="relational", status="degraded", error=str(exc))
+                    )
 
             # Associative
             if weights.get("associative", 0) > 0:
@@ -475,8 +512,18 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
                     associative_results = await self._associative_enrichment(
                         query, vector_results, limit, project_id
                     )
-                except Exception:
-                    logger.debug("Associative enrichment failed", exc_info=True)
+                    channel_status.append(
+                        ChannelStatus(
+                            channel="associative",
+                            status="ok",
+                            result_count=len(associative_results),
+                        )
+                    )
+                except Exception as exc:
+                    logger.warning("Associative enrichment failed", exc_info=True)
+                    channel_status.append(
+                        ChannelStatus(channel="associative", status="degraded", error=str(exc))
+                    )
 
             # Entity extraction (Tier 2.2)
             entity_results: list[dict[str, Any]] = []
@@ -485,8 +532,18 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
                     entity_results = await self._entity_extraction_enrichment(
                         query, project_id=project_id
                     )
-                except Exception:
-                    logger.debug("Entity extraction enrichment failed", exc_info=True)
+                    channel_status.append(
+                        ChannelStatus(
+                            channel="entity",
+                            status="ok",
+                            result_count=len(entity_results),
+                        )
+                    )
+                except Exception as exc:
+                    logger.warning("Entity extraction enrichment failed", exc_info=True)
+                    channel_status.append(
+                        ChannelStatus(channel="entity", status="degraded", error=str(exc))
+                    )
 
             # Step 5: Weighted multi-channel RRF merge
             from .merge import ChannelResults, weighted_rrf_merge  # noqa: PLC0415
@@ -538,6 +595,7 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
                 len(temporal_results) if (detected_intent == QueryIntent.TEMPORAL) else 0
             )
             self._last_detected_intent = detected_intent
+            self._last_channel_status = channel_status
 
             # DRIFT-002: record search stats
             # Wrapped in its own try/except — stats failure must not kill pipeline

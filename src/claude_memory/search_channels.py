@@ -111,13 +111,9 @@ class SearchChannelsMixin:
         if not hasattr(self, "fts_store"):
             return []
 
-        try:
-            fts_results = self.fts_store.search(query=query, limit=limit, project_id=project_id)
-            # Convert to the dict format expected by rrf_merge
-            return [{"_id": r["entity_id"], "_score": r["bm25_score"], **r} for r in fts_results]
-        except Exception:
-            logger.warning("FTS search failed, returning empty", exc_info=True)
-            return []
+        fts_results = self.fts_store.search(query=query, limit=limit, project_id=project_id)
+        # Convert to the dict format expected by rrf_merge
+        return [{"_id": r["entity_id"], "_score": r["bm25_score"], **r} for r in fts_results]
 
     # ── Entity extraction channel (Tier 2.2) ─────────────────────────
 

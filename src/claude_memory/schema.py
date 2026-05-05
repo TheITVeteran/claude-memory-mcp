@@ -45,6 +45,23 @@ EdgeType = Literal[
 
 CertaintyLevel = Literal["confirmed", "speculative", "spitballing", "rejected", "revisited"]
 
+
+# === CHANNEL HEALTH ===
+
+
+class ChannelStatus(BaseModel):
+    """Health status of a single search enrichment channel.
+
+    Attached to search results so callers can distinguish
+    'no results' from 'channel failed'.
+    """
+
+    channel: str
+    status: Literal["ok", "degraded", "skipped"]
+    result_count: int = 0
+    error: str | None = None
+
+
 # === MODELS ===
 
 
