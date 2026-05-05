@@ -18,46 +18,41 @@ from claude_memory.router import QueryRouter
 
 
 class TestGetNeighborsDefaults:
-    """Assert get_neighbors default parameters: depth=1, limit=20, offset=0."""
+    """Assert GetNeighborsParams default parameters: depth=1, limit=20, offset=0."""
 
     def test_sad1_defaults_evil_signature_depth(self) -> None:
         """Evil: depth default must be 1 in function signature."""
-        from claude_memory.search import SearchMixin
+        from claude_memory.schema import GetNeighborsParams
 
-        sig = inspect.signature(SearchMixin.get_neighbors)
-        assert sig.parameters["depth"].default == 1
-        assert sig.parameters["depth"].default != 2
+        assert GetNeighborsParams.model_fields["depth"].default == 1
+        assert GetNeighborsParams.model_fields["depth"].default != 2
 
     def test_sad2_defaults_evil_signature_limit(self) -> None:
         """Evil: limit default must be 20, not 21."""
-        from claude_memory.search import SearchMixin
+        from claude_memory.schema import GetNeighborsParams
 
-        sig = inspect.signature(SearchMixin.get_neighbors)
-        assert sig.parameters["limit"].default == 20
+        assert GetNeighborsParams.model_fields["limit"].default == 20
 
     def test_sad3_defaults_evil_signature_offset(self) -> None:
         """Evil: offset default must be 0, not 1."""
-        from claude_memory.search import SearchMixin
+        from claude_memory.schema import GetNeighborsParams
 
-        sig = inspect.signature(SearchMixin.get_neighbors)
-        assert sig.parameters["offset"].default == 0
+        assert GetNeighborsParams.model_fields["offset"].default == 0
 
     def test_sad4_defaults_sad_all_have_defaults(self) -> None:
         """Sad: all optional params actually have default values."""
-        from claude_memory.search import SearchMixin
+        from claude_memory.schema import GetNeighborsParams
 
-        sig = inspect.signature(SearchMixin.get_neighbors)
         for param_name in ("depth", "limit", "offset"):
-            assert sig.parameters[param_name].default is not inspect.Parameter.empty
+            assert GetNeighborsParams.model_fields[param_name].is_required() is False
 
     def test_sad5_defaults_happy_all_correct(self) -> None:
         """Happy: all default values match expected."""
-        from claude_memory.search import SearchMixin
+        from claude_memory.schema import GetNeighborsParams
 
-        sig = inspect.signature(SearchMixin.get_neighbors)
-        assert sig.parameters["depth"].default == 1
-        assert sig.parameters["limit"].default == 20
-        assert sig.parameters["offset"].default == 0
+        assert GetNeighborsParams.model_fields["depth"].default == 1
+        assert GetNeighborsParams.model_fields["limit"].default == 20
+        assert GetNeighborsParams.model_fields["offset"].default == 0
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -114,44 +109,39 @@ class TestSearchAssociativeDefaults:
 
 
 class TestGetHologramDefaults:
-    """Assert get_hologram default parameters: depth=1, max_tokens=8000."""
+    """Assert GetHologramParams default parameters: depth=1, max_tokens=8000."""
 
     def test_sad11_defaults_evil_depth(self) -> None:
         """Evil: depth default must be 1, not 2."""
-        from claude_memory.search_advanced import SearchAdvancedMixin
+        from claude_memory.schema import GetHologramParams
 
-        sig = inspect.signature(SearchAdvancedMixin.get_hologram)
-        assert sig.parameters["depth"].default == 1
+        assert GetHologramParams.model_fields["depth"].default == 1
 
     def test_sad12_defaults_evil_max_tokens(self) -> None:
         """Evil: max_tokens default must be 8000, not 8001."""
-        from claude_memory.search_advanced import SearchAdvancedMixin
+        from claude_memory.schema import GetHologramParams
 
-        sig = inspect.signature(SearchAdvancedMixin.get_hologram)
-        assert sig.parameters["max_tokens"].default == 8000
+        assert GetHologramParams.model_fields["max_tokens"].default == 8000
 
     def test_sad13_defaults_evil_max_tokens_not_zero(self) -> None:
         """Evil: max_tokens must not be 0."""
-        from claude_memory.search_advanced import SearchAdvancedMixin
+        from claude_memory.schema import GetHologramParams
 
-        sig = inspect.signature(SearchAdvancedMixin.get_hologram)
-        assert sig.parameters["max_tokens"].default > 0
+        assert GetHologramParams.model_fields["max_tokens"].default > 0
 
     def test_sad14_defaults_sad_both_have_defaults(self) -> None:
         """Sad: both params have default values."""
-        from claude_memory.search_advanced import SearchAdvancedMixin
+        from claude_memory.schema import GetHologramParams
 
-        sig = inspect.signature(SearchAdvancedMixin.get_hologram)
-        assert sig.parameters["depth"].default is not inspect.Parameter.empty
-        assert sig.parameters["max_tokens"].default is not inspect.Parameter.empty
+        assert GetHologramParams.model_fields["depth"].is_required() is False
+        assert GetHologramParams.model_fields["max_tokens"].is_required() is False
 
     def test_sad10_defaults_happy(self) -> None:
         """Happy: all defaults correct."""
-        from claude_memory.search_advanced import SearchAdvancedMixin
+        from claude_memory.schema import GetHologramParams
 
-        sig = inspect.signature(SearchAdvancedMixin.get_hologram)
-        assert sig.parameters["depth"].default == 1
-        assert sig.parameters["max_tokens"].default == 8000
+        assert GetHologramParams.model_fields["depth"].default == 1
+        assert GetHologramParams.model_fields["max_tokens"].default == 8000
 
 
 # ═══════════════════════════════════════════════════════════════════

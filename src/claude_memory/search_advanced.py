@@ -8,7 +8,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # pragma: no cover
-    from .schema import SearchResult
+    from .schema import GetHologramParams, SearchResult
 
 logger = logging.getLogger(__name__)
 
@@ -120,9 +120,7 @@ class SearchAdvancedMixin:
             )
             raise SearchError("Memory retrieval unavailable") from exc
 
-    async def get_hologram(
-        self, query: str, depth: int = 1, max_tokens: int = 8000
-    ) -> dict[str, Any]:
+    async def get_hologram(self, params: "GetHologramParams") -> dict[str, Any]:
         """Retrieves a 'Hologram' (connected subgraph) relevant to the query.
 
         Algorithm:
@@ -130,10 +128,10 @@ class SearchAdvancedMixin:
         2. Expand outward from Anchors by 'depth'.
         3. Return the consolidated subgraph.
         """
-        logger.info("Generating Hologram for: %s", query)
+        logger.info("Generating Hologram for: %s", params.query)
 
         # 1. Get Anchors
-        anchors = await self.search(query, limit=5)  # type: ignore[attr-defined]
+        anchors = await self.search(params.query, limit=5)  # type: ignore[attr-defined]
 
         if not anchors:
             return {"nodes": [], "edges": []}
@@ -141,7 +139,7 @@ class SearchAdvancedMixin:
         anchor_ids = [a.id for a in anchors]
 
         # 2. Expand Subgraph
-        hologram = self.repo.get_subgraph(anchor_ids, depth)  # type: ignore[attr-defined]
+        hologram = self.repo.get_subgraph(anchor_ids, params.depth)  # type: ignore[attr-defined]
 
         # 3. Assemble and Optimize
         raw_nodes = hologram.get("nodes", [])
@@ -154,7 +152,7 @@ class SearchAdvancedMixin:
 
         # Optimize using Token Budget
         optimized_nodes = self.context_manager.optimize(  # type: ignore[attr-defined]
-            raw_nodes, max_tokens=max_tokens
+            raw_nodes, max_tokens=params.max_tokens
         )
 
         # Filter edges: only keep edges where both nodes are in the optimized set
@@ -165,7 +163,7 @@ class SearchAdvancedMixin:
         ]
 
         return {
-            "query": query,
+            "query": params.query,
             "anchors": [a.model_dump() for a in anchors],
             "nodes": optimized_nodes,
             "edges": optimized_edges,

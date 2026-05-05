@@ -11,6 +11,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from claude_memory.schema import (
+    CrossDomainPatternsParams,
+    GetEvolutionParams,
+    GetNeighborsParams,
+    PointInTimeQueryParams,
+    TraversePathParams,
+)
+
 # ─── Test Constants ─────────────────────────────────────────────────
 # All test data is defined here — zero magic values in test bodies.
 
@@ -260,19 +268,25 @@ async def test_sad5_record_breakthrough_defaults() -> None:
 
 async def test_happy_get_neighbors() -> None:
     result = await server.get_neighbors(entity_id=ENTITY_ID, depth=GRAPH_DEPTH, limit=GRAPH_LIMIT)
-    server.service.get_neighbors.assert_awaited_once_with(ENTITY_ID, GRAPH_DEPTH, GRAPH_LIMIT, 0)
+    server.service.get_neighbors.assert_awaited_once_with(
+        GetNeighborsParams(entity_id=ENTITY_ID, depth=GRAPH_DEPTH, limit=GRAPH_LIMIT, offset=0)
+    )
     assert result == [{"id": ENTITY_ID}]
 
 
 async def test_happy_traverse_path() -> None:
     result = await server.traverse_path(from_id=RELATIONSHIP_FROM, to_id=RELATIONSHIP_TO)
-    server.service.traverse_path.assert_awaited_once_with(RELATIONSHIP_FROM, RELATIONSHIP_TO)
+    server.service.traverse_path.assert_awaited_once_with(
+        TraversePathParams(from_id=RELATIONSHIP_FROM, to_id=RELATIONSHIP_TO)
+    )
     assert result == [{"id": ENTITY_ID}]
 
 
 async def test_sad6_find_cross_domain_patterns() -> None:
     result = await server.find_cross_domain_patterns(entity_id=ENTITY_ID, limit=GRAPH_LIMIT)
-    server.service.find_cross_domain_patterns.assert_awaited_once_with(ENTITY_ID, GRAPH_LIMIT)
+    server.service.find_cross_domain_patterns.assert_awaited_once_with(
+        CrossDomainPatternsParams(entity_id=ENTITY_ID, limit=GRAPH_LIMIT)
+    )
     assert result == []
 
 
@@ -281,13 +295,15 @@ async def test_sad6_find_cross_domain_patterns() -> None:
 
 async def test_sad7_get_evolution() -> None:
     result = await server.get_evolution(entity_id=ENTITY_ID)
-    server.service.get_evolution.assert_awaited_once_with(ENTITY_ID)
+    server.service.get_evolution.assert_awaited_once_with(GetEvolutionParams(entity_id=ENTITY_ID))
     assert result == []
 
 
 async def test_sad8_point_in_time_query() -> None:
     result = await server.point_in_time_query(query_text=SEARCH_QUERY, as_of=TIME_QUERY_AS_OF)
-    server.service.point_in_time_query.assert_awaited_once_with(SEARCH_QUERY, TIME_QUERY_AS_OF)
+    server.service.point_in_time_query.assert_awaited_once_with(
+        PointInTimeQueryParams(query_text=SEARCH_QUERY, as_of=TIME_QUERY_AS_OF)
+    )
     assert result == []
 
 

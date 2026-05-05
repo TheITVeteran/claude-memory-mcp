@@ -3,7 +3,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from claude_memory.schema import SearchResult
+from claude_memory.schema import (
+    GetHologramParams,
+    SearchResult,
+)
 from claude_memory.tools import MemoryService
 
 
@@ -58,7 +61,7 @@ async def test_happy_get_hologram_orchestration(mock_service: Any) -> None:
     }
 
     # Execute
-    result = await mock_service.get_hologram("test query", depth=2)
+    result = await mock_service.get_hologram(GetHologramParams(query="test query", depth=2))
 
     # Assertions
     mock_service.search.assert_awaited_once_with("test query", limit=5)

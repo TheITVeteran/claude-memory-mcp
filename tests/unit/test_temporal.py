@@ -4,6 +4,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from claude_memory.schema import (
+    GetEvolutionParams,
+    PointInTimeQueryParams,
+)
 from claude_memory.tools import MemoryService
 
 
@@ -41,7 +45,7 @@ async def test_happy_get_evolution(memory_service: MemoryService) -> None:
 
     graph.query.return_value.result_set = [[obs2], [obs1]]
 
-    result = await memory_service.get_evolution("e1")
+    result = await memory_service.get_evolution(GetEvolutionParams(entity_id="e1"))
 
     assert len(result) == 2
     assert result[0]["id"] == "o2"
@@ -67,7 +71,9 @@ async def test_happy_point_in_time_query(memory_service: Any, mock_vector_store:
     )
 
     # Execute
-    result = await memory_service.point_in_time_query("test", "2023-12-31")
+    result = await memory_service.point_in_time_query(
+        PointInTimeQueryParams(query_text="test", as_of="2023-12-31")
+    )
 
     # Verify
     assert len(result) == 1

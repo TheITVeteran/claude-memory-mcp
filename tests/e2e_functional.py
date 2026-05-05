@@ -39,6 +39,16 @@ import traceback
 from datetime import UTC, datetime
 from typing import Any
 
+from claude_memory.schema import (
+    AnalyzeGraphParams,
+    CrossDomainPatternsParams,
+    GetEvolutionParams,
+    GetHologramParams,
+    GetNeighborsParams,
+    PointInTimeQueryParams,
+    TraversePathParams,
+)
+
 # Fix Windows console encoding
 sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
 sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
@@ -413,12 +423,16 @@ async def test_graph_traversal(service: Any, ids: dict[str, str]) -> None:
 
     try:
         # Neighbors
-        neighbors = await service.get_neighbors(ids["alpha"], depth=1, limit=10)
+        neighbors = await service.get_neighbors(
+            GetNeighborsParams(entity_id=ids["alpha"], depth=1, limit=10)
+        )
         results.ok(f"Get neighbors -> {len(neighbors)} found")
 
         # Traverse path (may fail on FalkorDB shortestPaths limitation)
         try:
-            path = await service.traverse_path(ids["alpha"], ids["beta"])
+            path = await service.traverse_path(
+                TraversePathParams(from_id=ids["alpha"], to_id=ids["beta"])
+            )
             results.ok(f"Traverse path -> {len(path)} nodes in path")
         except Exception as e:
             err_str = str(e)
@@ -428,12 +442,14 @@ async def test_graph_traversal(service: Any, ids: dict[str, str]) -> None:
                 results.fail("Traverse path", err_str)
 
         # Evolution
-        evolution = await service.get_evolution(ids["alpha"])
+        evolution = await service.get_evolution(GetEvolutionParams(entity_id=ids["alpha"]))
         results.ok(f"Get evolution -> {len(evolution)} entries")
 
         # Cross-domain patterns
         try:
-            patterns = await service.find_cross_domain_patterns(ids["alpha"], limit=5)
+            patterns = await service.find_cross_domain_patterns(
+                CrossDomainPatternsParams(entity_id=ids["alpha"], limit=5)
+            )
             results.ok(f"Cross-domain patterns -> {len(patterns)} found")
         except Exception as e:
             results.warn("Cross-domain patterns", str(e)[:80])
@@ -647,7 +663,7 @@ async def test_graph_algorithms(service: Any) -> None:
 
     # PageRank — should return list of ranked entities (never error dicts)
     try:
-        pr_results = await service.analyze_graph(algorithm="pagerank")
+        pr_results = await service.analyze_graph(AnalyzeGraphParams(algorithm="pagerank"))
         assert isinstance(pr_results, list), f"Expected list, got {type(pr_results)}"
         if pr_results:
             assert "name" in pr_results[0], f"Missing 'name' key: {pr_results[0]}"
@@ -658,7 +674,7 @@ async def test_graph_algorithms(service: Any) -> None:
 
     # Louvain — should return list of communities (never error dicts)
     try:
-        lv_results = await service.analyze_graph(algorithm="louvain")
+        lv_results = await service.analyze_graph(AnalyzeGraphParams(algorithm="louvain"))
         assert isinstance(lv_results, list), f"Expected list, got {type(lv_results)}"
         if lv_results:
             assert "community_id" in lv_results[0], f"Missing 'community_id': {lv_results[0]}"
@@ -678,7 +694,9 @@ async def test_hologram(service: Any) -> None:
     results.start_phase(f"[13/{TOTAL_PHASES}] Hologram Retrieval")
 
     try:
-        holo = await service.get_hologram("test entity E2E", depth=1, max_tokens=4000)
+        holo = await service.get_hologram(
+            GetHologramParams(query="test entity E2E", depth=1, max_tokens=4000)
+        )
         assert isinstance(holo, dict), f"Expected dict, got {type(holo)}"
         assert "nodes" in holo, f"Missing 'nodes' key in hologram: {list(holo.keys())}"
         assert "edges" in holo, "Missing 'edges' key in hologram"
@@ -1298,7 +1316,7 @@ async def test_graph_algo_semantics(service: Any) -> None:
 
     # PageRank: ranks should be positive floats, sorted descending
     try:
-        pr = await service.analyze_graph(algorithm="pagerank")
+        pr = await service.analyze_graph(AnalyzeGraphParams(algorithm="pagerank"))
         if pr:
             ranks = [entry["rank"] for entry in pr]
             assert all(isinstance(r, (int, float)) and r >= 0 for r in ranks), (
@@ -1319,7 +1337,7 @@ async def test_graph_algo_semantics(service: Any) -> None:
 
     # Louvain: each community should have >0 members, IDs unique
     try:
-        lv = await service.analyze_graph(algorithm="louvain")
+        lv = await service.analyze_graph(AnalyzeGraphParams(algorithm="louvain"))
         if lv:
             community_ids = [c["community_id"] for c in lv]
             assert len(community_ids) == len(set(community_ids)), "Duplicate community IDs"
@@ -1341,12 +1359,16 @@ async def test_point_in_time(service: Any) -> None:
     try:
         # Query as of now — should return results
         as_of = datetime.now(UTC).timestamp()
-        pit_results = await service.point_in_time_query("test entity", as_of=str(as_of))
+        pit_results = await service.point_in_time_query(
+            PointInTimeQueryParams(query_text="test entity", as_of=str(as_of))
+        )
         results.ok(f"Point-in-time (now) -> {len(pit_results)} results")
 
         # Query as of very old date — should return 0 or few results
         old_date = datetime(2020, 1, 1, tzinfo=UTC).timestamp()
-        pit_old = await service.point_in_time_query("test entity", as_of=str(old_date))
+        pit_old = await service.point_in_time_query(
+            PointInTimeQueryParams(query_text="test entity", as_of=str(old_date))
+        )
         results.ok(f"Point-in-time (2020) -> {len(pit_old)} results")
 
     except Exception as e:

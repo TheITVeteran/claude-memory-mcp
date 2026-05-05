@@ -281,3 +281,42 @@ class RadarSuggestion(BaseModel):
     radar_score: float = Field(description="Composite discovery score")
     suggested_relationship: str = Field(description="Heuristic EdgeType suggestion")
     reasoning: str = Field(description="Human-readable explanation")
+
+
+# --- Batch 6.A: Search & Graph Traversal ---
+
+
+class GetNeighborsParams(BaseModel):
+    entity_id: str
+    depth: int = 1
+    limit: int = 20
+    offset: int = 0
+
+
+class TraversePathParams(BaseModel):
+    from_id: str
+    to_id: str
+
+
+class CrossDomainPatternsParams(BaseModel):
+    entity_id: str
+    limit: int = 10
+
+
+class GetEvolutionParams(BaseModel):
+    entity_id: str
+
+
+class PointInTimeQueryParams(BaseModel):
+    query_text: str
+    as_of: str
+
+
+class AnalyzeGraphParams(BaseModel):
+    algorithm: Literal["pagerank", "louvain"] = "pagerank"
+
+
+class GetHologramParams(BaseModel):
+    query: str
+    depth: int = 1
+    max_tokens: int = 8000

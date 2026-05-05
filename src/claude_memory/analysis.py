@@ -7,7 +7,7 @@ memory consolidation, and ontology management.
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 from claude_memory.graph_algorithms import compute_louvain, compute_pagerank
 
@@ -15,7 +15,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from .interfaces import Embedder, VectorStore
     from .ontology import OntologyManager
     from .repository import MemoryRepository
-    from .schema import GapDetectionParams
+    from .schema import AnalyzeGraphParams, GapDetectionParams
 
 logger = logging.getLogger(__name__)
 
@@ -232,9 +232,7 @@ class AnalysisMixin:
         count = del_res.result_set[0][0] if del_res.result_set else 0
         return {"status": "success", "deleted_count": count}
 
-    async def analyze_graph(
-        self, algorithm: Literal["pagerank", "louvain"] = "pagerank"
-    ) -> list[dict[str, Any]]:
+    async def analyze_graph(self, params: "AnalyzeGraphParams") -> list[dict[str, Any]]:
         """Run graph algorithms to find key entities or communities.
 
         Computes algorithms in Python using adjacency data fetched via Cypher.
@@ -257,9 +255,9 @@ class AnalysisMixin:
         )
         edges = [(row[0], row[1]) for row in edge_res.result_set] if edge_res.result_set else []
 
-        if algorithm == "pagerank":
+        if params.algorithm == "pagerank":
             return compute_pagerank(nodes, node_names, edges)
-        elif algorithm == "louvain":
+        elif params.algorithm == "louvain":
             return compute_louvain(nodes, node_names, edges)
         return []
 

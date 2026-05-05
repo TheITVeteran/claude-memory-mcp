@@ -27,20 +27,27 @@ from .repository import MemoryRepository
 
 # Re-export schema items for backward compatibility
 from .schema import (  # noqa: F401
+    AnalyzeGraphParams,
     BottleQueryParams,
     BreakthroughParams,
+    CrossDomainPatternsParams,
     EntityCommitReceipt,
     EntityCreateParams,
     EntityDeleteParams,
     EntityUpdateParams,
     GapDetectionParams,
+    GetEvolutionParams,
+    GetHologramParams,
+    GetNeighborsParams,
     ObservationParams,
+    PointInTimeQueryParams,
     RelationshipCreateParams,
     RelationshipDeleteParams,
     SearchResult,
     SessionEndParams,
     SessionStartParams,
     TemporalQueryParams,
+    TraversePathParams,
 )
 from .vector_store import QdrantVectorStore
 

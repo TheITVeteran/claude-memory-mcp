@@ -15,6 +15,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from claude_memory.schema import (
+    AnalyzeGraphParams,
+    GetHologramParams,
+    PointInTimeQueryParams,
+    TraversePathParams,
+)
+
 # ─── Test Constants ─────────────────────────────────────────────────
 
 PROJECT_ID = "project-alpha"
@@ -439,7 +446,7 @@ async def test_happy_traverse_path_with_nodes(service: MemoryService) -> None:
 
     service.repo.execute_cypher.return_value = _make_cypher_result([[mock_path]])
 
-    result = await service.traverse_path(ENTITY_ID, ENTITY_ID_2)
+    result = await service.traverse_path(TraversePathParams(from_id=ENTITY_ID, to_id=ENTITY_ID_2))
     assert len(result) == 2
     # Verify embedding was stripped
     assert "embedding" not in result[0]
@@ -448,7 +455,7 @@ async def test_happy_traverse_path_with_nodes(service: MemoryService) -> None:
 async def test_sad4_traverse_path_no_path_found(service: MemoryService) -> None:
     service.repo.execute_cypher.return_value = _make_cypher_result([])
 
-    result = await service.traverse_path(ENTITY_ID, ENTITY_ID_2)
+    result = await service.traverse_path(TraversePathParams(from_id=ENTITY_ID, to_id=ENTITY_ID_2))
     assert result == []
 
 
@@ -457,7 +464,7 @@ async def test_sad5_traverse_path_no_nodes_attr(service: MemoryService) -> None:
     mock_path = MagicMock(spec=[])  # No attributes
     service.repo.execute_cypher.return_value = _make_cypher_result([[mock_path]])
 
-    result = await service.traverse_path(ENTITY_ID, ENTITY_ID_2)
+    result = await service.traverse_path(TraversePathParams(from_id=ENTITY_ID, to_id=ENTITY_ID_2))
     assert result == []
 
 
@@ -657,7 +664,9 @@ async def test_happy_search_with_mmr_flag(service: MemoryService) -> None:
 async def test_sad10_point_in_time_query_no_results(service: MemoryService) -> None:
     service.vector_store.search.return_value = []
 
-    result = await service.point_in_time_query(SEARCH_QUERY, TIME_AS_OF)
+    result = await service.point_in_time_query(
+        PointInTimeQueryParams(query_text=SEARCH_QUERY, as_of=TIME_AS_OF)
+    )
     assert result == []
 
 
@@ -670,7 +679,9 @@ async def test_happy_point_in_time_query_with_results(service: MemoryService) ->
         "edges": [],
     }
 
-    result = await service.point_in_time_query(SEARCH_QUERY, TIME_AS_OF)
+    result = await service.point_in_time_query(
+        PointInTimeQueryParams(query_text=SEARCH_QUERY, as_of=TIME_AS_OF)
+    )
     assert len(result) == 1
     assert result[0]["id"] == ENTITY_ID
 
@@ -692,7 +703,7 @@ async def test_happy_analyze_graph_pagerank_success(service: MemoryService) -> N
         _make_cypher_result([["NodeB", ENTITY_NAME]]),  # edges: B->A
     ]
 
-    result = await service.analyze_graph(algorithm="pagerank")
+    result = await service.analyze_graph(AnalyzeGraphParams(algorithm="pagerank"))
     assert len(result) >= 1
     # A has an incoming edge, should have a higher rank
     assert result[0]["name"] == ENTITY_NAME
@@ -710,7 +721,7 @@ async def test_happy_analyze_graph_pagerank_only_entity_label(service: MemorySer
         _make_cypher_result([]),  # no edges
     ]
 
-    result = await service.analyze_graph(algorithm="pagerank")
+    result = await service.analyze_graph(AnalyzeGraphParams(algorithm="pagerank"))
     assert result[0]["type"] == "Entity"
 
 
@@ -719,7 +730,7 @@ async def test_evil10_analyze_graph_pagerank_error(service: MemoryService) -> No
     service.repo.execute_cypher.side_effect = RuntimeError("algo not available")
 
     with pytest.raises(RuntimeError, match="algo not available"):
-        await service.analyze_graph(algorithm="pagerank")
+        await service.analyze_graph(AnalyzeGraphParams(algorithm="pagerank"))
 
 
 async def test_happy_analyze_graph_louvain_success(service: MemoryService) -> None:
@@ -736,7 +747,7 @@ async def test_happy_analyze_graph_louvain_success(service: MemoryService) -> No
         _make_cypher_result([["A", "B"], ["B", "C"], ["A", "C"]]),  # edges
     ]
 
-    result = await service.analyze_graph(algorithm="louvain")
+    result = await service.analyze_graph(AnalyzeGraphParams(algorithm="louvain"))
     assert len(result) >= 1
     assert "community_id" in result[0]
     assert "size" in result[0]
@@ -748,13 +759,14 @@ async def test_evil11_analyze_graph_louvain_error(service: MemoryService) -> Non
     service.repo.execute_cypher.side_effect = RuntimeError("algo not available")
 
     with pytest.raises(RuntimeError, match="algo not available"):
-        await service.analyze_graph(algorithm="louvain")
+        await service.analyze_graph(AnalyzeGraphParams(algorithm="louvain"))
 
 
 async def test_sad11_analyze_graph_unsupported_algorithm(service: MemoryService) -> None:
-    """Unsupported algorithm returns empty list."""
-    result = await service.analyze_graph(algorithm="unknown")  # type: ignore[arg-type]
-    assert result == []
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        await service.analyze_graph(AnalyzeGraphParams(algorithm="unknown"))  # type: ignore[arg-type]
 
 
 # ─── get_stale_entities Tests ──────────────────────────────────────
@@ -836,7 +848,9 @@ async def test_sad14_get_hologram_no_anchors(service: MemoryService) -> None:
     """Line 715: search returns no anchors → early return."""
     service.vector_store.search.return_value = []
 
-    result = await service.get_hologram(HOLOGRAM_QUERY, depth=HOLOGRAM_DEPTH)
+    result = await service.get_hologram(
+        GetHologramParams(query=HOLOGRAM_QUERY, depth=HOLOGRAM_DEPTH)
+    )
     assert result == {"nodes": [], "edges": []}
 
 
@@ -880,7 +894,9 @@ async def test_happy_get_hologram_with_non_dict_nodes(service: MemoryService) ->
         ]
 
         result = await service.get_hologram(
-            HOLOGRAM_QUERY, depth=HOLOGRAM_DEPTH, max_tokens=HOLOGRAM_MAX_TOKENS
+            GetHologramParams(
+                query=HOLOGRAM_QUERY, depth=HOLOGRAM_DEPTH, max_tokens=HOLOGRAM_MAX_TOKENS
+            )
         )
 
     assert result["query"] == HOLOGRAM_QUERY

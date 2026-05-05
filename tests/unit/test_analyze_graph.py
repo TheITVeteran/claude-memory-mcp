@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from claude_memory.analysis import AnalysisMixin
+from claude_memory.schema import AnalyzeGraphParams
 
 
 def _make_analysis_mixin() -> AnalysisMixin:
@@ -59,7 +60,7 @@ async def test_happy_pagerank_returns_ranked_entities() -> None:
 
     mixin.repo.execute_cypher.side_effect = [nodes_result, edges_result]
 
-    results = await mixin.analyze_graph(algorithm="pagerank")
+    results = await mixin.analyze_graph(AnalyzeGraphParams(algorithm="pagerank"))
 
     assert len(results) > 0
     # A should be ranked first (most incoming links)
@@ -74,7 +75,7 @@ async def test_sad1_pagerank_empty_graph() -> None:
     mixin = _make_analysis_mixin()
     mixin.repo.execute_cypher.return_value = _make_cypher_result([])
 
-    results = await mixin.analyze_graph(algorithm="pagerank")
+    results = await mixin.analyze_graph(AnalyzeGraphParams(algorithm="pagerank"))
 
     assert results == []
 
@@ -86,7 +87,7 @@ async def test_evil1_pagerank_cypher_error_is_loud() -> None:
     mixin.repo.execute_cypher.side_effect = ConnectionError("FalkorDB down")
 
     with pytest.raises(ConnectionError, match="FalkorDB down"):
-        await mixin.analyze_graph(algorithm="pagerank")
+        await mixin.analyze_graph(AnalyzeGraphParams(algorithm="pagerank"))
 
 
 # ─── Louvain tests ──────────────────────────────────────────────────
@@ -112,7 +113,7 @@ async def test_happy_louvain_returns_communities() -> None:
 
     mixin.repo.execute_cypher.side_effect = [nodes_result, edges_result]
 
-    results = await mixin.analyze_graph(algorithm="louvain")
+    results = await mixin.analyze_graph(AnalyzeGraphParams(algorithm="louvain"))
 
     assert len(results) >= 2
     # Each community should have community_id, size, members
@@ -129,7 +130,7 @@ async def test_sad2_louvain_empty_graph() -> None:
     mixin = _make_analysis_mixin()
     mixin.repo.execute_cypher.return_value = _make_cypher_result([])
 
-    results = await mixin.analyze_graph(algorithm="louvain")
+    results = await mixin.analyze_graph(AnalyzeGraphParams(algorithm="louvain"))
 
     assert results == []
 
@@ -141,4 +142,4 @@ async def test_evil2_louvain_cypher_error_is_loud() -> None:
     mixin.repo.execute_cypher.side_effect = ConnectionError("FalkorDB down")
 
     with pytest.raises(ConnectionError, match="FalkorDB down"):
-        await mixin.analyze_graph(algorithm="louvain")
+        await mixin.analyze_graph(AnalyzeGraphParams(algorithm="louvain"))

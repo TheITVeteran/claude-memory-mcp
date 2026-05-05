@@ -4,6 +4,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from claude_memory.schema import (
+    AnalyzeGraphParams,
+)
 from claude_memory.tools import MemoryService
 
 
@@ -62,7 +65,7 @@ async def test_happy_analyze_graph_pagerank(memory_service: Any, mock_repo: Any)
         "claude_memory.analysis.compute_pagerank",
         return_value=[{"name": "Important Node", "rank": 0.85}],
     ):
-        results = await memory_service.analyze_graph("pagerank")
+        results = await memory_service.analyze_graph(AnalyzeGraphParams(algorithm="pagerank"))
 
     assert len(results) == 1
     assert results[0]["name"] == "Important Node"

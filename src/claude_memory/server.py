@@ -10,18 +10,25 @@ from claude_memory.embedding import EmbeddingService
 from claude_memory.exceptions import SearchError
 from claude_memory.librarian import LibrarianAgent
 from claude_memory.schema import (
+    AnalyzeGraphParams,
     BreakthroughParams,
     CertaintyLevel,
+    CrossDomainPatternsParams,
     EdgeType,
     EntityCommitReceipt,
     EntityCreateParams,
     EntityDeleteParams,
     EntityUpdateParams,
+    GetEvolutionParams,
+    GetHologramParams,
+    GetNeighborsParams,
     ObservationParams,
+    PointInTimeQueryParams,
     RelationshipCreateParams,
     RelationshipDeleteParams,
     SessionEndParams,
     SessionStartParams,
+    TraversePathParams,
 )
 from claude_memory.tools import MemoryService
 from claude_memory.tools_extra import (
@@ -208,31 +215,36 @@ async def get_neighbors(
     entity_id: str, depth: int = 1, limit: int = 20, offset: int = 0
 ) -> list[dict[str, Any]]:
     """Retrieve neighboring entities up to a certain depth."""
-    return await service.get_neighbors(entity_id, depth, limit, offset)
+    params = GetNeighborsParams(entity_id=entity_id, depth=depth, limit=limit, offset=offset)
+    return await service.get_neighbors(params)
 
 
 @mcp.tool()
 async def traverse_path(from_id: str, to_id: str) -> list[dict[str, Any]]:
     """Find the shortest path between two entities."""
-    return await service.traverse_path(from_id, to_id)
+    params = TraversePathParams(from_id=from_id, to_id=to_id)
+    return await service.traverse_path(params)
 
 
 @mcp.tool()
 async def find_cross_domain_patterns(entity_id: str, limit: int = 10) -> list[dict[str, Any]]:
     """Analyzes the graph for non-obvious connections between disparate domains."""
-    return await service.find_cross_domain_patterns(entity_id, limit)
+    params = CrossDomainPatternsParams(entity_id=entity_id, limit=limit)
+    return await service.find_cross_domain_patterns(params)
 
 
 @mcp.tool()
 async def get_evolution(entity_id: str) -> list[dict[str, Any]]:
     """Retrieve the evolution (history/observations) of an entity."""
-    return await service.get_evolution(entity_id)
+    params = GetEvolutionParams(entity_id=entity_id)
+    return await service.get_evolution(params)
 
 
 @mcp.tool()
 async def point_in_time_query(query_text: str, as_of: str) -> list[dict[str, Any]]:
     """Execute a search considering only knowledge known before `as_of`."""
-    return await service.point_in_time_query(query_text, as_of)
+    params = PointInTimeQueryParams(query_text=query_text, as_of=as_of)
+    return await service.point_in_time_query(params)
 
 
 @mcp.tool()
@@ -315,7 +327,8 @@ async def analyze_graph(
     algorithm: Literal["pagerank", "louvain"] = "pagerank",
 ) -> list[dict[str, Any]]:
     """Runs graph algorithms (pagerank or louvain) to find key entities or communities."""
-    return await service.analyze_graph(algorithm=algorithm)
+    params = AnalyzeGraphParams(algorithm=algorithm)
+    return await service.analyze_graph(params)
 
 
 @mcp.tool()
@@ -325,7 +338,8 @@ async def get_hologram(
     max_tokens: int = 8000,
 ) -> dict[str, Any]:
     """Retrieves a 'Hologram' — a connected subgraph relevant to the query."""
-    return await service.get_hologram(query, depth=depth, max_tokens=max_tokens)
+    params = GetHologramParams(query=query, depth=depth, max_tokens=max_tokens)
+    return await service.get_hologram(params)
 
 
 @mcp.tool()

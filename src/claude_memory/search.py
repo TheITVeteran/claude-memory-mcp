@@ -17,6 +17,7 @@ from claude_memory.merge import MergedResult
 from claude_memory.schema import ChannelStatus
 from claude_memory.search_advanced import SearchAdvancedMixin
 from claude_memory.search_channels import SearchChannelsMixin
+from claude_memory.validation import requires_entity
 
 # Infrastructure exceptions: indicate the system is degraded, not a bug.
 INFRA_ERRORS = (ConnectionError, TimeoutError, OSError)
@@ -27,7 +28,14 @@ if TYPE_CHECKING:  # pragma: no cover
     from .interfaces import Embedder, VectorStore
     from .repository import MemoryRepository
     from .router import QueryRouter
-    from .schema import SearchResult
+    from .schema import (
+        CrossDomainPatternsParams,
+        GetEvolutionParams,
+        GetNeighborsParams,
+        PointInTimeQueryParams,
+        SearchResult,
+        TraversePathParams,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -69,11 +77,10 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
     activation_engine: "ActivationEngine"
     context_manager: "ContextManager"
 
-    async def get_neighbors(
-        self, entity_id: str, depth: int = 1, limit: int = 20, offset: int = 0
-    ) -> list[dict[str, Any]]:
+    @requires_entity("entity_id")
+    async def get_neighbors(self, params: "GetNeighborsParams") -> list[dict[str, Any]]:
         """Retrieve entities connected within a given hop depth."""
-        depth = max(depth, 1)
+        depth = max(params.depth, 1)
         query = f"""
         MATCH (n)-[*1..{depth}]-(m)
         WHERE n.id = $entity_id
@@ -82,14 +89,16 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
         LIMIT $limit
         """
         res = self.repo.execute_cypher(
-            query, {"entity_id": entity_id, "limit": limit, "offset": offset}
+            query, {"entity_id": params.entity_id, "limit": params.limit, "offset": params.offset}
         )
         nodes = [row[0].properties for row in res.result_set if row]
         for n in nodes:
             n.pop("embedding", None)
         return nodes
 
-    async def traverse_path(self, from_id: str, to_id: str) -> list[dict[str, Any]]:
+    @requires_entity("from_id")
+    @requires_entity("to_id")
+    async def traverse_path(self, params: "TraversePathParams") -> list[dict[str, Any]]:
         """Find the shortest path between two entities.
 
         FalkorDB requires directed shortestPath traversals, so we try
@@ -109,7 +118,7 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
                         path_data.append(props)
             return path_data
 
-        params = {"start": from_id, "end": to_id}
+        cypher_params = {"start": params.from_id, "end": params.to_id}
 
         # Try forward direction first
         fwd_query = """
@@ -118,7 +127,7 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
         RETURN p
         """
         try:
-            res = self.repo.execute_cypher(fwd_query, params)
+            res = self.repo.execute_cypher(fwd_query, cypher_params)
             path_data = _extract_path(res)
             if path_data:
                 return path_data
@@ -132,14 +141,15 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
         WITH shortestPath((b)-[*..10]->(a)) AS p
         RETURN p
         """
-        res = self.repo.execute_cypher(rev_query, params)
+        res = self.repo.execute_cypher(rev_query, cypher_params)
         path_data = _extract_path(res)
         if path_data:
             path_data.reverse()
         return path_data
 
+    @requires_entity("entity_id")
     async def find_cross_domain_patterns(
-        self, entity_id: str, limit: int = 10
+        self, params: "CrossDomainPatternsParams"
     ) -> list[dict[str, Any]]:
         """Find nodes in different projects connected to this entity."""
         query = """
@@ -149,32 +159,35 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
         RETURN distinct m
         LIMIT $limit
         """
-        res = self.repo.execute_cypher(query, {"entity_id": entity_id, "limit": limit})
+        res = self.repo.execute_cypher(
+            query, {"entity_id": params.entity_id, "limit": params.limit}
+        )
         nodes = [row[0].properties for row in res.result_set if row]
         for n in nodes:
             n.pop("embedding", None)
         return nodes
 
-    async def get_evolution(self, entity_id: str) -> list[dict[str, Any]]:
+    @requires_entity("entity_id")
+    async def get_evolution(self, params: "GetEvolutionParams") -> list[dict[str, Any]]:
         """Retrieve the evolution (history/observations) of an entity."""
         query = """
         MATCH (e:Entity {id: $entity_id})-[:HAS_OBSERVATION]->(o)
         RETURN o
         ORDER BY o.created_at DESC
         """
-        res = self.repo.execute_cypher(query, {"entity_id": entity_id})
+        res = self.repo.execute_cypher(query, {"entity_id": params.entity_id})
         nodes = [row[0].properties for row in res.result_set if row]
         for n in nodes:
             n.pop("embedding", None)
         return nodes
 
-    async def point_in_time_query(self, query_text: str, as_of: str) -> list[dict[str, Any]]:
+    async def point_in_time_query(self, params: "PointInTimeQueryParams") -> list[dict[str, Any]]:
         """Execute a search considering only knowledge known before `as_of`."""
-        vec = self.embedder.encode(query_text)
+        vec = self.embedder.encode(params.query_text)
 
         # Use VectorStore with time filter
         vector_results = await self.vector_store.search(
-            vector=vec, limit=10, filter={"created_at_lt": as_of}
+            vector=vec, limit=10, filter={"created_at_lt": params.as_of}
         )
 
         if not vector_results:

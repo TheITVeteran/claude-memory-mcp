@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from claude_memory.schema import CrossDomainPatternsParams, GetNeighborsParams, TraversePathParams
 from claude_memory.tools import MemoryService
 
 
@@ -31,7 +32,7 @@ async def test_happy_get_neighbors(memory_service: MemoryService) -> None:
 
     graph.query.return_value.result_set = [[mock_node]]
 
-    result = await memory_service.get_neighbors("n1", depth=1)
+    result = await memory_service.get_neighbors(GetNeighborsParams(entity_id="n1", depth=1))
 
     assert len(result) == 1
     assert result[0]["id"] == "n2"
@@ -56,7 +57,7 @@ async def test_happy_traverse_path(memory_service: MemoryService) -> None:
     # Result set: [[path_obj]]
     graph.query.return_value.result_set = [[mock_path]]
 
-    result = await memory_service.traverse_path("start", "end")
+    result = await memory_service.traverse_path(TraversePathParams(from_id="start", to_id="end"))
 
     assert len(result) == 2
     assert result[0]["id"] == "start"
@@ -74,7 +75,9 @@ async def test_happy_find_cross_domain_patterns(memory_service: MemoryService) -
     mock_node.properties = {"id": "n3", "project_id": "other_proj"}
     graph.query.return_value.result_set = [[mock_node]]
 
-    result = await memory_service.find_cross_domain_patterns("n1")
+    result = await memory_service.find_cross_domain_patterns(
+        CrossDomainPatternsParams(entity_id="n1")
+    )
 
     assert len(result) == 1
     assert result[0]["project_id"] == "other_proj"

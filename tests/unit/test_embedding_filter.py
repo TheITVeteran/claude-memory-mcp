@@ -8,7 +8,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from claude_memory.schema import EntityCreateParams, SearchResult
+from claude_memory.schema import (
+    EntityCreateParams,
+    GetHologramParams,
+    GetNeighborsParams,
+    SearchResult,
+)
 from claude_memory.tools import MemoryService
 
 
@@ -126,7 +131,7 @@ async def test_happy_get_hologram_strips_embedding(mock_service):
     mock_service.context_manager = MagicMock()
     mock_service.context_manager.optimize.return_value = [{"id": "1", "name": "LeakyNode"}]
 
-    result = await mock_service.get_hologram("query", depth=1)
+    result = await mock_service.get_hologram(GetHologramParams(query="query", depth=1))
 
     nodes = result["nodes"]
     assert len(nodes) > 0
@@ -146,7 +151,7 @@ async def test_happy_get_neighbors_strips_embedding(mock_service):
     mock_res.result_set = [[mock_node]]
     mock_service.repo.execute_cypher.return_value = mock_res
 
-    neighbors = await mock_service.get_neighbors("root_id")
+    neighbors = await mock_service.get_neighbors(GetNeighborsParams(entity_id="root_id"))
 
     assert len(neighbors) == 1
     assert "embedding" not in neighbors[0], "get_neighbors leaked embedding!"
