@@ -341,6 +341,33 @@ class CrudMixin:
             return await _do_delete()
 
     async def delete_relationship(self, params: "RelationshipDeleteParams") -> dict[str, Any]:
-        """Deletes a relationship."""
-        self.repo.delete_edge(params.relationship_id)
-        return {"status": "deleted", "id": params.relationship_id}
+        """Deletes a relationship.
+
+        Acquires project lock if the edge's source node has a project_id,
+        to prevent interleaving with concurrent graph mutations.
+        """
+        # Look up the edge's source node project_id for locking
+        project_id: str | None = None
+        try:
+            res = self.repo.execute_cypher(
+                "MATCH (s)-[r]->() WHERE r.id = $id RETURN s.project_id",
+                {"id": params.relationship_id},
+            )
+            if res.result_set and res.result_set[0][0]:
+                project_id = str(res.result_set[0][0])
+        except Exception:
+            logger.warning(
+                "Could not resolve project_id for relationship %s — proceeding unlocked",
+                params.relationship_id,
+                exc_info=True,
+            )
+
+        async def _do_delete() -> dict[str, Any]:
+            self.repo.delete_edge(params.relationship_id)
+            return {"status": "deleted", "id": params.relationship_id}
+
+        if project_id:
+            async with self.lock_manager.lock(project_id):
+                return await _do_delete()
+        else:
+            return await _do_delete()

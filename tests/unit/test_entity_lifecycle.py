@@ -112,9 +112,10 @@ async def test_happy_add_observation(memory_service: MemoryService) -> None:
     }
 
     # Return different results depending on which query is called:
-    # 1st call: CREATE observation → returns obs node
-    # 2nd call: get_node → returns entity node
-    # 3rd call: get_observations_for_entity → returns obs list
+    # 1st call: project_id lookup → returns project_id (AUDIT-B5)
+    # 2nd call: CREATE observation → returns obs node
+    # 3rd call: get_node → returns entity node
+    # 4th call: get_observations_for_entity → returns obs list
     call_count = 0
 
     def query_side_effect(*args: Any, **kwargs: Any) -> MagicMock:
@@ -122,9 +123,12 @@ async def test_happy_add_observation(memory_service: MemoryService) -> None:
         call_count += 1
         result = MagicMock()
         if call_count == 1:
+            # project_id lookup (AUDIT-B5 lock)
+            result.result_set = [["default"]]
+        elif call_count == 2:
             # CREATE observation
             result.result_set = [[mock_obs_node]]
-        elif call_count == 2:
+        elif call_count == 3:
             # get_node for re-embedding
             result.result_set = [[mock_entity_node]]
         else:
@@ -144,10 +148,14 @@ async def test_happy_add_observation(memory_service: MemoryService) -> None:
     assert result["id"] == "obs-789"
     assert result["content"] == "User likes Python"
 
-    # Verify observation CREATE query was the first call
+    # Verify first query is the project_id lookup (AUDIT-B5)
     first_call_cypher = graph.query.call_args_list[0][0][0]
-    assert "CREATE (o:Observation" in first_call_cypher
-    assert "CREATE (e)-[:HAS_OBSERVATION]->(o)" in first_call_cypher
+    assert "e.project_id" in first_call_cypher
+
+    # Verify observation CREATE query was the second call
+    second_call_cypher = graph.query.call_args_list[1][0][0]
+    assert "CREATE (o:Observation" in second_call_cypher
+    assert "CREATE (e)-[:HAS_OBSERVATION]->(o)" in second_call_cypher
 
     # Verify vector_store was called at least twice:
     # once for observation, once for entity re-embed

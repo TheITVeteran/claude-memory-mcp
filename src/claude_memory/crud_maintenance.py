@@ -14,6 +14,7 @@ from claude_memory.crud import _compute_entity_embedding_text
 
 if TYPE_CHECKING:  # pragma: no cover
     from .interfaces import Embedder, VectorStore
+    from .lock_manager import LockManager
     from .repository import MemoryRepository
     from .schema import ObservationParams
 
@@ -27,6 +28,7 @@ class CrudMaintenanceMixin:
     repo: "MemoryRepository"
     embedder: "Embedder"
     vector_store: "VectorStore"
+    lock_manager: "LockManager"
     _background_tasks: set[asyncio.Task[None]]
 
     def _fire_salience_update(self, ids: list[str]) -> None:
@@ -53,7 +55,40 @@ class CrudMaintenanceMixin:
             await asyncio.gather(*self._background_tasks)
 
     async def add_observation(self, params: "ObservationParams") -> dict[str, Any]:
-        """Adds an observation node linked to an entity."""
+        """Adds an observation node linked to an entity.
+
+        Acquires project lock to prevent concurrent observations from
+        causing stale re-embedding of the parent entity.
+        """
+        # Look up project_id for locking
+        project_id: str | None = None
+        try:
+            res = self.repo.execute_cypher(
+                "MATCH (e) WHERE e.id = $eid RETURN e.project_id",
+                {"eid": params.entity_id},
+            )
+            if not res.result_set:
+                return {"error": "Entity not found"}
+            if res.result_set[0][0]:
+                project_id = str(res.result_set[0][0])
+        except Exception:
+            logger.warning(
+                "Could not resolve project_id for entity %s — proceeding unlocked",
+                params.entity_id,
+                exc_info=True,
+            )
+
+        async def _do_add() -> dict[str, Any]:
+            return await self._add_observation_inner(params)
+
+        if project_id:
+            async with self.lock_manager.lock(project_id):
+                return await _do_add()
+        else:
+            return await _do_add()
+
+    async def _add_observation_inner(self, params: "ObservationParams") -> dict[str, Any]:
+        """Inner observation creation logic — called inside the lock."""
         obs_id = str(uuid.uuid4())
         timestamp = datetime.now(UTC).isoformat()
 
