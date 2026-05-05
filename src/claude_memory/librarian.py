@@ -4,6 +4,8 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
+from claude_memory.schema import PruneStaleParams
+
 from .clustering import ClusteringService, detect_gaps
 from .tools import MemoryService
 
@@ -131,7 +133,7 @@ class LibrarianAgent:
     async def _prune_stale(self, report: dict[str, Any]) -> None:
         """Prune stale entities older than 60 days."""
         try:
-            prune_res = await self.memory.prune_stale(days=60)
+            prune_res = await self.memory.prune_stale(PruneStaleParams(days=60))
             report["deleted_stale"] = prune_res.get("deleted_count", 0)
         except (ConnectionError, TimeoutError, OSError, ValueError) as e:
             report["errors"].append(f"Prune: {e!s}")

@@ -228,7 +228,7 @@ class QueryRouter:
         # Simple heuristic: find quoted strings or CamelCase words
         quoted = re.findall(r'"([^"]+)"', query)
         if len(quoted) >= _MIN_QUOTED_ENTITIES:
-            return await service.traverse_path(quoted[0], quoted[1])
+            return await service.traverse_path(quoted[0], quoted[1])  # type: ignore[no-any-return]
 
         # Fallback: semantic search (we can't reliably extract entities)
         return await service.search(query, limit=10)

@@ -5,5 +5,5 @@
 
 # Context manager protocol methods (required by Python, flagged as unused params)
 exc_type = None  # noqa: unused — __exit__ protocol
-exc_val = None   # noqa: unused — __exit__ protocol
-exc_tb = None    # noqa: unused — __exit__ protocol
+exc_val = None  # noqa: unused — __exit__ protocol
+exc_tb = None  # noqa: unused — __exit__ protocol

@@ -36,3 +36,35 @@ def requires_entity(
         return wrapper
 
     return decorator
+
+
+def requires_session(
+    session_field: str = "session_id", empty_on_missing: bool = False
+) -> Callable[..., Any]:
+    """Decorator to ensure a session exists before executing a service method.
+
+    If the session does not exist, returns either an empty list (if empty_on_missing=True)
+    or a structured error dict.
+    """
+
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        @functools.wraps(func)
+        async def wrapper(self: Any, params: BaseModel, *args: Any, **kwargs: Any) -> Any:
+            session_id = getattr(params, session_field, None)
+
+            if not session_id:
+                return await func(self, params, *args, **kwargs)
+
+            # A session is just an entity in the graph with label Session,
+            # or we can just check if it exists as a node
+            existing = self.repo.get_node(session_id)
+            if not existing:
+                if empty_on_missing:
+                    return []
+                return {"error": f"Session not found: {session_id}"}
+
+            return await func(self, params, *args, **kwargs)
+
+        return wrapper
+
+    return decorator

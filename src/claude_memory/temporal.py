@@ -8,11 +8,14 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
+from claude_memory.validation import requires_entity, requires_session
+
 if TYPE_CHECKING:  # pragma: no cover
     from .repository import MemoryRepository
     from .schema import (
         BottleQueryParams,
         BreakthroughParams,
+        GetTemporalNeighborsParams,
         SessionEndParams,
         SessionStartParams,
         TemporalQueryParams,
@@ -66,6 +69,7 @@ class TemporalMixin:
         )
         return cast(dict[str, Any], res.result_set[0][0].properties)
 
+    @requires_session("session_id")
     async def end_session(self, params: "SessionEndParams") -> dict[str, Any]:
         """Close a session and record its summary and outcomes."""
         timestamp = datetime.now(UTC).isoformat()
@@ -91,6 +95,7 @@ class TemporalMixin:
             return {"error": "Session not found"}
         return cast(dict[str, Any], res.result_set[0][0].properties)
 
+    @requires_session("session_id")
     async def record_breakthrough(self, params: "BreakthroughParams") -> dict[str, Any]:
         """Create a Breakthrough node linked to its originating session."""
         b_id = str(uuid.uuid4())
@@ -122,17 +127,16 @@ class TemporalMixin:
             project_id=params.project_id,
         )
 
+    @requires_entity("entity_id")
     async def get_temporal_neighbors(
         self,
-        entity_id: str,
-        direction: str = "both",
-        limit: int = 10,
+        params: "GetTemporalNeighborsParams",
     ) -> list[dict[str, Any]]:
         """Find entities connected by temporal edges."""
         return self.repo.get_temporal_neighbors(  # type: ignore[no-any-return]
-            entity_id=entity_id,
-            direction=direction,
-            limit=limit,
+            entity_id=params.entity_id,
+            direction=params.direction,
+            limit=params.limit,
         )
 
     async def get_bottles(

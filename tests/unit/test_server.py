@@ -12,10 +12,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from claude_memory.schema import (
+    ArchiveEntityParams,
     CrossDomainPatternsParams,
     GetEvolutionParams,
     GetNeighborsParams,
     PointInTimeQueryParams,
+    PruneStaleParams,
     TraversePathParams,
 )
 
@@ -309,13 +311,13 @@ async def test_sad8_point_in_time_query() -> None:
 
 async def test_happy_archive_entity() -> None:
     result = await server.archive_entity(entity_id=ENTITY_ID)
-    server.service.archive_entity.assert_awaited_once_with(ENTITY_ID)
+    server.service.archive_entity.assert_awaited_once_with(ArchiveEntityParams(entity_id=ENTITY_ID))
     assert result == {"status": "archived"}
 
 
 async def test_sad9_prune_stale() -> None:
     result = await server.prune_stale(days=PRUNE_DAYS)
-    server.service.prune_stale.assert_awaited_once_with(PRUNE_DAYS)
+    server.service.prune_stale.assert_awaited_once_with(PruneStaleParams(days=PRUNE_DAYS))
     assert result == {"pruned": PRUNE_DAYS}
 
 

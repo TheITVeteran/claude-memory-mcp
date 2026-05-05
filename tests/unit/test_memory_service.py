@@ -1284,8 +1284,11 @@ async def test_happy_service_get_temporal_neighbors(
     service: MemoryService,
 ) -> None:
     """MemoryService.get_temporal_neighbors delegates to repo."""
+    from claude_memory.schema import GetTemporalNeighborsParams
+
     service.repo.get_temporal_neighbors.return_value = [{"id": "neighbor-1"}]
-    result = await service.get_temporal_neighbors(ENTITY_ID, direction="after", limit=5)
+    params = GetTemporalNeighborsParams(entity_id=ENTITY_ID, direction="after", limit=5)  # type: ignore[arg-type]
+    result = await service.get_temporal_neighbors(params)
     assert len(result) == 1
     service.repo.get_temporal_neighbors.assert_called_once_with(
         entity_id=ENTITY_ID, direction="after", limit=5

@@ -186,7 +186,7 @@ async def end_session(
     if outcomes is None:
         outcomes = []
     params = SessionEndParams(session_id=session_id, summary=summary, outcomes=outcomes)
-    return await service.end_session(params)
+    return await service.end_session(params)  # type: ignore[no-any-return]
 
 
 @mcp.tool()
@@ -207,7 +207,7 @@ async def record_breakthrough(
         analogy_used=analogy_used,
         concepts_unlocked=concepts_unlocked,
     )
-    return await service.record_breakthrough(params)
+    return await service.record_breakthrough(params)  # type: ignore[no-any-return]
 
 
 @mcp.tool()
@@ -216,28 +216,28 @@ async def get_neighbors(
 ) -> list[dict[str, Any]]:
     """Retrieve neighboring entities up to a certain depth."""
     params = GetNeighborsParams(entity_id=entity_id, depth=depth, limit=limit, offset=offset)
-    return await service.get_neighbors(params)
+    return await service.get_neighbors(params)  # type: ignore[no-any-return]
 
 
 @mcp.tool()
 async def traverse_path(from_id: str, to_id: str) -> list[dict[str, Any]]:
     """Find the shortest path between two entities."""
     params = TraversePathParams(from_id=from_id, to_id=to_id)
-    return await service.traverse_path(params)
+    return await service.traverse_path(params)  # type: ignore[no-any-return]
 
 
 @mcp.tool()
 async def find_cross_domain_patterns(entity_id: str, limit: int = 10) -> list[dict[str, Any]]:
     """Analyzes the graph for non-obvious connections between disparate domains."""
     params = CrossDomainPatternsParams(entity_id=entity_id, limit=limit)
-    return await service.find_cross_domain_patterns(params)
+    return await service.find_cross_domain_patterns(params)  # type: ignore[no-any-return]
 
 
 @mcp.tool()
 async def get_evolution(entity_id: str) -> list[dict[str, Any]]:
     """Retrieve the evolution (history/observations) of an entity."""
     params = GetEvolutionParams(entity_id=entity_id)
-    return await service.get_evolution(params)
+    return await service.get_evolution(params)  # type: ignore[no-any-return]
 
 
 @mcp.tool()
@@ -250,13 +250,19 @@ async def point_in_time_query(query_text: str, as_of: str) -> list[dict[str, Any
 @mcp.tool()
 async def archive_entity(entity_id: str) -> dict[str, Any]:
     """Archive an entity (logical hide."""
-    return await service.archive_entity(entity_id)
+    from claude_memory.schema import ArchiveEntityParams  # noqa: PLC0415
+
+    params = ArchiveEntityParams(entity_id=entity_id)
+    return await service.archive_entity(params)  # type: ignore[no-any-return]
 
 
 @mcp.tool()
 async def prune_stale(days: int = 30) -> dict[str, Any]:
     """Hard delete archived entities older than N days."""
-    return await service.prune_stale(days)
+    from claude_memory.schema import PruneStaleParams  # noqa: PLC0415
+
+    params = PruneStaleParams(days=days)
+    return await service.prune_stale(params)
 
 
 @mcp.tool()

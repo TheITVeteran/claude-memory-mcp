@@ -5,8 +5,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from claude_memory.schema import (
+    ArchiveEntityParams,
     GetEvolutionParams,
     PointInTimeQueryParams,
+    PruneStaleParams,
 )
 from claude_memory.tools import MemoryService
 
@@ -96,7 +98,7 @@ async def test_happy_archive_entity(memory_service: MemoryService) -> None:
     mock_node.properties = {"id": "e1", "status": "archived"}
     graph.query.return_value.result_set = [[mock_node]]
 
-    result = await memory_service.archive_entity("e1")
+    result = await memory_service.archive_entity(ArchiveEntityParams(entity_id="e1"))
 
     assert result["status"] == "archived"
 
@@ -115,7 +117,7 @@ async def test_sad1_prune_stale(memory_service: MemoryService) -> None:
 
     graph.query.return_value.result_set = [[5]]  # 5 deleted nodes
 
-    result = await memory_service.prune_stale(days=30)
+    result = await memory_service.prune_stale(PruneStaleParams(days=30))
 
     assert result["deleted_count"] == 5
     assert "DETACH DELETE n" in graph.query.call_args[0][0]

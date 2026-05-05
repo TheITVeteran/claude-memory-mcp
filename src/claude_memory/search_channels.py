@@ -224,14 +224,12 @@ class SearchChannelsMixin:
                             "MATCH (e:Entity) WHERE toLower(e.name) = toLower($name) "
                             "AND e.project_id = $pid RETURN e.id"
                         )
-                        res = self.repo.execute_cypher(  # type: ignore[attr-defined]
-                            cypher, {"name": name, "pid": project_id}
-                        )
+                        res = self.repo.execute_cypher(cypher, {"name": name, "pid": project_id})
                     else:
                         cypher = (
                             "MATCH (e:Entity) WHERE toLower(e.name) = toLower($name) RETURN e.id"
                         )
-                        res = self.repo.execute_cypher(cypher, {"name": name})  # type: ignore[attr-defined]
+                        res = self.repo.execute_cypher(cypher, {"name": name})
                     if res.result_set:
                         resolved_ids.append(str(res.result_set[0][0]))
                 except Exception:

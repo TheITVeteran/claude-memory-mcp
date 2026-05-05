@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from claude_memory.analysis import AnalysisMixin
+from claude_memory.schema import ArchiveEntityParams
 
 
 def _make_analysis_mixin() -> AnalysisMixin:
@@ -27,7 +28,7 @@ async def test_happy_archive_entity_deletes_qdrant_vector() -> None:
     mixin = _make_analysis_mixin()
     mixin.repo.update_node.return_value = {"id": "ent-1", "status": "archived"}
 
-    result = await mixin.archive_entity("ent-1")
+    result = await mixin.archive_entity(ArchiveEntityParams(entity_id="ent-1"))
 
     mixin.vector_store.delete.assert_awaited_once_with("ent-1")
     assert result["status"] == "archived"
@@ -40,7 +41,7 @@ async def test_evil1_archive_entity_qdrant_failure_propagates() -> None:
     mixin.vector_store.delete.side_effect = ConnectionError("Qdrant unreachable")
 
     with pytest.raises(ConnectionError, match="Qdrant unreachable"):
-        await mixin.archive_entity("ent-1")
+        await mixin.archive_entity(ArchiveEntityParams(entity_id="ent-1"))
 
 
 @pytest.mark.asyncio
@@ -59,6 +60,6 @@ async def test_happy_archive_entity_vector_deleted_before_graph_update() -> None
     mixin.vector_store.delete.side_effect = track_delete
     mixin.repo.update_node.side_effect = track_update
 
-    await mixin.archive_entity("ent-1")
+    await mixin.archive_entity(ArchiveEntityParams(entity_id="ent-1"))
 
     assert call_order == ["qdrant_delete", "graph_update"]

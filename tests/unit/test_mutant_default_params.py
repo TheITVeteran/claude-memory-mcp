@@ -276,39 +276,39 @@ class TestTemporalNeighborsDefaults:
 
     def test_sad31_defaults_evil_direction(self) -> None:
         """Evil: direction default must be 'both', not 'forward' or 'reverse'."""
-        from claude_memory.temporal import TemporalMixin
+        from claude_memory.schema import GetTemporalNeighborsParams
 
-        sig = inspect.signature(TemporalMixin.get_temporal_neighbors)
-        assert sig.parameters["direction"].default == "both"
+        sig = GetTemporalNeighborsParams.model_fields
+        assert sig["direction"].default == "both"
 
     def test_sad6_defaults_evil_limit(self) -> None:
         """Evil: limit default must be 10, not 11."""
-        from claude_memory.temporal import TemporalMixin
+        from claude_memory.schema import GetTemporalNeighborsParams
 
-        sig = inspect.signature(TemporalMixin.get_temporal_neighbors)
-        assert sig.parameters["limit"].default == 10
+        sig = GetTemporalNeighborsParams.model_fields
+        assert sig["limit"].default == 10
 
     def test_sad33_defaults_evil_direction_not_mutated(self) -> None:
         """Evil: mutmut-style mutation to 'XXbothXX' must not match."""
-        from claude_memory.temporal import TemporalMixin
+        from claude_memory.schema import GetTemporalNeighborsParams
 
-        sig = inspect.signature(TemporalMixin.get_temporal_neighbors)
-        assert sig.parameters["direction"].default != "XXbothXX"
+        sig = GetTemporalNeighborsParams.model_fields
+        assert sig["direction"].default != "XXbothXX"
 
     def test_sad34_defaults_sad_all_have_values(self) -> None:
         """Sad: optional params have defaults."""
-        from claude_memory.temporal import TemporalMixin
+        from claude_memory.schema import GetTemporalNeighborsParams
 
-        sig = inspect.signature(TemporalMixin.get_temporal_neighbors)
+        sig = GetTemporalNeighborsParams.model_fields
         for p in ("direction", "limit"):
-            assert sig.parameters[p].default is not inspect.Parameter.empty
+            assert sig[p].default is not None
 
     def test_sad10_defaults_happy(self) -> None:
         """Happy: all defaults correct."""
-        from claude_memory.temporal import TemporalMixin
+        from claude_memory.schema import GetTemporalNeighborsParams
 
-        sig = inspect.signature(TemporalMixin.get_temporal_neighbors)
-        assert sig.parameters["direction"].default == "both"
+        sig = GetTemporalNeighborsParams.model_fields
+        assert sig["direction"].default == "both"
         assert sig.parameters["limit"].default == 10
 
 

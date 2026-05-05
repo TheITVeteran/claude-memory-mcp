@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from claude_memory.schema import DiffKnowledgeStateParams
 from claude_memory.search import SearchMixin
 
 # ── Fixtures ──────────────────────────────────────────────────────────
@@ -49,7 +50,9 @@ async def test_evil1_same_timestamp() -> None:
     t = datetime(2026, 3, 1, tzinfo=UTC)
 
     with pytest.raises(ValueError, match="must be before"):
-        await mixin.diff_knowledge_state(as_of_start=t, as_of_end=t)
+        await mixin.diff_knowledge_state(
+            DiffKnowledgeStateParams(as_of_start=t.isoformat(), as_of_end=t.isoformat())
+        )
 
 
 @pytest.mark.asyncio
@@ -60,7 +63,9 @@ async def test_evil2_start_after_end() -> None:
     t2 = datetime(2026, 3, 1, tzinfo=UTC)
 
     with pytest.raises(ValueError, match="must be before"):
-        await mixin.diff_knowledge_state(as_of_start=t1, as_of_end=t2)
+        await mixin.diff_knowledge_state(
+            DiffKnowledgeStateParams(as_of_start=t1.isoformat(), as_of_end=t2.isoformat())
+        )
 
 
 @pytest.mark.asyncio
@@ -91,7 +96,9 @@ async def test_evil3_archived_entity_in_window() -> None:
         side_effect=[start_result, end_result, empty, empty, empty]
     )
 
-    diff = await mixin.diff_knowledge_state(as_of_start=t1, as_of_end=t2)
+    diff = await mixin.diff_knowledge_state(
+        DiffKnowledgeStateParams(as_of_start=t1.isoformat(), as_of_end=t2.isoformat())
+    )
 
     assert diff["summary"]["entities_removed"] == 1
     assert len(diff["removed_entities"]) == 1
@@ -113,7 +120,9 @@ async def test_sad1_empty_graph() -> None:
     # 5 cypher calls: start entities, end entities, start rels, end rels, supersedes
     mixin.repo.execute_cypher = MagicMock(return_value=empty)
 
-    diff = await mixin.diff_knowledge_state(as_of_start=t1, as_of_end=t2)
+    diff = await mixin.diff_knowledge_state(
+        DiffKnowledgeStateParams(as_of_start=t1.isoformat(), as_of_end=t2.isoformat())
+    )
 
     assert diff["summary"]["entities_added"] == 0
     assert diff["summary"]["entities_removed"] == 0
@@ -192,7 +201,9 @@ async def test_happy_full_diff() -> None:
         ]
     )
 
-    diff = await mixin.diff_knowledge_state(as_of_start=t1, as_of_end=t2)
+    diff = await mixin.diff_knowledge_state(
+        DiffKnowledgeStateParams(as_of_start=t1.isoformat(), as_of_end=t2.isoformat())
+    )
 
     # C was added
     assert diff["summary"]["entities_added"] == 1

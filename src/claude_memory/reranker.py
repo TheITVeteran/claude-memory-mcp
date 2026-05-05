@@ -88,7 +88,7 @@ class RerankerClient:
                 json={"query": query, "documents": documents, "top_k": top_k},
             )
             resp.raise_for_status()
-            return resp.json()
+            return resp.json()  # type: ignore[no-any-return]
 
 
 def _build_documents(candidates: list[dict[str, Any]], text_key: str) -> list[str]:

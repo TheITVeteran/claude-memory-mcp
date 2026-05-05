@@ -10,12 +10,18 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 from claude_memory.graph_algorithms import compute_louvain, compute_pagerank
+from claude_memory.validation import requires_entity
 
 if TYPE_CHECKING:  # pragma: no cover
     from .interfaces import Embedder, VectorStore
     from .ontology import OntologyManager
     from .repository import MemoryRepository
-    from .schema import AnalyzeGraphParams, GapDetectionParams
+    from .schema import (
+        AnalyzeGraphParams,
+        ArchiveEntityParams,
+        GapDetectionParams,
+        PruneStaleParams,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -182,28 +188,27 @@ class AnalysisMixin:
 
         return results
 
-    async def archive_entity(self, entity_id: str) -> dict[str, Any]:
+    @requires_entity("entity_id", empty_on_missing=False)
+    async def archive_entity(self, params: "ArchiveEntityParams") -> dict[str, Any]:
         """Archive an entity (logical hide).
 
         Checks entity existence first, then deletes Qdrant vector BEFORE
         graph update to prevent ghost search results.
         """
-        existing = self.repo.get_node(entity_id)
-        if not existing:
-            return {"error": f"Entity {entity_id} not found"}
-        if existing.get("status") == "archived":
-            return {"error": f"Entity {entity_id} is already archived"}
+        existing = self.repo.get_node(params.entity_id)
+        if existing and existing.get("status") == "archived":
+            return {"error": f"Entity {params.entity_id} is already archived"}
 
-        await self.vector_store.delete(entity_id)
-        return self.repo.update_node(entity_id, {"status": "archived"})  # type: ignore[no-any-return]
+        await self.vector_store.delete(params.entity_id)
+        return self.repo.update_node(params.entity_id, {"status": "archived"})  # type: ignore[no-any-return]
 
-    async def prune_stale(self, days: int = 30) -> dict[str, Any]:
+    async def prune_stale(self, params: "PruneStaleParams") -> dict[str, Any]:
         """Hard delete archived entities older than N days.
 
         Deletes Qdrant vectors BEFORE graph nodes to prevent orphan vectors.
         Order: SELECT IDs → delete vectors → DETACH DELETE graph nodes.
         """
-        cutoff = (datetime.now(UTC) - timedelta(days=days)).isoformat()
+        cutoff = (datetime.now(UTC) - timedelta(days=params.days)).isoformat()
 
         # Step 1: SELECT IDs of entities to prune (don't delete yet)
         select_query = """

@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from claude_memory.analysis import AnalysisMixin
+from claude_memory.schema import ArchiveEntityParams
 
 # --- Test Constants ---
 ENTITY_ID = "entity-001"
@@ -224,7 +225,7 @@ class TestArchiveEntityExistenceCheck:
         mixin = _make_analysis_mixin()
         mixin.repo.get_node.return_value = None
 
-        result = await mixin.archive_entity(ENTITY_ID)
+        result = await mixin.archive_entity(ArchiveEntityParams(entity_id=ENTITY_ID))
 
         assert "error" in result
         mixin.vector_store.delete.assert_not_awaited()
@@ -236,7 +237,7 @@ class TestArchiveEntityExistenceCheck:
         mixin = _make_analysis_mixin()
         mixin.repo.get_node.return_value = {"id": ENTITY_ID, "status": "archived"}
 
-        result = await mixin.archive_entity(ENTITY_ID)
+        result = await mixin.archive_entity(ArchiveEntityParams(entity_id=ENTITY_ID))
 
         assert "error" in result
         mixin.vector_store.delete.assert_not_awaited()
@@ -248,7 +249,7 @@ class TestArchiveEntityExistenceCheck:
         mixin.repo.get_node.side_effect = ConnectionError("FalkorDB down")
 
         with pytest.raises(ConnectionError, match="FalkorDB down"):
-            await mixin.archive_entity(ENTITY_ID)
+            await mixin.archive_entity(ArchiveEntityParams(entity_id=ENTITY_ID))
 
     @pytest.mark.asyncio
     async def test_sad1_archive_entity_soft_deleted(self) -> None:
@@ -257,7 +258,7 @@ class TestArchiveEntityExistenceCheck:
         mixin.repo.get_node.return_value = {"id": ENTITY_ID, "deleted": True}
         mixin.repo.update_node.return_value = {"id": ENTITY_ID, "status": "archived"}
 
-        result = await mixin.archive_entity(ENTITY_ID)
+        result = await mixin.archive_entity(ArchiveEntityParams(entity_id=ENTITY_ID))
         assert result["status"] == "archived"
 
     @pytest.mark.asyncio
@@ -267,7 +268,7 @@ class TestArchiveEntityExistenceCheck:
         mixin.repo.get_node.return_value = {"id": ENTITY_ID, "name": ENTITY_NAME}
         mixin.repo.update_node.return_value = {"id": ENTITY_ID, "status": "archived"}
 
-        result = await mixin.archive_entity(ENTITY_ID)
+        result = await mixin.archive_entity(ArchiveEntityParams(entity_id=ENTITY_ID))
 
         assert result["status"] == "archived"
         mixin.vector_store.delete.assert_awaited_once_with(ENTITY_ID)

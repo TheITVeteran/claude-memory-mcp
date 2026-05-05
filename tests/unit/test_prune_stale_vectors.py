@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, call
 import pytest
 
 from claude_memory.analysis import AnalysisMixin
+from claude_memory.schema import PruneStaleParams
 
 
 def _make_analysis_mixin() -> AnalysisMixin:
@@ -42,7 +43,7 @@ async def test_sad1_prune_stale_deletes_qdrant_vectors() -> None:
         _make_cypher_result([[3]]),  # DETACH DELETE count
     ]
 
-    result = await mixin.prune_stale(days=30)
+    result = await mixin.prune_stale(PruneStaleParams(days=30))
 
     # Qdrant delete called for each ID
     assert mixin.vector_store.delete.await_count == 3
@@ -60,7 +61,7 @@ async def test_sad2_prune_stale_no_stale_entities() -> None:
 
     mixin.repo.execute_cypher.return_value = _make_cypher_result([])
 
-    result = await mixin.prune_stale(days=30)
+    result = await mixin.prune_stale(PruneStaleParams(days=30))
 
     mixin.vector_store.delete.assert_not_awaited()
     assert result["deleted_count"] == 0
@@ -75,7 +76,7 @@ async def test_evil1_prune_stale_qdrant_failure_propagates() -> None:
     mixin.vector_store.delete.side_effect = ConnectionError("Qdrant unreachable")
 
     with pytest.raises(ConnectionError, match="Qdrant unreachable"):
-        await mixin.prune_stale(days=30)
+        await mixin.prune_stale(PruneStaleParams(days=30))
 
 
 @pytest.mark.asyncio
@@ -98,6 +99,6 @@ async def test_sad3_prune_stale_vectors_deleted_before_graph() -> None:
     mixin.vector_store.delete.side_effect = track_delete
     mixin.repo.execute_cypher.side_effect = track_cypher
 
-    await mixin.prune_stale(days=30)
+    await mixin.prune_stale(PruneStaleParams(days=30))
 
     assert call_order == ["graph_select", "qdrant_delete:id-1", "graph_delete"]

@@ -128,7 +128,10 @@ async def get_temporal_neighbors(
     limit: int = 10,
 ) -> list[dict[str, Any]]:
     """Find entities connected by temporal edges (before/after/both)."""
-    return await _service.get_temporal_neighbors(entity_id, direction, limit)  # type: ignore[union-attr]
+    from claude_memory.schema import GetTemporalNeighborsParams  # noqa: PLC0415
+
+    params = GetTemporalNeighborsParams(entity_id=entity_id, direction=direction, limit=limit)  # type: ignore[arg-type]
+    return await _service.get_temporal_neighbors(params)  # type: ignore[union-attr,no-any-return]
 
 
 async def get_bottles(  # noqa: PLR0913
@@ -269,14 +272,13 @@ async def diff_knowledge_state(
         project_id: Optional project scope filter.
         include_observations: If True, include per-entity observation diffs.
     """
-    from datetime import datetime  # noqa: PLC0415
+    from claude_memory.schema import DiffKnowledgeStateParams  # noqa: PLC0415
 
-    start_dt = datetime.fromisoformat(as_of_start.replace("Z", "+00:00"))
-    end_dt = datetime.fromisoformat(as_of_end.replace("Z", "+00:00"))
-
-    return await _service.diff_knowledge_state(  # type: ignore[union-attr]
-        as_of_start=start_dt,
-        as_of_end=end_dt,
+    params = DiffKnowledgeStateParams(
+        as_of_start=as_of_start,
+        as_of_end=as_of_end,
         project_id=project_id,
         include_observations=include_observations,
     )
+
+    return await _service.diff_knowledge_state(params)  # type: ignore[union-attr]

@@ -96,7 +96,7 @@ def render_graph_with_radar(
             dashes=True,
         )
 
-    return net.generate_html()
+    return net.generate_html()  # type: ignore[no-any-return]
 
 
 def _score_to_alpha(score: float, min_alpha: float = 0.3, max_alpha: float = 1.0) -> float:

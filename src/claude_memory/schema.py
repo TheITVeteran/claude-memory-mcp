@@ -320,3 +320,27 @@ class GetHologramParams(BaseModel):
     query: str
     depth: int = 1
     max_tokens: int = 8000
+
+
+# --- Batch 6.B: Temporal & Maintenance ---
+
+
+class ArchiveEntityParams(BaseModel):
+    entity_id: str
+
+
+class PruneStaleParams(BaseModel):
+    days: int = 30
+
+
+class GetTemporalNeighborsParams(BaseModel):
+    entity_id: str
+    direction: Literal["forward", "backward", "both"] = "both"
+    limit: int = 10
+
+
+class DiffKnowledgeStateParams(BaseModel):
+    as_of_start: str
+    as_of_end: str
+    project_id: str | None = None
+    include_observations: bool = False

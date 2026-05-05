@@ -30,6 +30,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from .router import QueryRouter
     from .schema import (
         CrossDomainPatternsParams,
+        DiffKnowledgeStateParams,
         GetEvolutionParams,
         GetNeighborsParams,
         PointInTimeQueryParams,
@@ -205,10 +206,7 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
 
     async def diff_knowledge_state(
         self,
-        as_of_start: datetime,
-        as_of_end: datetime,
-        project_id: str | None = None,
-        include_observations: bool = False,
+        params: "DiffKnowledgeStateParams",
     ) -> dict[str, Any]:
         """Compute the difference between two knowledge graph snapshots.
 
@@ -216,10 +214,7 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
         added/removed/evolved between two points in time.
 
         Args:
-            as_of_start: Earlier timestamp.
-            as_of_end: Later timestamp (must be after start).
-            project_id: Optional project scoping.
-            include_observations: If True, include per-entity observation diffs.
+            params: DiffKnowledgeStateParams with start and end times.
 
         Returns:
             Dict with added/removed/evolved entities and relationships,
@@ -228,6 +223,12 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
         Raises:
             ValueError: If as_of_start >= as_of_end.
         """
+        try:
+            as_of_start = datetime.fromisoformat(params.as_of_start.replace("Z", "+00:00"))
+            as_of_end = datetime.fromisoformat(params.as_of_end.replace("Z", "+00:00"))
+        except ValueError as e:
+            raise ValueError(f"Invalid timestamp format: {e}") from e
+
         if as_of_start >= as_of_end:
             raise ValueError(
                 f"as_of_start ({as_of_start.isoformat()}) must be before "
@@ -236,15 +237,15 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
 
         start_iso = as_of_start.isoformat()
         end_iso = as_of_end.isoformat()
-        project_clause = "AND n.project_id = $project_id" if project_id else ""
-        params: dict[str, Any] = {"start": start_iso, "end": end_iso}
-        if project_id:
-            params["project_id"] = project_id
+        project_clause = "AND n.project_id = $project_id" if params.project_id else ""
+        query_params: dict[str, Any] = {"start": start_iso, "end": end_iso}
+        if params.project_id:
+            query_params["project_id"] = params.project_id
 
         # Fetch snapshots via helpers
-        start_ents, end_ents = self._diff_fetch_entities(params, project_clause)
-        start_rels, end_rels = self._diff_fetch_relationships(params, project_clause)
-        superseded = self._diff_fetch_supersedes(params, project_clause)
+        start_ents, end_ents = self._diff_fetch_entities(query_params, project_clause)
+        start_rels, end_rels = self._diff_fetch_relationships(query_params, project_clause)
+        superseded = self._diff_fetch_supersedes(query_params, project_clause)
 
         # Compute diffs
         added_ids = set(end_ents.keys()) - set(start_ents.keys())
@@ -281,7 +282,7 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
                 ),
             },
         }
-        if include_observations:
+        if params.include_observations:
             result["observation_deltas"] = self._diff_fetch_observations(
                 evolved, start_iso, end_iso
             )
