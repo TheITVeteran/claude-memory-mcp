@@ -164,7 +164,7 @@ class SearchChannelsMixin:
 
             return results
 
-        except Exception:
+        except Exception:  # noqa: contract
             logger.warning("Entity extraction enrichment failed", exc_info=True)
             return []
 
@@ -419,7 +419,7 @@ class SearchChannelsMixin:
             if age_days < 0:
                 return 1.0  # future timestamps → max recency
             return float(2.0 ** (-age_days / half_life))
-        except (ValueError, TypeError):
+        except ValueError:  # noqa: contract
             logger.warning("Invalid occurred_at '%s', falling back to default", occurred_at)
             return result.recency_score
 

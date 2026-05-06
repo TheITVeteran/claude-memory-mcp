@@ -221,7 +221,7 @@ class FTSStore:
                     }
                 )
             return results
-        except sqlite3.OperationalError:
+        except sqlite3.OperationalError:  # noqa: contract
             # Malformed query or FTS error — return empty gracefully
             logger.warning("FTS search failed for query=%r", query, exc_info=True)
             return []

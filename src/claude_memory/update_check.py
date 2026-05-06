@@ -72,5 +72,5 @@ def _is_newer(remote: str, local: str) -> bool:
         r_parts = [int(x) for x in remote.split(".")]
         l_parts = [int(x) for x in local.split(".")]
         return r_parts > l_parts
-    except (ValueError, TypeError):
+    except ValueError:  # noqa: contract
         return False

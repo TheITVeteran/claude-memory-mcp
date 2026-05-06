@@ -88,8 +88,8 @@ def parse_temporal_range(
             start = datetime(year, month, day, tzinfo=UTC)
             end = start + timedelta(days=1)
             return (start, end)
-        except ValueError:
-            pass
+        except ValueError:  # noqa: contract
+            logger.debug("Phase 1 date parsing failed")
 
     # Phase 2: Check explicit month + year (January 2026)
     m = _MONTH_YEAR.search(text)

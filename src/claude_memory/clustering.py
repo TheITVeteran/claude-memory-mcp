@@ -51,7 +51,7 @@ class ClusteringService:
 
         if not valid_nodes:
             logger.warning("No valid nodes with embeddings found for clustering.")
-            return []
+            return []  # noqa: contract
 
         X = np.array(embeddings)  # noqa: N806
 

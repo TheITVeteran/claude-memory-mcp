@@ -191,7 +191,7 @@ class ActivationEngine:
             age_days = (datetime.now(UTC) - ts).total_seconds() / 86400.0
             # Exponential decay: half-life = 30 days
             return float(2.0 ** (-age_days / 30.0))
-        except (ValueError, TypeError):
+        except ValueError:  # noqa: contract
             return 0.0
 
     def rank(  # noqa: PLR0913
