@@ -6,6 +6,42 @@ Drop this file into your project root or reference it from your Claude Code conf
 
 **Assertive pushback is non-negotiable. See global `~/.claude/CLAUDE.md` § The Harness — 6 guardrails against yes-man behavior. Do NOT hedge-then-agree. Say NO first, make Tabish argue his case. Devil's advocate on every decision. Name the opportunity cost.**
 
+## Audit Remediation (April-May 2026)
+
+4-phase adversarial audit found **83 contract violations across 37 source files**. Fixes shipped in 10 batches: B1-B8 landed, B9 (CI gate + docs) shipping now, **B10 (async-native repository migration) deferred to Phase 19+** as a separate ~50-80hr epic with launch gate "B1-B9 merged + 14-day production soak."
+
+### The lie this audit closed
+
+Before B1: `search()` wrapped its entire pipeline in `except Exception: return []`. The MCP `search_memory` tool transformed that into `"No results found."` — a confident string lie indistinguishable from "I genuinely have no memories on this topic." Every degraded memory query was Claude operating on missing context without knowing it. **For two months, Dragon Brain was potentially lying to Claude on every infrastructure failure.**
+
+### The contract that matters now
+
+- **`SearchError`** is raised on infrastructure failure (FalkorDB unreachable, Qdrant down, embedding API failed). Defined in `src/claude_memory/exceptions.py`.
+- **Empty list** signals "no results found" only — never infrastructure failure.
+- **MCP `search_memory`** returns structured `{"error": "MEMORY_LAYER_DEGRADED", "retry_safe": True}` on infra failure. The string `"No results found."` is reserved for legitimate empty results.
+
+If you hit `MEMORY_LAYER_DEGRADED`, the memory layer is broken — don't assume the user has no memories about the topic. Surface the degradation; offer to retry.
+
+### Other audit-driven invariants
+
+- **Edge writes use `MERGE`, not `CREATE`** — retried `create_relationship` calls don't duplicate edges (B2)
+- **Cross-channel status propagates** in search responses — when one of the 6 retrieval channels fails, response carries per-channel health metadata (B3)
+- **FTS write failures propagate** to caller receipts — silent index staleness eliminated (B2)
+- **Lock manager raises `TimeoutError`** on contention — never silently proceeds without the lock (B5)
+- **MCP tools have semantic validation** — bad UUIDs return `{"error": "ENTITY_NOT_FOUND"}`, not silent empty results (B6)
+
+### CI gate
+
+`tox -e contracts` runs `scripts/trace_contracts_dragon.py`. Baseline reflects current violation count post-B8 (~46 sites, almost all from B10's sync-in-async territory). Quarterly baseline reduction reviews ratchet toward zero.
+
+**If your commit produces NEW violations, the build fails before merge.** This is the regression guardrail; respect it.
+
+### Where to dig deeper
+
+- **Audit artifacts:** `audit_phase_1-4_*.md` and `audit_phase_4_synthesis.md` carry the full reasoning, prioritized fix list, and Phase B test plan (in the operator's antigravity brain folder).
+- **Architecture:** `docs/ARCHITECTURE.md` (B9 deliverable) — trust boundary diagram + per-boundary contracts.
+- **Curriculum:** the patterns this audit applied — shape vs contract, behavioral contract tests, sub-batching discipline, tests-enforcing-bugs — are documented in operator's COMMANDNODE Code Literacy Layer 3.5. Not portable to public consumers; reference for operator-internal sessions only.
+
 ## What This Is
 
 A persistent memory system for AI agents. Knowledge graph (FalkorDB) + vector search (Qdrant) + MCP server. Any MCP-compatible client can store entities, observations, and relationships — then recall them semantically across sessions. Published on PyPI as `dragon-brain`. **v1.1.0 — 100% recall@5 on LongMemEval (ICLR 2025), no LLM required.**

@@ -1,141 +1,64 @@
-# System Architecture
+# Claude Memory MCP Architecture & Trust Boundaries
 
-## Design Principles ("The Moto")
+This document defines the strict trust boundaries and architectural invariants established during the Phase 2 Audit (April/May 2026). It is intentionally scoped strictly to trust boundaries and data flow.
 
-1.  **Mercenary Validation**: "No code without a git pre commit + plethora of unit tests + mercenary checks."
-2.  **Strict Decoupling**: ML logic (`embedding.py`, `activation.py`) is isolated from Business Logic (`tools.py`) via Dependency Injection.
-3.  **Semantic Holiness**: We do not treat memories as strings. We treat them as **Holographic Graphs**.
-4.  **Adaptive Retrieval**: Queries are automatically classified and routed to the best search strategy.
+## Trust Boundary Diagram
 
-## The Data Model
+```mermaid
+graph TD
+    %% Define Styles
+    classDef client fill:#e0f2fe,stroke:#0369a1,stroke-width:2px;
+    classDef boundary fill:#fef08a,stroke:#b45309,stroke-width:2px,stroke-dasharray: 5 5;
+    classDef service fill:#dcfce7,stroke:#15803d,stroke-width:2px;
+    classDef storage fill:#f3e8ff,stroke:#7e22ce,stroke-width:2px;
 
-### Entities
+    %% Client Layer (Untrusted)
+    subgraph ClientLayer [Client Layer]
+        MCP[MCP Server / Decorators]
+        FastAPI[FastAPI Endpoints]
+        CLI[CLI Tools]
+    end
+    class MCP,FastAPI,CLI client;
 
-Nodes in the graph (FalkorDB).
+    %% Trust Boundary Layer
+    subgraph BoundaryLayer [Trust Boundary: Pydantic Validation]
+        Schema[schema.py Models]
+        Validation[@requires_entity / @requires_session]
+    end
+    class Schema,Validation boundary;
 
-- **Properties**: `id`, `name`, `description`, `node_type`, `project_id`, `created_at`, `occurred_at`, `certainty`, `weight`, `salience_score`, `last_accessed`.
-- **Vector**: Stored in **Qdrant** (linked by `id`). Not on graph nodes.
+    %% Domain Layer (Trusted)
+    subgraph DomainLayer [Domain Layer: MemoryService]
+        Service[MemoryService Core]
+    end
+    class Service service;
 
-### Vector Store (Qdrant)
+    %% Persistence Layer (Untrusted / Failure Prone)
+    subgraph PersistenceLayer [Persistence Layer: Infra Boundaries]
+        Repo[FalkorDB / GraphRepository]
+        Qdrant[Qdrant / VectorStore]
+        FTS[SQLite / FTSStore]
+    end
+    class Repo,Qdrant,FTS storage;
 
-High-performance vector similarity search.
-
-- **Collection**: `memory_embeddings`
-- **Payload**: Stores `entity_id` and embedding vector (1024d, BAAI/bge-m3).
-- **Features**: MMR diversity search, HNSW optimized threshold (500), full-text payload index on `name`.
-- **Env**: `QDRANT_HOST` (default `localhost`, set to `qdrant` in Docker).
-
-> **Entity Embedding Quality**: Entity vectors are computed from a composite text
-> that includes name, type, description, and all observation content. Adding an
-> observation triggers automatic re-embedding of the parent entity, ensuring
-> vectors stay semantically rich over time.
-
-### Relationships
-
-Edges in the graph.
-
-- **Properties**: `confidence`, `weight` (0-1), `created_at`.
-- **Typed**: `DEPENDS_ON`, `ENABLES`, `BLOCKS`, `CONTAINS`, `PART_OF`, `EVOLVED_FROM`, `SUPERSEDES`, `PRECEDED_BY`, `CONCURRENT_WITH`, `CONTRADICTS`, `SUPPORTS`, `REJECTED_FOR`, `REVISITED_BECAUSE`, `RHYMES_WITH`, `ANALOGOUS_TO`, `TAUGHT_THROUGH`, `BREAKTHROUGH_IN`, `UNLOCKED`, `CREATED_BY`, `DECIDED_IN`, `MENTIONED_IN`, `BELONGS_TO_PROJECT`, `BRIDGES_TO`, `RELATED_TO`.
-
-### The "Hologram"
-
-A subgraph retrieval pattern.
-Instead of `SELECT * FROM Memories WHERE text MATCH query`, we do:
-
-1.  **Search**: Find anchors (top-k semantic match via Qdrant).
-2.  **Expand**: BFS Traverse outward (Depth 2-3 via FalkorDB).
-3.  **Return**: The connected subgraph (stripped of raw embeddings).
-
-### Spreading Activation
-
-An associative retrieval pattern (Phase 12).
-
-1.  **Seed**: Vector search finds initial anchors.
-2.  **Activate**: Energy propagates through graph edges (decay=0.6, max_hops=3).
-3.  **Inhibit**: Lateral inhibition (top-k) prevents runaway activation.
-4.  **Rank**: Merge vector score + activation score + salience + recency with configurable weights.
-
-### Adaptive Routing (Phase 13)
-
-The `QueryRouter` classifies queries by intent:
-
-- **SEMANTIC**: Factual lookups → vector search
-- **ASSOCIATIVE**: "How does X relate to Y?" → spreading activation
-- **TEMPORAL**: "What happened last week?" → timeline query
-- **RELATIONAL**: "What depends on X?" → graph traversal
-
-### Structural Gap Analysis (Phase 15)
-
-InfraNodus-inspired knowledge gap detection:
-
-1.  **Cluster**: Louvain (NetworkX) detects communities; DBSCAN groups related memories.
-2.  **Compare**: Cosine similarity between cluster centroids.
-3.  **Detect**: High similarity + low cross-edges = structural gap.
-4.  **Report**: Generate research prompts + store `GapReport` entities.
-
-### API Sanitization Layer ("The Bouncer")
-
-Before any data leaves the `MemoryService` to return to the user/LLM:
-
-- **Strip Embeddings**: We aggressively remove the `embedding` field (1024 floats) from all nodes.
-- **Why**: Vectors are for machines (clustering/search), not for LLM context windows. Returning them wastes token budget (4KB/node) and degrades performance.
-
-## Transport
-
-- **stdio** (only). SSE transport was removed (Feb 2026). The MCP server runs via stdio for Claude Desktop / VS Code integration.
-
-## Component Interaction
-
-```
-    A[MCP Human/Agent] -->|stdio| B[Server (FastMCP)]
-    B -->|delegates| C[MemoryService]
-    C -->|remote call| D[Embedding Microservice :8001]
-    C -->|persists| E[Repository]
-    E -->|structure| F[(FalkorDB :6379)]
-    E -->|vectors| I[(Qdrant :6333)]
-
-    D -->|loads| M[Model BAAI/bge-m3 (GPU)]
-
-    G[LibrarianAgent] -->|monitors| C
-    G -->|clusters| H[ClusteringService]
-    G -->|detects gaps| H
-    H -->|reads vectors| I
-
-    K[ActivationEngine] -->|reads edges| F
-    K -->|reads vectors| I
-
-    L[QueryRouter] -->|classifies| C
-    L -->|routes to| K
-
-    J[Dashboard :8501] -->|imports| C
+    %% Flow
+    ClientLayer -->|Untrusted Dicts/Kwargs| BoundaryLayer
+    BoundaryLayer -->|Validated Pydantic Models| DomainLayer
+    DomainLayer -->|Fail-Loud Sync/Async IO| PersistenceLayer
 ```
 
-## Docker Services
+## Per-Boundary Definitions
 
-| Service    | Image                      | Ports (localhost-bound) | Healthcheck                          |
-| ---------- | -------------------------- | ----------------------- | ------------------------------------ |
-| graphdb    | falkordb/falkordb:v4.14.11 | 6379, 3000              | `redis-cli ping`                     |
-| qdrant     | qdrant/qdrant:v1.16.3      | 6333                    | `bash /dev/tcp/localhost/6333`       |
-| embeddings | custom (Dockerfile)        | 8001→8000               | `curl localhost:8000/health`         |
-| dashboard  | custom (Dockerfile)        | 8501                    | `curl localhost:8501/_stcore/health` |
+### 1. The Client-to-Domain Boundary
+- **Protocol:** Clients (MCP, FastAPI, Scripts) **must never** pass raw dictionaries or kwargs directly into domain logic.
+- **Validators:** All data crossing into `MemoryService` MUST be encapsulated in `schema.py` Pydantic models. Decorators like `@requires_entity` enforce existence checks *before* domain logic executes.
+- **Error Propagation:** `MemoryService` raises domain-specific exceptions (e.g. `SearchError`) or `ValueError`. The Client layer is responsible for converting these to transport-specific error formats (e.g. JSON-RPC error dicts).
 
-All ports are bound to `127.0.0.1` — no external access.
+### 2. The Domain-to-Persistence Boundary
+- **Protocol:** `MemoryService` coordinates persistence, but treats infrastructure as inherently unstable.
+- **Error Propagation:** The persistence layer must be strictly fail-loud. Infrastructure failures (`redis.exceptions.ConnectionError`, `httpx.ConnectError`, `sqlite3.Error`) must propagate upward to `MemoryService`, which then translates them into standardized domain exceptions like `SearchError`.
+- **Sync/Async:** `MemoryService` is largely async, while underlying repositories use a mix of async (`Qdrant`, `httpx`) and sync (`FalkorDB`, `SQLite`) IO. Batch 10 targets full async-native operation.
 
-## Backup Architecture
-
-- **Automated**: Windows Task Scheduler (`ExocortexBackup`) runs daily at 3 AM.
-- **Storage**: Local (`backups/`) + Google Drive (`G:\My Drive\exocortex_backups\`).
-- **Retention**: Rolling 7-day window — both local and cloud copies.
-- **Script**: `scripts/scheduled_backup.py`.
-
-## CI/CD Tiers (The Gold Stack)
-
-| Tier   | What                                                           |
-| ------ | -------------------------------------------------------------- |
-| pulse   | Ruff lint + format check + Mypy strict + Pytest (1,166 tests)  |
-| gate    | Hypothesis property tests + diff-cover (changed-line coverage) |
-| hammer  | Security scanning (bandit, pip-audit, detect-secrets)          |
-| polish  | Codespell (typos) + docstr-coverage (docstring completeness)   |
-| reaper  | Dead code detection (vulture — unused functions/imports)       |
-
-Run all: `tox` | Run one: `tox -e pulse`
+## Audit Artifacts
+For the full context on how these boundaries were established and enforced, refer to the **Dragon Brain Audit Artifacts** located in the Exocortex:
+`e3371fab-b05f-4190-8611-5d91f320000a/audit_phase_1-4_*.md`
