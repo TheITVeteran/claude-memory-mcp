@@ -41,6 +41,7 @@ from typing import Any
 
 from claude_memory.schema import (
     AnalyzeGraphParams,
+    CreateMemoryTypeParams,
     CrossDomainPatternsParams,
     GetEvolutionParams,
     GetHologramParams,
@@ -774,9 +775,11 @@ async def test_ontology(service: Any) -> None:
 
     try:
         result = service.create_memory_type(
-            name="E2E_TestType",
-            description="A test memory type created during E2E validation",
-            required_properties=["test_field"],
+            CreateMemoryTypeParams(
+                name="E2E_TestType",
+                description="A test memory type created during E2E validation",
+                required_properties=["test_field"],
+            )
         )
         assert "error" not in result, f"Ontology error: {result.get('error')}"
         results.ok(f"Create memory type -> {result.get('name', 'E2E_TestType')}")

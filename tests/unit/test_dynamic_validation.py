@@ -65,8 +65,12 @@ async def test_evil1_create_entity_invalid_type_rejection(service_with_ontology:
 
 @pytest.mark.asyncio
 async def test_happy_create_entity_valid_dynamic_type(service_with_ontology: Any) -> None:
+    from claude_memory.schema import CreateMemoryTypeParams
+
     # 1. Register new type
-    service_with_ontology.create_memory_type("Recipe", "Cooking", [])
+    service_with_ontology.create_memory_type(
+        CreateMemoryTypeParams(name="Recipe", description="Cooking", required_properties=[])
+    )
 
     # 2. Create entity
     params = EntityCreateParams(name="Soup", node_type="Recipe", project_id="p1")

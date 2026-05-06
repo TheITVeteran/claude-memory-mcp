@@ -26,6 +26,7 @@ from claude_memory.schema import (
     PointInTimeQueryParams,
     RelationshipCreateParams,
     RelationshipDeleteParams,
+    SearchMemoryParams,
     SessionEndParams,
     SessionStartParams,
     TraversePathParams,
@@ -283,15 +284,17 @@ async def search_memory(  # noqa: PLR0913
     include_meta: when True, wraps results with temporal exhaustion metadata.
     """
     try:
-        results = await service.search(
-            query,
-            limit,
-            project_id,
-            offset,
+        params = SearchMemoryParams(
+            query=query,
+            project_id=project_id,
+            limit=limit,
+            offset=offset,
             mmr=mmr,
             strategy=strategy,
             temporal_window_days=temporal_window_days,
+            deep=False,
         )
+        results = await service.search(params)
     except SearchError:
         logger.error("search_memory: infrastructure error for query=%r", query, exc_info=True)
         return {

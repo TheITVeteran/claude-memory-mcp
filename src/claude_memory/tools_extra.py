@@ -11,7 +11,12 @@ from typing import TYPE_CHECKING, Any
 
 from claude_memory.schema import (
     BottleQueryParams,
+    CreateMemoryTypeParams,
+    FindSemanticOpportunitiesParams,
     GapDetectionParams,
+    ListOrphansParams,
+    SearchAssociativeParams,
+    SemanticRadarParams,
     TemporalQueryParams,
 )
 
@@ -68,8 +73,8 @@ async def search_associative(  # noqa: PLR0913
     richer, context-aware retrieval.  Score weights default to env vars
     ``W_SIMILARITY``, ``W_ACTIVATION``, ``W_SALIENCE``, ``W_RECENCY``.
     """
-    results = await _service.search_associative(  # type: ignore[union-attr]
-        query,
+    params = SearchAssociativeParams(
+        query=query,
         limit=limit,
         project_id=project_id,
         decay=decay,
@@ -79,6 +84,7 @@ async def search_associative(  # noqa: PLR0913
         w_sal=w_sal,
         w_rec=w_rec,
     )
+    results = await _service.search_associative(params)  # type: ignore[union-attr]
     if not results:
         return [{"message": "No results found."}]
     return [res.model_dump() for res in results]
@@ -99,9 +105,12 @@ async def create_memory_type(
         description: Description of what this type represents
         required_properties: List of property names that should always be present
     """
-    if required_properties is None:
-        required_properties = []
-    return _service.create_memory_type(name, description, required_properties)  # type: ignore[union-attr]
+    params = CreateMemoryTypeParams(
+        name=name,
+        description=description,
+        required_properties=required_properties,
+    )
+    return _service.create_memory_type(params)  # type: ignore[union-attr]
 
 
 async def query_timeline(
@@ -201,7 +210,8 @@ async def list_orphans(limit: int = 50) -> list[dict[str, Any]]:
     Args:
         limit: Maximum nodes to return (default 50, safety cap).
     """
-    return await _service.list_orphans(limit=limit)  # type: ignore[union-attr]
+    params = ListOrphansParams(limit=limit)
+    return await _service.list_orphans(params)  # type: ignore[union-attr]  # type: ignore[union-attr]
 
 
 async def semantic_radar(
@@ -222,12 +232,13 @@ async def semantic_radar(
         similarity_threshold: Minimum cosine similarity (default 0.6).
         project_id: Optional project scope filter.
     """
-    return await _service.semantic_radar(  # type: ignore[union-attr]
+    params = SemanticRadarParams(
         entity_id=entity_id,
         limit=limit,
         similarity_threshold=similarity_threshold,
         project_id=project_id,
     )
+    return await _service.semantic_radar(params)  # type: ignore[union-attr]
 
 
 async def find_semantic_opportunities(
@@ -247,12 +258,13 @@ async def find_semantic_opportunities(
         limit: Maximum opportunities to return (default 20).
         min_graph_distance: Minimum graph hops to qualify (default 3).
     """
-    return await _service.find_semantic_opportunities(  # type: ignore[union-attr]
+    params = FindSemanticOpportunitiesParams(
         project_id=project_id,
         similarity_threshold=similarity_threshold,
         limit=limit,
         min_graph_distance=min_graph_distance,
     )
+    return await _service.find_semantic_opportunities(params)  # type: ignore[union-attr]
 
 
 async def diff_knowledge_state(

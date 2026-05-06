@@ -11,6 +11,7 @@ import streamlit.components.v1 as components
 from pyvis.network import Network
 
 from claude_memory.embedding import EmbeddingService
+from claude_memory.schema import FindSemanticOpportunitiesParams, SearchMemoryParams
 from claude_memory.tools import MemoryService
 from dashboard.radar_viz import render_graph_with_radar
 
@@ -136,13 +137,12 @@ def _render_radar_tab(service: MemoryService) -> None:
 
     if run_scan:
         with st.spinner("Scanning graph for missing connections..."):
-            results = asyncio.run(
-                service.find_semantic_opportunities(
-                    project_id=project_id or None,
-                    similarity_threshold=similarity_threshold,
-                    limit=limit,
-                )
+            params = FindSemanticOpportunitiesParams(
+                project_id=project_id or None,
+                similarity_threshold=similarity_threshold,
+                limit=limit,
             )
+            results = asyncio.run(service.find_semantic_opportunities(params))
 
         # Metrics row
         stats = results.get("stats", {})
@@ -210,7 +210,8 @@ def _render_search_tab(service: MemoryService) -> None:
     st.header("Semantic Search")
     query = st.text_input("Query")
     if query:
-        results = asyncio.run(service.search(query))  # nest_asyncio makes this safe
+        params = SearchMemoryParams(query=query)
+        results = asyncio.run(service.search(params))  # nest_asyncio makes this safe
         for res in results:
             with st.expander(f"{res.name} (Score: {res.score:.2f})"):
                 st.json(res)

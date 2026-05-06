@@ -65,42 +65,37 @@ class TestSearchAssociativeDefaults:
 
     def test_sad6_defaults_evil_limit(self) -> None:
         """Evil: limit default must be 10, not 11."""
-        from claude_memory.search_advanced import SearchAdvancedMixin
+        from claude_memory.schema import SearchAssociativeParams
 
-        sig = inspect.signature(SearchAdvancedMixin.search_associative)
-        assert sig.parameters["limit"].default == 10
+        assert SearchAssociativeParams.model_fields["limit"].default == 10
 
     def test_sad7_defaults_evil_decay(self) -> None:
         """Evil: decay default must be 0.6, not 0.7."""
-        from claude_memory.search_advanced import SearchAdvancedMixin
+        from claude_memory.schema import SearchAssociativeParams
 
-        sig = inspect.signature(SearchAdvancedMixin.search_associative)
-        assert sig.parameters["decay"].default == 0.6
+        assert SearchAssociativeParams.model_fields["decay"].default == 0.6
 
     def test_sad8_defaults_evil_max_hops(self) -> None:
         """Evil: max_hops default must be 3, not 4."""
-        from claude_memory.search_advanced import SearchAdvancedMixin
+        from claude_memory.schema import SearchAssociativeParams
 
-        sig = inspect.signature(SearchAdvancedMixin.search_associative)
-        assert sig.parameters["max_hops"].default == 3
-        assert sig.parameters["max_hops"].default != 4
+        assert SearchAssociativeParams.model_fields["max_hops"].default == 3
+        assert SearchAssociativeParams.model_fields["max_hops"].default != 4
 
     def test_sad9_defaults_sad_weights_default_none(self) -> None:
         """Sad: weight params default to None (use env vars)."""
-        from claude_memory.search_advanced import SearchAdvancedMixin
+        from claude_memory.schema import SearchAssociativeParams
 
-        sig = inspect.signature(SearchAdvancedMixin.search_associative)
         for w in ("w_sim", "w_act", "w_sal", "w_rec"):
-            assert sig.parameters[w].default is None
+            assert SearchAssociativeParams.model_fields[w].default is None
 
     def test_sad10_defaults_happy(self) -> None:
         """Happy: all defaults correct."""
-        from claude_memory.search_advanced import SearchAdvancedMixin
+        from claude_memory.schema import SearchAssociativeParams
 
-        sig = inspect.signature(SearchAdvancedMixin.search_associative)
-        assert sig.parameters["limit"].default == 10
-        assert sig.parameters["decay"].default == 0.6
-        assert sig.parameters["max_hops"].default == 3
+        assert SearchAssociativeParams.model_fields["limit"].default == 10
+        assert SearchAssociativeParams.model_fields["decay"].default == 0.6
+        assert SearchAssociativeParams.model_fields["max_hops"].default == 3
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -153,43 +148,38 @@ class TestSearchDefaults:
     """Assert search() default parameters."""
 
     def test_sad6_defaults_evil_limit(self) -> None:
-        """Evil: limit default must be 5, not 10."""
-        from claude_memory.search import SearchMixin
+        """Evil: limit default must be 10, not 5."""
+        from claude_memory.schema import SearchMemoryParams
 
-        sig = inspect.signature(SearchMixin.search)
-        assert sig.parameters["limit"].default == 5
+        assert SearchMemoryParams.model_fields["limit"].default == 10
 
     def test_sad17_defaults_evil_offset(self) -> None:
         """Evil: offset default must be 0."""
-        from claude_memory.search import SearchMixin
+        from claude_memory.schema import SearchMemoryParams
 
-        sig = inspect.signature(SearchMixin.search)
-        assert sig.parameters["offset"].default == 0
+        assert SearchMemoryParams.model_fields["offset"].default == 0
 
     def test_sad18_defaults_evil_mmr_false(self) -> None:
         """Evil: mmr default must be False."""
-        from claude_memory.search import SearchMixin
+        from claude_memory.schema import SearchMemoryParams
 
-        sig = inspect.signature(SearchMixin.search)
-        assert sig.parameters["mmr"].default is False
+        assert SearchMemoryParams.model_fields["mmr"].default is False
 
     def test_sad19_defaults_sad_strategy_none(self) -> None:
         """Sad: strategy defaults to None (direct vector search)."""
-        from claude_memory.search import SearchMixin
+        from claude_memory.schema import SearchMemoryParams
 
-        sig = inspect.signature(SearchMixin.search)
-        assert sig.parameters["strategy"].default is None
+        assert SearchMemoryParams.model_fields["strategy"].default is None
 
     def test_sad10_defaults_happy(self) -> None:
         """Happy: all defaults correct."""
-        from claude_memory.search import SearchMixin
+        from claude_memory.schema import SearchMemoryParams
 
-        sig = inspect.signature(SearchMixin.search)
-        assert sig.parameters["limit"].default == 5
-        assert sig.parameters["offset"].default == 0
-        assert sig.parameters["mmr"].default is False
-        assert sig.parameters["strategy"].default is None
-        assert sig.parameters["deep"].default is False
+        assert SearchMemoryParams.model_fields["limit"].default == 10
+        assert SearchMemoryParams.model_fields["offset"].default == 0
+        assert SearchMemoryParams.model_fields["mmr"].default is False
+        assert SearchMemoryParams.model_fields["strategy"].default is None
+        assert SearchMemoryParams.model_fields["deep"].default is False
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -309,7 +299,7 @@ class TestTemporalNeighborsDefaults:
 
         sig = GetTemporalNeighborsParams.model_fields
         assert sig["direction"].default == "both"
-        assert sig.parameters["limit"].default == 10
+        assert sig["limit"].default == 10
 
 
 # ═══════════════════════════════════════════════════════════════════

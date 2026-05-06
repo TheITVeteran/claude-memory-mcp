@@ -12,6 +12,7 @@ from claude_memory.schema import (
     EntityCreateParams,
     GetHologramParams,
     GetNeighborsParams,
+    SearchMemoryParams,
     SearchResult,
 )
 from claude_memory.tools import MemoryService
@@ -103,7 +104,7 @@ async def test_happy_search_results_have_no_embedding_field(mock_service):
     }
     mock_service._fire_salience_update = MagicMock()
 
-    results = await mock_service.search("test query")
+    results = await mock_service.search(SearchMemoryParams(query="test query"))
 
     assert len(results) == 1
     assert isinstance(results[0], SearchResult)

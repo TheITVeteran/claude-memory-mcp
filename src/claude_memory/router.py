@@ -11,7 +11,12 @@ from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
-from claude_memory.schema import TemporalQueryParams
+from claude_memory.schema import (
+    SearchAssociativeParams,
+    SearchMemoryParams,
+    TemporalQueryParams,
+    TraversePathParams,
+)
 
 if TYPE_CHECKING:  # pragma: no cover
     from claude_memory.tools import MemoryService
@@ -189,7 +194,9 @@ class QueryRouter:
             return await self._route_associative(service, query, limit, project_id, **kwargs)
 
         # Default: SEMANTIC
-        return await service.search(query, limit=limit, project_id=project_id, **kwargs)
+        # Ignore kwargs as they might not be in SearchMemoryParams
+        params = SearchMemoryParams(query=query, limit=limit, project_id=project_id)
+        return await service.search(params)
 
     # ── Private dispatch helpers ─────────────────────────────────────
 
@@ -228,10 +235,11 @@ class QueryRouter:
         # Simple heuristic: find quoted strings or CamelCase words
         quoted = re.findall(r'"([^"]+)"', query)
         if len(quoted) >= _MIN_QUOTED_ENTITIES:
-            return await service.traverse_path(quoted[0], quoted[1])  # type: ignore[no-any-return]
+            t_params = TraversePathParams(from_id=quoted[0], to_id=quoted[1])
+            return await service.traverse_path(t_params)  # type: ignore[no-any-return]
 
         # Fallback: semantic search (we can't reliably extract entities)
-        return await service.search(query, limit=10)
+        return await service.search(SearchMemoryParams(query=query, limit=10))
 
     @staticmethod
     async def _route_associative(
@@ -242,4 +250,11 @@ class QueryRouter:
         **kwargs: Any,
     ) -> list[Any]:
         """Route to spreading-activation search."""
-        return await service.search_associative(query, limit=limit, project_id=project_id, **kwargs)
+        # Assume decay, max_hops might be in kwargs, but we will safely pass known defaults
+        decay = kwargs.get("decay", 0.5)
+        max_hops = kwargs.get("max_hops", 3)
+        return await service.search_associative(
+            SearchAssociativeParams(
+                query=query, limit=limit, project_id=project_id, decay=decay, max_hops=max_hops
+            )
+        )

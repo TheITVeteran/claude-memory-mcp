@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from claude_memory.schema import FindSemanticOpportunitiesParams
 from claude_memory.tools import MemoryService
 
 # ─── Test Constants ─────────────────────────────────────────────────
@@ -45,7 +46,7 @@ def service(mock_vector_store: Any) -> Generator[MemoryService, None, None]:
 async def test_evil1_empty_graph(service: MemoryService) -> None:
     """Evil: no entities in graph → empty results."""
     with patch.object(service.repo, "get_all_node_ids", return_value=[]):
-        result = await service.find_semantic_opportunities()
+        result = await service.find_semantic_opportunities(FindSemanticOpportunitiesParams())
 
     assert result["opportunities"] == []
     assert result["stats"]["entities_scanned"] == 0
@@ -63,7 +64,9 @@ async def test_evil2_fully_connected_graph(service: MemoryService) -> None:
             service.vector_store, "find_similar_by_id", new_callable=AsyncMock, return_value=similar
         ):
             with patch.object(service.repo, "shortest_path_length", return_value=1):
-                result = await service.find_semantic_opportunities(min_graph_distance=3)
+                result = await service.find_semantic_opportunities(
+                    FindSemanticOpportunitiesParams(min_graph_distance=3)
+                )
 
     assert result["opportunities"] == []
     assert result["stats"]["already_connected"] == 1
@@ -90,7 +93,9 @@ async def test_evil3_deduplication(service: MemoryService) -> None:
             service.vector_store, "find_similar_by_id", side_effect=mock_find_similar
         ):
             with patch.object(service.repo, "shortest_path_length", return_value=None):
-                result = await service.find_semantic_opportunities()
+                result = await service.find_semantic_opportunities(
+                    FindSemanticOpportunitiesParams()
+                )
 
     # Should be deduplicated to 1 pair
     assert len(result["opportunities"]) == 1
@@ -112,7 +117,9 @@ async def test_sad1_project_id_filters(service: MemoryService) -> None:
         with patch.object(
             service.vector_store, "find_similar_by_id", new_callable=AsyncMock, return_value=[]
         ):
-            result = await service.find_semantic_opportunities(project_id="my-project")
+            result = await service.find_semantic_opportunities(
+                FindSemanticOpportunitiesParams(project_id="my-project")
+            )
 
     # Verify execute_cypher was called with project filter
     call_args = mock_cypher.call_args
@@ -145,7 +152,9 @@ async def test_happy_disconnected_clusters_found(service: MemoryService) -> None
             service.vector_store, "find_similar_by_id", side_effect=mock_find_similar
         ):
             with patch.object(service.repo, "shortest_path_length", return_value=None):
-                result = await service.find_semantic_opportunities()
+                result = await service.find_semantic_opportunities(
+                    FindSemanticOpportunitiesParams()
+                )
 
     assert len(result["opportunities"]) == 2
     assert result["stats"]["bridges_found"] == 2
@@ -175,7 +184,9 @@ async def test_happy_limit_respected(service: MemoryService) -> None:
             return_value=many_similar,
         ):
             with patch.object(service.repo, "shortest_path_length", return_value=None):
-                result = await service.find_semantic_opportunities(limit=3)
+                result = await service.find_semantic_opportunities(
+                    FindSemanticOpportunitiesParams(limit=3)
+                )
 
     assert len(result["opportunities"]) == 3
     assert result["stats"]["bridges_found"] == 3

@@ -17,8 +17,11 @@ import pytest
 
 from claude_memory.schema import (
     AnalyzeGraphParams,
+    CreateMemoryTypeParams,
     GetHologramParams,
     PointInTimeQueryParams,
+    SearchAssociativeParams,
+    SearchMemoryParams,
     TraversePathParams,
 )
 
@@ -472,14 +475,14 @@ async def test_sad5_traverse_path_no_nodes_attr(service: MemoryService) -> None:
 
 
 async def test_sad6_search_empty_query(service: MemoryService) -> None:
-    result = await service.search("", limit=SEARCH_LIMIT)
+    result = await service.search(SearchMemoryParams(query="", limit=SEARCH_LIMIT))
     assert result == []
 
 
 async def test_sad7_search_no_vector_results(service: MemoryService) -> None:
     service.vector_store.search.return_value = []
 
-    result = await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
+    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
     assert result == []
 
 
@@ -500,7 +503,7 @@ async def test_happy_search_with_results(service: MemoryService) -> None:
         "edges": [],
     }
 
-    result = await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
+    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
     assert len(result) == 1
     assert result[0].id == ENTITY_ID
     assert result[0].name == ENTITY_NAME
@@ -514,7 +517,7 @@ async def test_sad8_search_node_not_in_graph(service: MemoryService) -> None:
     ]
     service.repo.get_subgraph.return_value = {"nodes": [], "edges": []}
 
-    result = await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
+    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
     assert result == []
 
 
@@ -545,7 +548,9 @@ async def test_happy_search_deep_returns_observations(service: MemoryService) ->
     obs_result.result_set = [["First observation"], ["Second observation"]]
     service.repo.execute_cypher.return_value = obs_result
 
-    result = await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT, deep=True)
+    result = await service.search(
+        SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT, deep=True)
+    )
     assert len(result) == 1
     assert result[0].observations == ["First observation", "Second observation"]
 
@@ -575,7 +580,9 @@ async def test_happy_search_deep_returns_relationships(service: MemoryService) -
     obs_result.result_set = []
     service.repo.execute_cypher.return_value = obs_result
 
-    result = await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT, deep=True)
+    result = await service.search(
+        SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT, deep=True)
+    )
     assert len(result) == 1
     assert len(result[0].relationships) == 2
 
@@ -597,7 +604,7 @@ async def test_sad9_search_shallow_backward_compat(service: MemoryService) -> No
         "edges": [],
     }
 
-    result = await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
+    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
     assert len(result) == 1
     # Shallow search should have empty/None observations and relationships
     assert not result[0].observations
@@ -625,7 +632,9 @@ async def test_happy_search_with_project_id_filter(service: MemoryService) -> No
         "edges": [],
     }
 
-    result = await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT, project_id=PROJECT_ID)
+    result = await service.search(
+        SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT, project_id=PROJECT_ID)
+    )
     assert len(result) == 1
 
     # Verify filter was passed to vector_store.search
@@ -651,7 +660,9 @@ async def test_happy_search_with_mmr_flag(service: MemoryService) -> None:
         "edges": [],
     }
 
-    result = await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT, mmr=True)
+    result = await service.search(
+        SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT, mmr=True)
+    )
     assert len(result) == 1
     # Verify search_mmr was called instead of search
     service.vector_store.search_mmr.assert_awaited_once()
@@ -822,9 +833,11 @@ def test_happy_create_memory_type(service: MemoryService) -> None:
     service.ontology = MagicMock()
 
     result = service.create_memory_type(
-        name="Recipe",
-        description="Culinary recipe",
-        required_properties=["ingredients"],
+        CreateMemoryTypeParams(
+            name="Recipe",
+            description="Culinary recipe",
+            required_properties=["ingredients"],
+        )
     )
     assert result["name"] == "Recipe"
     assert result["status"] == "active"
@@ -833,7 +846,9 @@ def test_happy_create_memory_type(service: MemoryService) -> None:
 def test_sad13_create_memory_type_defaults(service: MemoryService) -> None:
     service.ontology = MagicMock()
 
-    result = service.create_memory_type(name="Recipe", description="Culinary recipe")
+    result = service.create_memory_type(
+        CreateMemoryTypeParams(name="Recipe", description="Culinary recipe")
+    )
     assert result["required_properties"] == []
 
 
@@ -968,7 +983,7 @@ async def test_happy_search_fires_salience_async(service: MemoryService) -> None
         }
     ]
 
-    result = await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
+    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
     assert len(result) == 1
     # Returns PRE-update salience from graph data (fire-and-forget)
     assert result[0].salience_score == SALIENCE_DEFAULT
@@ -1004,7 +1019,7 @@ async def test_evil13_search_salience_background_error_silent(service: MemorySer
     }
     service.repo.increment_salience.side_effect = ConnectionError("FalkorDB down")
 
-    result = await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
+    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
     assert len(result) == 1
     # Uses graph node's salience_score (background error is silent)
     assert result[0].salience_score == 3.5
@@ -1034,7 +1049,7 @@ async def test_sad15_search_salience_fallback_default(service: MemoryService) ->
     }
     service.repo.increment_salience.return_value = []  # No updates returned
 
-    result = await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
+    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
     assert len(result) == 1
     assert result[0].salience_score == 0.0
 
@@ -1153,7 +1168,7 @@ def test_happy_get_temporal_neighbors_before(service: MemoryService) -> None:
 def test_happy_get_temporal_neighbors_after(service: MemoryService) -> None:
     """get_temporal_neighbors returns successors."""
     service.repo.get_temporal_neighbors.return_value = [{"id": "next-1", "name": "Next"}]
-    result = service.repo.get_temporal_neighbors(ENTITY_ID, direction="after")
+    result = service.repo.get_temporal_neighbors(ENTITY_ID, direction="forward")
     assert len(result) == 1
 
 
@@ -1287,11 +1302,11 @@ async def test_happy_service_get_temporal_neighbors(
     from claude_memory.schema import GetTemporalNeighborsParams
 
     service.repo.get_temporal_neighbors.return_value = [{"id": "neighbor-1"}]
-    params = GetTemporalNeighborsParams(entity_id=ENTITY_ID, direction="after", limit=5)  # type: ignore[arg-type]
+    params = GetTemporalNeighborsParams(entity_id=ENTITY_ID, direction="forward", limit=5)  # type: ignore[arg-type]
     result = await service.get_temporal_neighbors(params)
     assert len(result) == 1
     service.repo.get_temporal_neighbors.assert_called_once_with(
-        entity_id=ENTITY_ID, direction="after", limit=5
+        entity_id=ENTITY_ID, direction="forward", limit=5
     )
 
 
@@ -1650,7 +1665,7 @@ async def test_evil20_search_raises_on_embedder_failure(service: MemoryService) 
     service.embedder.encode.side_effect = ConnectionError("Embedding server down")
 
     with pytest.raises(SearchError, match="Memory retrieval unavailable"):
-        await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
+        await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
 
 
 async def test_evil21_search_raises_on_vector_store_failure(service: MemoryService) -> None:
@@ -1660,7 +1675,7 @@ async def test_evil21_search_raises_on_vector_store_failure(service: MemoryServi
     service.vector_store.search.side_effect = ConnectionError("Qdrant unreachable")
 
     with pytest.raises(SearchError, match="Memory retrieval unavailable"):
-        await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
+        await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
 
 
 async def test_evil22_search_raises_on_timeout(service: MemoryService) -> None:
@@ -1670,7 +1685,7 @@ async def test_evil22_search_raises_on_timeout(service: MemoryService) -> None:
     service.embedder.encode.side_effect = TimeoutError("Embedding timed out")
 
     with pytest.raises(SearchError, match="Memory retrieval unavailable"):
-        await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
+        await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
 
 
 async def test_evil23_search_associative_raises_on_embedder_failure(
@@ -1682,7 +1697,9 @@ async def test_evil23_search_associative_raises_on_embedder_failure(
     service.embedder.encode.side_effect = ConnectionError("Embedding server down")
 
     with pytest.raises(SearchError, match="Memory retrieval unavailable"):
-        await service.search_associative(SEARCH_QUERY, limit=SEARCH_LIMIT)
+        await service.search_associative(
+            SearchAssociativeParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT)
+        )
 
 
 async def test_evil24_search_associative_raises_on_vector_store_failure(
@@ -1694,7 +1711,9 @@ async def test_evil24_search_associative_raises_on_vector_store_failure(
     service.vector_store.search.side_effect = ConnectionError("Qdrant unreachable")
 
     with pytest.raises(SearchError, match="Memory retrieval unavailable"):
-        await service.search_associative(SEARCH_QUERY, limit=SEARCH_LIMIT)
+        await service.search_associative(
+            SearchAssociativeParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT)
+        )
 
 
 async def test_evil25_search_raises_on_os_error(service: MemoryService) -> None:
@@ -1704,12 +1723,12 @@ async def test_evil25_search_raises_on_os_error(service: MemoryService) -> None:
     service.embedder.encode.side_effect = OSError("Network unreachable")
 
     with pytest.raises(SearchError, match="Memory retrieval unavailable"):
-        await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
+        await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
 
 
 async def test_sad28_search_empty_query_returns_empty(service: MemoryService) -> None:
     """AUDIT-B1: Empty query still returns [] (not SearchError) — it's not an infra failure."""
-    result = await service.search("", limit=SEARCH_LIMIT)
+    result = await service.search(SearchMemoryParams(query="", limit=SEARCH_LIMIT))
     assert result == []
 
 
@@ -1724,7 +1743,7 @@ async def test_happy_search_normal_operation_returns_results(service: MemoryServ
     ]
 
     # search() returns results, does not raise
-    result = await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
+    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
     # Result may be empty if hydration mocks aren't set up, but should NOT raise
     assert isinstance(result, list)
 

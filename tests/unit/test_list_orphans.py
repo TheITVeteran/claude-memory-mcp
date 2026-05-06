@@ -9,6 +9,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from claude_memory.schema import ListOrphansParams
+
 # ─── Module Import (patch infra before import) ──────────────────────
 
 with patch("claude_memory.repository.FalkorDB"):
@@ -73,7 +75,7 @@ async def test_sad1_returns_orphan_nodes(mock_service):
     assert result[0]["node_type"] == "Entity"
     assert result[1]["project_id"] == "proj-b"
     assert result[2]["labels"] == ["Observation"]
-    mock_service.list_orphans.assert_awaited_once_with(limit=50)
+    mock_service.list_orphans.assert_awaited_once_with(ListOrphansParams(limit=50))
 
 
 # ─── Sad Path ───────────────────────────────────────────────────────
@@ -87,7 +89,7 @@ async def test_sad2_empty_graph_returns_empty(mock_service):
     result = await tools_extra.list_orphans()
 
     assert result == []
-    mock_service.list_orphans.assert_awaited_once_with(limit=50)
+    mock_service.list_orphans.assert_awaited_once_with(ListOrphansParams(limit=50))
 
 
 # ─── Evil Paths ─────────────────────────────────────────────────────
@@ -101,7 +103,7 @@ async def test_sad3_limit_zero_returns_empty(mock_service):
     result = await tools_extra.list_orphans(limit=0)
 
     assert result == []
-    mock_service.list_orphans.assert_awaited_once_with(limit=0)
+    mock_service.list_orphans.assert_awaited_once_with(ListOrphansParams(limit=0))
 
 
 @pytest.mark.asyncio()
@@ -167,4 +169,4 @@ async def test_sad5_nameless_orphan_returns_focus(mock_service):
     assert result[0]["name"] is None
     assert result[0]["focus"] == "architecture review"
     assert result[0]["project_id"] == "frankenlearn"
-    mock_service.list_orphans.assert_awaited_once_with(limit=10)
+    mock_service.list_orphans.assert_awaited_once_with(ListOrphansParams(limit=10))

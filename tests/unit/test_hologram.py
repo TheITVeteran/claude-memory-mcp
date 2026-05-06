@@ -64,7 +64,9 @@ async def test_happy_get_hologram_orchestration(mock_service: Any) -> None:
     result = await mock_service.get_hologram(GetHologramParams(query="test query", depth=2))
 
     # Assertions
-    mock_service.search.assert_awaited_once_with("test query", limit=5)
+    from claude_memory.schema import SearchMemoryParams
+
+    mock_service.search.assert_awaited_once_with(SearchMemoryParams(query="test query", limit=5))
     mock_service.repo.get_subgraph.assert_called_once_with(["1", "2"], 2)
     assert len(result["nodes"]) == 3
     assert len(result["edges"]) == 1

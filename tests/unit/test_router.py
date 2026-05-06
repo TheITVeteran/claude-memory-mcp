@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from claude_memory.router import QueryIntent, QueryRouter
+from claude_memory.schema import SearchMemoryParams
 
 # ─── Fixtures ───────────────────────────────────────────────────────
 
@@ -142,7 +143,11 @@ class TestRoute:
     ) -> None:
         """RELATIONAL with quoted entities dispatches to traverse_path()."""
         result = await router.route('what connects "auth_module" to "database_layer"', mock_service)
-        mock_service.traverse_path.assert_called_once_with("auth_module", "database_layer")
+        from claude_memory.schema import TraversePathParams
+
+        mock_service.traverse_path.assert_called_once_with(
+            TraversePathParams(from_id="auth_module", to_id="database_layer")
+        )
         assert result == [{"id": "rel-1"}]
 
     @pytest.mark.asyncio()
@@ -175,8 +180,8 @@ class TestRoute:
         """Limit and project_id are forwarded to the underlying method."""
         await router.route("what is Python", mock_service, limit=20, project_id="proj-x")
         call_kwargs = mock_service.search.call_args
-        assert call_kwargs.kwargs["limit"] == 20
-        assert call_kwargs.kwargs["project_id"] == "proj-x"
+        assert call_kwargs.args[0].limit == 20
+        assert call_kwargs.args[0].project_id == "proj-x"
 
     @pytest.mark.asyncio()
     async def test_happy_route_temporal_passes_project(
@@ -256,7 +261,9 @@ class TestSearchStrategy:
 
         # Bind the real search method's logic
         with patch.object(logging.getLogger("claude_memory.search"), "warning") as mock_warn:
-            _ = await SearchMixin.search(svc, "plain query", strategy="auto")
+            _ = await SearchMixin.search(
+                svc, SearchMemoryParams(query="plain query", strategy="auto")
+            )
 
         mock_warn.assert_called()
         deprecation_calls = [c for c in mock_warn.call_args_list if "deprecated" in c[0][0].lower()]
@@ -286,7 +293,9 @@ class TestSearchStrategy:
 
         svc._direct_strategy_search = AsyncMock(return_value=[mock_result])
 
-        result = await SearchMixin.search(svc, "what is Python", strategy="semantic")
+        result = await SearchMixin.search(
+            svc, SearchMemoryParams(query="what is Python", strategy="semantic")
+        )
         svc._direct_strategy_search.assert_called_once()
         assert len(result) == 1
 
@@ -315,7 +324,7 @@ class TestSearchStrategy:
         svc.reranker = MagicMock()
         svc.reranker.rerank = AsyncMock(side_effect=lambda q, c, **kw: c)
 
-        result = await SearchMixin.search(svc, "test query")
+        result = await SearchMixin.search(svc, SearchMemoryParams(query="test query"))
 
         # In ADR-007, strategy=None now uses router.classify()
         svc.router.classify.assert_called_once_with("test query")
@@ -341,7 +350,9 @@ class TestSearchStrategy:
         svc = MagicMock()
         svc._direct_strategy_search = AsyncMock(return_value=[mock_sr])
 
-        result = await SearchMixin.search(svc, "timeline of events", strategy="temporal")
+        result = await SearchMixin.search(
+            svc, SearchMemoryParams(query="timeline of events", strategy="temporal")
+        )
         assert len(result) == 1
         assert result[0].retrieval_strategy == "temporal"
 
@@ -351,5 +362,5 @@ class TestSearchStrategy:
         from claude_memory.search import SearchMixin
 
         svc = MagicMock()
-        result = await SearchMixin.search(svc, "", strategy="auto")
+        result = await SearchMixin.search(svc, SearchMemoryParams(query="", strategy="auto"))
         assert result == []

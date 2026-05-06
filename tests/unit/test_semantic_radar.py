@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from claude_memory.schema import SemanticRadarParams
 from claude_memory.tools import MemoryService
 
 # ─── Test Constants ─────────────────────────────────────────────────
@@ -100,7 +101,7 @@ async def test_evil1_no_similar_neighbors(service: MemoryService) -> None:
         with patch.object(
             service.vector_store, "find_similar_by_id", new_callable=AsyncMock, return_value=[]
         ):
-            result = await service.semantic_radar(ENTITY_ID)
+            result = await service.semantic_radar(SemanticRadarParams(entity_id=ENTITY_ID))
 
     assert result["suggestions"] == []
     assert result["stats"]["candidates_scanned"] == 0
@@ -135,7 +136,7 @@ async def test_evil2_all_directly_connected(service: MemoryService) -> None:
             service.vector_store, "find_similar_by_id", new_callable=AsyncMock, return_value=similar
         ):
             with patch.object(service.repo, "shortest_path_length", return_value=1):
-                result = await service.semantic_radar(ENTITY_ID)
+                result = await service.semantic_radar(SemanticRadarParams(entity_id=ENTITY_ID))
 
     assert result["suggestions"] == []
     assert result["stats"]["already_connected"] == 2
@@ -165,7 +166,7 @@ async def test_evil3_radar_score_disconnected_entities(service: MemoryService) -
             service.vector_store, "find_similar_by_id", new_callable=AsyncMock, return_value=similar
         ):
             with patch.object(service.repo, "shortest_path_length", return_value=None):
-                result = await service.semantic_radar(ENTITY_ID)
+                result = await service.semantic_radar(SemanticRadarParams(entity_id=ENTITY_ID))
 
     assert len(result["suggestions"]) == 1
     suggestion = result["suggestions"][0]
@@ -181,7 +182,7 @@ async def test_evil3_radar_score_disconnected_entities(service: MemoryService) -
 async def test_sad1_entity_not_in_graph(service: MemoryService) -> None:
     """Sad: entity doesn't exist in graph — returns error."""
     with patch.object(service.repo, "get_node", return_value=None):
-        result = await service.semantic_radar("nonexistent-id")
+        result = await service.semantic_radar(SemanticRadarParams(entity_id="nonexistent-id"))
 
     assert "error" in result
     assert result["suggestions"] == []
@@ -226,7 +227,7 @@ async def test_happy_suggestions_sorted_by_radar_score(service: MemoryService) -
             service.vector_store, "find_similar_by_id", new_callable=AsyncMock, return_value=similar
         ):
             with patch.object(service.repo, "shortest_path_length", side_effect=mock_path_length):
-                result = await service.semantic_radar(ENTITY_ID)
+                result = await service.semantic_radar(SemanticRadarParams(entity_id=ENTITY_ID))
 
     suggestions = result["suggestions"]
     assert len(suggestions) == 3
@@ -281,7 +282,7 @@ async def test_happy_relationship_type_inference(service: MemoryService) -> None
             service.vector_store, "find_similar_by_id", new_callable=AsyncMock, return_value=similar
         ):
             with patch.object(service.repo, "shortest_path_length", return_value=None):
-                result = await service.semantic_radar(ENTITY_ID)
+                result = await service.semantic_radar(SemanticRadarParams(entity_id=ENTITY_ID))
 
     suggestions = result["suggestions"]
     rel_map = {s["candidate_id"]: s["suggested_relationship"] for s in suggestions}

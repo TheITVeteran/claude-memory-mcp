@@ -17,8 +17,10 @@ import pytest
 
 from claude_memory.schema import (
     AnalyzeGraphParams,
+    CreateMemoryTypeParams,
     GetHologramParams,
     PointInTimeQueryParams,
+    SearchMemoryParams,
     TraversePathParams,
 )
 
@@ -78,6 +80,7 @@ with patch("claude_memory.repository.FalkorDB"):
                 ObservationParams,
                 RelationshipCreateParams,
                 RelationshipDeleteParams,
+                SearchMemoryParams,
                 SessionEndParams,
             )
             from claude_memory.tools import MemoryService
@@ -406,14 +409,14 @@ async def test_sad5_traverse_path_no_nodes_attr(service: MemoryService) -> None:
 
 
 async def test_sad6_search_empty_query(service: MemoryService) -> None:
-    result = await service.search("", limit=SEARCH_LIMIT)
+    result = await service.search(SearchMemoryParams(query="", limit=SEARCH_LIMIT))
     assert result == []
 
 
 async def test_sad7_search_no_vector_results(service: MemoryService) -> None:
     service.vector_store.search.return_value = []
 
-    result = await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
+    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
     assert result == []
 
 
@@ -434,7 +437,7 @@ async def test_happy_search_with_results(service: MemoryService) -> None:
         "edges": [],
     }
 
-    result = await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
+    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
     assert len(result) == 1
     assert result[0].id == ENTITY_ID
     assert result[0].name == ENTITY_NAME
@@ -448,7 +451,7 @@ async def test_sad8_search_node_not_in_graph(service: MemoryService) -> None:
     ]
     service.repo.get_subgraph.return_value = {"nodes": [], "edges": []}
 
-    result = await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
+    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
     assert result == []
 
 
@@ -473,7 +476,9 @@ async def test_happy_search_with_project_id_filter(service: MemoryService) -> No
         "edges": [],
     }
 
-    result = await service.search(SEARCH_QUERY, limit=SEARCH_LIMIT, project_id=PROJECT_ID)
+    result = await service.search(
+        SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT, project_id=PROJECT_ID)
+    )
     assert len(result) == 1
 
     # Verify filter was passed to vector_store.search
@@ -654,9 +659,11 @@ def test_happy_create_memory_type(service: MemoryService) -> None:
     service.ontology = MagicMock()
 
     result = service.create_memory_type(
-        name="Recipe",
-        description="Culinary recipe",
-        required_properties=["ingredients"],
+        CreateMemoryTypeParams(
+            name="Recipe",
+            description="Culinary recipe",
+            required_properties=["ingredients"],
+        )
     )
     assert result["name"] == "Recipe"
     assert result["status"] == "active"
@@ -666,7 +673,9 @@ def test_happy_create_memory_type(service: MemoryService) -> None:
 def test_sad12_create_memory_type_defaults(service: MemoryService) -> None:
     service.ontology = MagicMock()
 
-    result = service.create_memory_type(name="Recipe", description="Culinary recipe")
+    result = service.create_memory_type(
+        CreateMemoryTypeParams(name="Recipe", description="Culinary recipe")
+    )
     assert result["required_properties"] == []
 
 

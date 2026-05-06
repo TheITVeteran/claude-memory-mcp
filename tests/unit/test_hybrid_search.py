@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from claude_memory.router import QueryIntent, QueryRouter
+from claude_memory.schema import SearchMemoryParams
 
 if TYPE_CHECKING:
     from claude_memory.tools import MemoryService
@@ -94,7 +95,7 @@ class TestHybridSearchPipeline:
         service.router.classify.return_value = QueryIntent.SEMANTIC
         service.repo.get_subgraph.return_value = _graph_nodes("a")
 
-        await service.search("test query")
+        await service.search(SearchMemoryParams(query="test query"))
 
         service.vector_store.search.assert_called_once()
 
@@ -111,7 +112,7 @@ class TestHybridSearchPipeline:
             mock_tl.return_value = [{"id": "t1", "name": "Temporal-1"}]
             service.repo.get_subgraph.return_value = _graph_nodes("a", "t1")
 
-            _ = await service.search("what happened recently")
+            _ = await service.search(SearchMemoryParams(query="what happened recently"))
 
         mock_tl.assert_called_once()
         service.vector_store.search.assert_called_once()
@@ -132,7 +133,7 @@ class TestHybridSearchPipeline:
             ]
             service.repo.get_subgraph.return_value = _graph_nodes("a", "r1", "r2")
 
-            await service.search('path between "auth" and "database"')
+            await service.search(SearchMemoryParams(query='path between "auth" and "database"'))
 
         mock_tp.assert_called_once()
 
@@ -150,7 +151,7 @@ class TestHybridSearchPipeline:
         service.activation_engine.spread = MagicMock(return_value={"a": 1.0, "b": 0.6, "c": 0.3})
         service.repo.get_subgraph.return_value = _graph_nodes("a", "b", "c")
 
-        results = await service.search("things related to auth")
+        results = await service.search(SearchMemoryParams(query="things related to auth"))
 
         # Activation engine was used with the seeds from vector results
         service.activation_engine.activate.assert_called_once_with(["a", "b"])
@@ -163,7 +164,7 @@ class TestHybridSearchPipeline:
         service.router.classify.return_value = QueryIntent.SEMANTIC
         service.repo.get_subgraph.return_value = _graph_nodes("a")
 
-        results = await service.search("what is Python")
+        results = await service.search(SearchMemoryParams(query="what is Python"))
 
         # Under soft routing, all channels fire — vector still dominates
         assert len(results) == 1
@@ -176,7 +177,7 @@ class TestHybridSearchPipeline:
         service.router.classify.return_value = QueryIntent.SEMANTIC
         service.repo.get_subgraph.return_value = _graph_nodes("a")
 
-        results = await service.search("test query")
+        results = await service.search(SearchMemoryParams(query="test query"))
 
         for r in results:
             assert r.retrieval_strategy in (
@@ -199,7 +200,7 @@ class TestHybridSearchPipeline:
         with patch.object(service, "query_timeline", new_callable=AsyncMock) as mock_tl:
             mock_tl.return_value = [{"id": "a", "name": "Node-a"}]
 
-            results = await service.search("recent work")
+            results = await service.search(SearchMemoryParams(query="recent work"))
 
         # The key assertion: score is NOT 0.0 for an entity that has a vector match
         assert len(results) > 0
@@ -217,7 +218,7 @@ class TestHybridSearchPipeline:
         service.repo.get_subgraph.return_value = _graph_nodes("a")
 
         with caplog.at_level(logging.WARNING):
-            results = await service.search("test", strategy="auto")
+            results = await service.search(SearchMemoryParams(query="test", strategy="auto"))
 
         assert "deprecated" in caplog.text.lower()
         # Should still return results (ran hybrid path)
@@ -233,7 +234,7 @@ class TestHybridSearchPipeline:
         with patch.object(service, "query_timeline", new_callable=AsyncMock) as mock_tl:
             mock_tl.return_value = [{"id": "a", "name": "Node-a"}]
 
-            await service.search("recent stuff")
+            await service.search(SearchMemoryParams(query="recent stuff"))
 
         # Verify the temporal params used 7-day window
         call_args = mock_tl.call_args[0][0]
@@ -253,7 +254,7 @@ class TestHybridSearchPipeline:
                 {"id": "t1", "name": "Temporal-1"},
             ]
 
-            await service.search("recent things", limit=5)
+            await service.search(SearchMemoryParams(query="recent things", limit=5))
 
         # 1 result < limit 5 → exhausted
         assert service._last_temporal_exhausted is True

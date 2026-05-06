@@ -60,7 +60,9 @@ async def test_happy_librarian_cycle_success(
     mock_memory_service.repo.get_all_nodes.assert_called_once()
     mock_clustering_service.cluster_nodes.assert_called_once()
     mock_memory_service.consolidate_memories.assert_awaited_once()
-    mock_memory_service.prune_stale.assert_awaited_once_with(days=60)
+    from claude_memory.schema import PruneStaleParams
+
+    mock_memory_service.prune_stale.assert_awaited_once_with(PruneStaleParams(days=60))
 
 
 @pytest.mark.asyncio

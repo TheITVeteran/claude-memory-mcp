@@ -7,6 +7,8 @@ Mixed into SearchMixin at runtime.
 import logging
 from typing import TYPE_CHECKING, Any
 
+from .schema import SearchAssociativeParams, SearchMemoryParams, SemanticRadarParams
+
 if TYPE_CHECKING:  # pragma: no cover
     from .schema import GetHologramParams, SearchResult
 
@@ -21,18 +23,9 @@ class SearchAdvancedMixin:
     ``_fire_salience_update()``, and ``search()``.
     """
 
-    async def search_associative(  # noqa: PLR0913
+    async def search_associative(
         self,
-        query: str,
-        limit: int = 10,
-        project_id: str | None = None,
-        *,
-        decay: float = 0.6,
-        max_hops: int = 3,
-        w_sim: float | None = None,
-        w_act: float | None = None,
-        w_sal: float | None = None,
-        w_rec: float | None = None,
+        params: SearchAssociativeParams,
     ) -> list["SearchResult"]:
         """Spreading-activation search: vector → graph spread → composite rank.
 
@@ -41,6 +34,14 @@ class SearchAdvancedMixin:
         3. Hydrate candidate entities from graph.
         4. Composite rank with configurable weights (env var / per-query).
         """
+        query = params.query
+        limit = params.limit
+        decay = params.decay
+        max_hops = params.max_hops
+        w_sim = params.w_sim
+        w_act = params.w_act
+        w_sal = params.w_sal
+        w_rec = params.w_rec
         from .schema import SearchResult  # noqa: PLC0415
 
         if not query:
@@ -50,8 +51,8 @@ class SearchAdvancedMixin:
         try:
             vec = self.embedder.encode(query)  # type: ignore[attr-defined]
             search_filter: dict[str, Any] | None = None
-            if project_id:
-                search_filter = {"project_id": project_id}
+            if params.project_id:
+                search_filter = {"project_id": params.project_id}
 
             vector_results = await self.vector_store.search(  # type: ignore[attr-defined]
                 vector=vec, limit=limit, filter=search_filter
@@ -131,7 +132,7 @@ class SearchAdvancedMixin:
         logger.info("Generating Hologram for: %s", params.query)
 
         # 1. Get Anchors
-        anchors = await self.search(params.query, limit=5)  # type: ignore[attr-defined]
+        anchors = await self.search(SearchMemoryParams(query=params.query, limit=5))  # type: ignore[attr-defined]
 
         if not anchors:
             return {"nodes": [], "edges": []}
@@ -179,10 +180,7 @@ class SearchAdvancedMixin:
 
     async def semantic_radar(
         self,
-        entity_id: str,
-        limit: int = 10,
-        similarity_threshold: float = 0.6,
-        project_id: str | None = None,
+        params: SemanticRadarParams,
     ) -> dict[str, Any]:
         """Discover potential relationships for an entity.
 
@@ -192,6 +190,9 @@ class SearchAdvancedMixin:
 
         Returns suggestions only — does NOT commit edges.
         """
+        entity_id = params.entity_id
+        limit = params.limit
+        similarity_threshold = params.similarity_threshold
         import math  # noqa: PLC0415
         import os  # noqa: PLC0415
 

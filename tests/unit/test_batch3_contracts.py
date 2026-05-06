@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from pydantic import ValidationError
 
-from claude_memory.schema import ChannelStatus
+from claude_memory.schema import ChannelStatus, SearchMemoryParams
 
 # --- Test Constants ---
 SEARCH_QUERY = "async patterns"
@@ -101,7 +101,7 @@ async def test_evil1_channel_failure_visible_in_status(search_service) -> None:
     # Make temporal fail
     search_service.query_timeline = AsyncMock(side_effect=ConnectionError("FalkorDB timeout"))
 
-    await search_service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
+    await search_service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
 
     statuses = search_service._last_channel_status
     assert isinstance(statuses, list)
@@ -118,7 +118,7 @@ async def test_evil2_fts_failure_visible_in_status(search_service) -> None:
     """AUDIT-B3: When FTS search fails, channel_status shows degraded."""
     search_service.fts_store.search.side_effect = Exception("FTS corrupted")
 
-    await search_service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
+    await search_service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
 
     statuses = search_service._last_channel_status
     fts_status = next((s for s in statuses if s.channel == "fts"), None)
@@ -129,7 +129,7 @@ async def test_evil2_fts_failure_visible_in_status(search_service) -> None:
 @pytest.mark.asyncio
 async def test_evil3_all_channels_ok_when_healthy(search_service) -> None:
     """AUDIT-B3: All channels report ok when nothing fails."""
-    await search_service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
+    await search_service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
 
     statuses = search_service._last_channel_status
     assert isinstance(statuses, list)
@@ -142,7 +142,7 @@ async def test_evil3_all_channels_ok_when_healthy(search_service) -> None:
 @pytest.mark.asyncio
 async def test_sad1_channel_status_empty_results(search_service) -> None:
     """AUDIT-B3: Zero results but no error → status is still ok."""
-    await search_service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
+    await search_service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
 
     statuses = search_service._last_channel_status
     vector_status = next((s for s in statuses if s.channel == "vector"), None)
@@ -158,7 +158,7 @@ async def test_happy_channel_status_with_results(search_service) -> None:
         {"_id": "e1", "_score": 0.9, "payload": {"name": "Test"}},
     ]
 
-    await search_service.search(SEARCH_QUERY, limit=SEARCH_LIMIT)
+    await search_service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
 
     statuses = search_service._last_channel_status
     vector_status = next((s for s in statuses if s.channel == "vector"), None)

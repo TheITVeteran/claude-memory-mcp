@@ -19,6 +19,8 @@ from claude_memory.search_advanced import SearchAdvancedMixin
 from claude_memory.search_channels import SearchChannelsMixin
 from claude_memory.validation import requires_entity
 
+from .schema import SearchMemoryParams
+
 # Infrastructure exceptions: indicate the system is degraded, not a bug.
 INFRA_ERRORS = (ConnectionError, TimeoutError, OSError)
 
@@ -410,17 +412,18 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
 
     # ── Main search entry point (ADR-007 hybrid pipeline) ────────────
 
-    async def search(  # noqa: PLR0913, C901, PLR0915, PLR0912
+    async def search(  # noqa: C901, PLR0915, PLR0912
         self,
-        query: str,
-        limit: int = 5,
-        project_id: str | None = None,
-        offset: int = 0,
-        mmr: bool = False,
-        strategy: str | None = None,
-        deep: bool = False,
-        temporal_window_days: int = 7,
+        params: SearchMemoryParams,
     ) -> list["SearchResult"]:
+        query = params.query
+        limit = params.limit
+        project_id = params.project_id
+        offset = params.offset
+        mmr = params.mmr
+        strategy = params.strategy
+        deep = params.deep
+        temporal_window_days = params.temporal_window_days
         """Search for entities using the hybrid pipeline (ADR-007).
 
         Default path (``strategy=None``): vector search + intent-based graph

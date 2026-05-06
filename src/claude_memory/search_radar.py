@@ -14,6 +14,8 @@ import os
 import time
 from typing import TYPE_CHECKING, Any
 
+from .schema import FindSemanticOpportunitiesParams
+
 if TYPE_CHECKING:  # pragma: no cover
     from .interfaces import Embedder, VectorStore
     from .repository import MemoryRepository
@@ -33,10 +35,7 @@ class SearchRadarMixin:
 
     async def find_semantic_opportunities(
         self,
-        project_id: str | None = None,
-        similarity_threshold: float = 0.6,
-        limit: int = 20,
-        min_graph_distance: int = 3,
+        params: FindSemanticOpportunitiesParams,
     ) -> dict[str, Any]:
         """Scan graph for entity pairs that should be connected.
 
@@ -51,6 +50,10 @@ class SearchRadarMixin:
         surface only significant gaps, not near-neighbors that are
         simply 2 hops away.
         """
+        project_id = params.project_id
+        similarity_threshold = params.similarity_threshold
+        limit = params.limit
+        min_graph_distance = params.min_graph_distance
         concurrency = int(os.getenv("RADAR_CONCURRENCY", "10"))
         max_dist_factor = float(os.getenv("RADAR_MAX_DISTANCE_FACTOR", "5.0"))
         semaphore = asyncio.Semaphore(concurrency)

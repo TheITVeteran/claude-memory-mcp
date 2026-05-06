@@ -17,6 +17,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from claude_memory.schema import SearchAssociativeParams
+
 # ─── Constants ──────────────────────────────────────────────────────
 
 PROJECT_ID = "project-alpha"
@@ -81,7 +83,7 @@ def _graph_nodes(*ids: str) -> dict[str, Any]:
 @pytest.mark.asyncio()
 async def test_sad1_search_associative_empty_query(service: MemoryService) -> None:
     """Empty query returns empty list immediately."""
-    result = await service.search_associative("")
+    result = await service.search_associative(SearchAssociativeParams(query=""))
     assert result == []
     service.vector_store.search.assert_not_called()
 
@@ -90,7 +92,7 @@ async def test_sad1_search_associative_empty_query(service: MemoryService) -> No
 async def test_sad2_search_associative_no_vector_hits(service: MemoryService) -> None:
     """No vector results → empty list."""
     service.vector_store.search.return_value = []
-    result = await service.search_associative("hello world")
+    result = await service.search_associative(SearchAssociativeParams(query="hello world"))
     assert result == []
 
 
@@ -110,7 +112,9 @@ async def test_happy_search_associative_full_pipeline(service: MemoryService) ->
         _graph_nodes("a", "b", "c"),
     ]
 
-    results = await service.search_associative("test query", limit=10, max_hops=1)
+    results = await service.search_associative(
+        SearchAssociativeParams(query="test query", limit=10, max_hops=1)
+    )
     assert len(results) > 0
     assert results[0].score > 0  # composite_score mapped to score
     assert results[0].name.startswith("Node-")
@@ -122,7 +126,7 @@ async def test_happy_search_associative_project_filter(service: MemoryService) -
     service.vector_store.search.return_value = _vector_results("a")
     service.repo.get_subgraph.return_value = _graph_nodes("a")
 
-    await service.search_associative("q", project_id="proj-x")
+    await service.search_associative(SearchAssociativeParams(query="q", project_id="proj-x"))
 
     call_kwargs = service.vector_store.search.call_args
     assert call_kwargs.kwargs.get("filter") == {"project_id": "proj-x"}
@@ -135,13 +139,17 @@ async def test_happy_search_associative_per_query_weights(service: MemoryService
     service.repo.get_subgraph.return_value = _graph_nodes("a")
 
     # All weight on similarity
-    results_sim = await service.search_associative("q", w_sim=1.0, w_act=0.0, w_sal=0.0, w_rec=0.0)
+    results_sim = await service.search_associative(
+        SearchAssociativeParams(query="q", w_sim=1.0, w_act=0.0, w_sal=0.0, w_rec=0.0)
+    )
 
     service.vector_store.search.return_value = _vector_results("a")
     service.repo.get_subgraph.return_value = _graph_nodes("a")
 
     # All weight on recency
-    results_rec = await service.search_associative("q", w_sim=0.0, w_act=0.0, w_sal=0.0, w_rec=1.0)
+    results_rec = await service.search_associative(
+        SearchAssociativeParams(query="q", w_sim=0.0, w_act=0.0, w_sal=0.0, w_rec=1.0)
+    )
 
     # Scores should differ because the inputs differ
     assert results_sim[0].score != results_rec[0].score

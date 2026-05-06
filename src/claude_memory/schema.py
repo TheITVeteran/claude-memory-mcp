@@ -344,3 +344,54 @@ class DiffKnowledgeStateParams(BaseModel):
     as_of_end: str
     project_id: str | None = None
     include_observations: bool = False
+
+
+# --- Batch 6.C: Tools Extra & System ---
+
+
+class SearchMemoryParams(BaseModel):
+    query: str
+    project_id: str | None = None
+    limit: int = 10
+    offset: int = 0
+    mmr: bool = False
+    strategy: str | None = None
+    temporal_window_days: int = 7
+    include_meta: bool = False
+    deep: bool = False
+
+
+class SearchAssociativeParams(BaseModel):
+    query: str
+    limit: int = 10
+    project_id: str | None = None
+    decay: float = 0.6
+    max_hops: int = 3
+    w_sim: float | None = None
+    w_act: float | None = None
+    w_sal: float | None = None
+    w_rec: float | None = None
+
+
+class SemanticRadarParams(BaseModel):
+    entity_id: str
+    limit: int = 10
+    similarity_threshold: float = 0.6
+    project_id: str | None = None
+
+
+class FindSemanticOpportunitiesParams(BaseModel):
+    project_id: str | None = None
+    similarity_threshold: float = 0.6
+    limit: int = 20
+    min_graph_distance: int = 3
+
+
+class ListOrphansParams(BaseModel):
+    limit: int = 50
+
+
+class CreateMemoryTypeParams(BaseModel):
+    name: str
+    description: str
+    required_properties: list[str] | None = None

@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING, Any
 from claude_memory.graph_algorithms import compute_louvain, compute_pagerank
 from claude_memory.validation import requires_entity
 
+from .schema import ListOrphansParams
+
 if TYPE_CHECKING:  # pragma: no cover
     from .interfaces import Embedder, VectorStore
     from .ontology import OntologyManager
@@ -19,6 +21,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from .schema import (
         AnalyzeGraphParams,
         ArchiveEntityParams,
+        CreateMemoryTypeParams,
         GapDetectionParams,
         PruneStaleParams,
     )
@@ -58,12 +61,13 @@ class AnalysisMixin:
         health["community_count"] = community_count
         return health  # type: ignore[no-any-return]
 
-    async def list_orphans(self, limit: int = 50) -> list[dict[str, Any]]:
+    async def list_orphans(self, params: ListOrphansParams) -> list[dict[str, Any]]:
         """List graph nodes with zero relationships (orphans).
 
         Delegates to repository-level Cypher query. Returns id, name,
         node_type, project_id, focus, labels, and created_at.
         """
+        limit = params.limit
         return list(self.repo.list_orphans(limit=limit))
 
     async def system_diagnostics(self) -> dict[str, Any]:
@@ -346,16 +350,13 @@ class AnalysisMixin:
             result["consolidation_errors"] = errors
         return result
 
-    def create_memory_type(
-        self, name: str, description: str, required_properties: list[str] | None = None
-    ) -> dict[str, Any]:
+    def create_memory_type(self, params: "CreateMemoryTypeParams") -> dict[str, Any]:
         """Registers a new memory type in the ontology."""
-        if required_properties is None:
-            required_properties = []
-        self.ontology.add_type(name, description, required_properties)
+        required = params.required_properties or []
+        self.ontology.add_type(params.name, params.description, required)
         return {
-            "name": name,
-            "description": description,
-            "required_properties": required_properties,
+            "name": params.name,
+            "description": params.description,
+            "required_properties": required,
             "status": "active",
         }

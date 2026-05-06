@@ -394,8 +394,8 @@ async def test_happy_create_memory_type_with_required_props() -> None:
 
 async def test_sad11_create_memory_type_defaults() -> None:
     await server.create_memory_type(name=MEMORY_TYPE_NAME, description=MEMORY_TYPE_DESC)
-    call_args = server.service.create_memory_type.call_args[0]
-    assert call_args[2] == []  # required_properties defaults to []
+    params = server.service.create_memory_type.call_args[0][0]
+    assert params.required_properties is None  # required_properties defaults to None
 
 
 # ─── Main Entry Point Tests ─────────────────────────────────────────
