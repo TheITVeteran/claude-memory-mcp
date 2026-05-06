@@ -15,7 +15,7 @@ from claude_memory.schema import EntityCreateParams, SearchResult
 class TestConcurrentSchemaConstruction:
     """Thread-safety of Pydantic model construction."""
 
-    def test_concurrent_entity_creation(self):
+    def test_happy_concurrent_entity_creation(self):
         """T1: 1000 concurrent EntityCreateParams — no crash, no corruption."""
 
         def create_entity(i: int) -> EntityCreateParams:
@@ -31,7 +31,7 @@ class TestConcurrentSchemaConstruction:
         names = {r.name for r in results}
         assert len(names) == 1000  # all unique
 
-    def test_concurrent_search_result_creation(self):
+    def test_happy_concurrent_search_result_creation(self):
         """T2: 1000 concurrent SearchResult — no crash, no corruption."""
 
         def create_result(i: int) -> SearchResult:
@@ -54,7 +54,7 @@ class TestConcurrentSchemaConstruction:
 class TestConcurrentRouterClassification:
     """Thread-safety of QueryRouter.classify()."""
 
-    def test_concurrent_classification(self):
+    def test_happy_concurrent_classification(self):
         """T3: 1000 concurrent classifications — deterministic results."""
         router = QueryRouter()
         queries = [
@@ -84,7 +84,7 @@ class TestConcurrentRouterClassification:
 class TestConcurrentSerialization:
     """Thread-safety of JSON serialization round-trips."""
 
-    def test_concurrent_roundtrip(self):
+    def test_happy_concurrent_roundtrip(self):
         """T4: 500 concurrent serialize+deserialize — no corruption."""
 
         def roundtrip(i: int) -> bool:

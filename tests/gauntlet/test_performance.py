@@ -40,7 +40,7 @@ def measure_peak_memory(func, *args, **kwargs):
 class TestSpeedBaselines:
     """Benchmark core functions to establish speed baselines."""
 
-    def test_schema_construction_speed(self):
+    def test_happy_schema_construction_speed(self):
         """H1: 10K EntityCreateParams constructions in < 2s."""
         import time
 
@@ -54,7 +54,7 @@ class TestSpeedBaselines:
         elapsed = time.monotonic() - start
         assert elapsed < 2.0, f"10K schema constructions took {elapsed:.2f}s (limit: 2.0s)"
 
-    def test_router_classify_speed(self):
+    def test_happy_router_classify_speed(self):
         """H2: 10K router classifications in < 2s."""
         import time
 
@@ -72,7 +72,7 @@ class TestSpeedBaselines:
         elapsed = time.monotonic() - start
         assert elapsed < 2.0, f"10K classifications took {elapsed:.2f}s (limit: 2.0s)"
 
-    def test_schema_serialization_speed(self):
+    def test_happy_schema_serialization_speed(self):
         """H3: 5K SearchResult serialize+deserialize in < 3s."""
         import time
 
@@ -103,7 +103,7 @@ class TestSpeedBaselines:
 class TestMemoryBaselines:
     """Verify core functions don't leak memory beyond expected limits."""
 
-    def test_schema_construction_memory(self):
+    def test_happy_schema_construction_memory(self):
         """H4: 10K EntityCreateParams uses < 10MB peak."""
 
         def build_batch():
@@ -120,7 +120,7 @@ class TestMemoryBaselines:
         mb = peak / (1024 * 1024)
         assert mb < 15, f"10K schema construction peak: {mb:.2f}MB (limit: 15MB)"
 
-    def test_router_classification_memory(self):
+    def test_happy_router_classification_memory(self):
         """H5: 10K router classifications use < 5MB."""
         router = QueryRouter()
 
@@ -132,7 +132,7 @@ class TestMemoryBaselines:
         mb = peak / (1024 * 1024)
         assert mb < 5, f"10K classifications peak: {mb:.2f}MB (limit: 5MB)"
 
-    def test_search_result_memory(self):
+    def test_happy_search_result_memory(self):
         """H6: 5K SearchResult constructions use < 10MB."""
 
         def build_results():

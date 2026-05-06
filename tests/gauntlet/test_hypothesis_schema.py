@@ -70,7 +70,7 @@ class TestEntityCreateParamsProperties:
 
     @settings(max_examples=FUZZ_EXAMPLES, deadline=None)
     @given(safe_text, node_type_strategy, safe_text, certainty_strategy)
-    def test_valid_construction(self, name, node_type, project_id, certainty):
+    def test_happy_valid_construction(self, name, node_type, project_id, certainty):
         """P1: Any non-empty name + valid type constructs successfully."""
         params = EntityCreateParams(
             name=name,
@@ -83,7 +83,7 @@ class TestEntityCreateParamsProperties:
 
     @settings(max_examples=FUZZ_EXAMPLES, deadline=None)
     @given(safe_text, node_type_strategy, safe_text)
-    def test_roundtrip_serialization(self, name, node_type, project_id):
+    def test_happy_roundtrip_serialization(self, name, node_type, project_id):
         """P2: Serialize to JSON → deserialize → equals original."""
         params = EntityCreateParams(name=name, node_type=node_type, project_id=project_id)
         json_str = params.model_dump_json()
@@ -103,7 +103,7 @@ class TestEntityCreateParamsProperties:
             max_size=5,
         ),
     )
-    def test_extra_properties_accepted(self, name, node_type, project_id, props):
+    def test_happy_extra_properties_accepted(self, name, node_type, project_id, props):
         """P3: Arbitrary extra properties dict is accepted without crash."""
         params = EntityCreateParams(
             name=name,
@@ -128,7 +128,7 @@ class TestRelationshipCreateParamsProperties:
         safe_text,
         st.floats(min_value=0.0, max_value=1.0, allow_nan=False),
     )
-    def test_weight_bounds(self, from_entity, to_entity, weight):
+    def test_happy_weight_bounds(self, from_entity, to_entity, weight):
         """P1: Weight must be 0.0 <= w <= 1.0 — valid values accepted."""
         params = RelationshipCreateParams(
             from_entity=from_entity,
@@ -140,7 +140,7 @@ class TestRelationshipCreateParamsProperties:
 
     @settings(max_examples=500, deadline=None)
     @given(st.floats().filter(lambda x: x < 0.0 or x > 1.0))
-    def test_weight_out_of_bounds_rejected(self, weight):
+    def test_happy_weight_out_of_bounds_rejected(self, weight):
         """P2: Weight outside 0-1 raises ValidationError."""
         with pytest.raises(ValidationError):
             RelationshipCreateParams(
@@ -166,7 +166,7 @@ class TestSearchResultProperties:
         st.floats(min_value=0.0, max_value=1.0, allow_nan=False),
         st.floats(min_value=0.0, max_value=1.0, allow_nan=False),
     )
-    def test_construction_with_valid_scores(self, name, node_type, score, distance):
+    def test_happy_construction_with_valid_scores(self, name, node_type, score, distance):
         """P1: Valid scores always construct successfully."""
         result = SearchResult(
             id="test-id",
@@ -181,7 +181,7 @@ class TestSearchResultProperties:
 
     @settings(max_examples=500, deadline=None)
     @given(safe_text, safe_text)
-    def test_default_collections_empty(self, name, node_type):
+    def test_sad_default_collections_empty(self, name, node_type):
         """P2: observations and relationships default to empty lists."""
         result = SearchResult(
             id="test-id",
@@ -209,7 +209,7 @@ class TestGapDetectionParamsProperties:
         st.integers(min_value=0, max_value=100),
         st.integers(min_value=1, max_value=50),
     )
-    def test_valid_construction(self, min_similarity, max_edges, limit):
+    def test_happy_valid_construction(self, min_similarity, max_edges, limit):
         """P1: Valid params always construct."""
         params = GapDetectionParams(
             min_similarity=min_similarity,
@@ -222,12 +222,12 @@ class TestGapDetectionParamsProperties:
 
     @settings(max_examples=500, deadline=None)
     @given(st.floats().filter(lambda x: x < 0.0 or x > 1.0))
-    def test_similarity_out_of_bounds_rejected(self, bad_sim):
+    def test_happy_similarity_out_of_bounds_rejected(self, bad_sim):
         """P2: min_similarity outside 0-1 raises ValidationError."""
         with pytest.raises(ValidationError):
             GapDetectionParams(min_similarity=bad_sim)
 
-    def test_limit_zero_rejected(self):
+    def test_happy_limit_zero_rejected(self):
         """P3: limit=0 raises ValidationError (ge=1)."""
         with pytest.raises(ValidationError):
             GapDetectionParams(limit=0)
@@ -247,13 +247,13 @@ class TestTemporalQueryParamsProperties:
         st.datetimes(timezones=st.just(None)),
         st.integers(min_value=1, max_value=100),
     )
-    def test_valid_construction(self, start, end, limit):
+    def test_happy_valid_construction(self, start, end, limit):
         """P1: Any datetime pair + valid limit constructs."""
         params = TemporalQueryParams(start=start, end=end, limit=limit)
         assert params.start == start
         assert params.end == end
 
-    def test_limit_out_of_range_rejected(self):
+    def test_happy_limit_out_of_range_rejected(self):
         """P2: limit > 100 raises ValidationError."""
         from datetime import datetime
 
@@ -273,14 +273,14 @@ class TestTemporalQueryParamsProperties:
 class TestBottleQueryParamsProperties:
     """Property tests for BottleQueryParams — R3A spec."""
 
-    def test_include_content_defaults_false(self):
+    def test_happy_include_content_defaults_false(self):
         """P1: include_content defaults to False."""
         params = BottleQueryParams()
         assert params.include_content is False
 
     @settings(max_examples=500, deadline=None)
     @given(st.integers(min_value=1, max_value=100))
-    def test_valid_limit(self, limit):
+    def test_happy_valid_limit(self, limit):
         """P2: Valid limit always accepted."""
         params = BottleQueryParams(limit=limit)
         assert params.limit == limit

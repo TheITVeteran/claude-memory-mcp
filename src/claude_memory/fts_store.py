@@ -22,7 +22,7 @@ import os
 import sqlite3
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ class FTSStore:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA synchronous=NORMAL")
             self._local.conn = conn
-        return self._local.conn  # type: ignore[no-any-return]
+        return cast("sqlite3.Connection", self._local.conn)
 
     def _init_schema(self) -> None:
         """Create the FTS5 virtual table if it doesn't exist.
@@ -230,7 +230,7 @@ class FTSStore:
         """Return the number of indexed entities."""
         conn = self._get_conn()
         cursor = conn.execute("SELECT COUNT(*) FROM entities_fts")
-        return cursor.fetchone()[0]  # type: ignore[no-any-return]
+        return int(cursor.fetchone()[0])
 
     def clear(self) -> None:
         """Delete all entries from the FTS index."""

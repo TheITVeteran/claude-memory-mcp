@@ -25,7 +25,7 @@ pytestmark = pytest.mark.invariant
 class TestScoreInvariants:
     """Scores must always be normalized and meaningful."""
 
-    def test_score_bounded_0_1(self) -> None:
+    def test_happy_score_bounded_0_1(self) -> None:
         """SearchResult.score must accept values in [0.0, 1.0] only at boundaries."""
         for val in [0.0, 0.5, 1.0]:
             r = SearchResult(
@@ -33,7 +33,7 @@ class TestScoreInvariants:
             )
             assert 0.0 <= r.score <= 1.0
 
-    def test_vector_score_bounded_when_present(self) -> None:
+    def test_happy_vector_score_bounded_when_present(self) -> None:
         """vector_score, when not None, must be in [0.0, 1.0]."""
         for val in [0.0, 0.5, 1.0]:
             r = SearchResult(
@@ -48,7 +48,7 @@ class TestScoreInvariants:
             assert r.vector_score is not None
             assert 0.0 <= r.vector_score <= 1.0
 
-    def test_recency_score_bounded(self) -> None:
+    def test_happy_recency_score_bounded(self) -> None:
         """recency_score must be in [0.0, 1.0]."""
         for val in [0.0, 0.5, 1.0]:
             r = SearchResult(
@@ -62,7 +62,7 @@ class TestScoreInvariants:
             )
             assert 0.0 <= r.recency_score <= 1.0
 
-    def test_score_zero_requires_no_vector(self) -> None:
+    def test_happy_score_zero_requires_no_vector(self) -> None:
         """If score is 0.0, vector_score must be None (intentional, not silent failure).
 
         This invariant exists because we got burned by the ADR-007 score-0 bug.
@@ -91,14 +91,14 @@ class TestScoreInvariants:
 class TestSchemaInvariants:
     """SearchResult schema contract must hold."""
 
-    def test_retrieval_strategy_default_is_semantic(self) -> None:
+    def test_happy_retrieval_strategy_default_is_semantic(self) -> None:
         """Default retrieval_strategy must be 'semantic'."""
         r = SearchResult(
             id="x", name="x", node_type="Entity", project_id="p", score=0.5, distance=0.5
         )
         assert r.retrieval_strategy == "semantic"
 
-    def test_valid_strategies_accepted(self) -> None:
+    def test_happy_valid_strategies_accepted(self) -> None:
         """All 5 valid strategies must be accepted."""
         valid = ["semantic", "hybrid", "temporal", "relational", "associative"]
         for strategy in valid:
@@ -113,7 +113,7 @@ class TestSchemaInvariants:
             )
             assert r.retrieval_strategy == strategy
 
-    def test_required_fields_present(self) -> None:
+    def test_happy_required_fields_present(self) -> None:
         """model_dump() must always contain the canonical field set."""
         required = {
             "id",
@@ -139,7 +139,7 @@ class TestSchemaInvariants:
         missing = required - set(dumped.keys())
         assert not missing, f"Missing fields: {missing}"
 
-    def test_id_never_empty_when_set(self) -> None:
+    def test_sad_id_never_empty_when_set(self) -> None:
         """A SearchResult with id set must have a non-empty id."""
         r = SearchResult(
             id="abc123", name="x", node_type="Entity", project_id="p", score=0.5, distance=0.5
@@ -154,19 +154,19 @@ class TestRouterInvariants:
     """Router classification must be deterministic and exhaustive."""
 
     @given(st.text(min_size=0, max_size=500))
-    def test_classify_always_returns_valid_intent(self, query: str) -> None:
+    def test_happy_classify_always_returns_valid_intent(self, query: str) -> None:
         """Any string must classify to a valid QueryIntent."""
         router = QueryRouter()
         intent = router.classify(query)
         assert intent in list(QueryIntent)
 
     @given(st.text(min_size=1, max_size=200))
-    def test_classify_is_deterministic(self, query: str) -> None:
+    def test_happy_classify_is_deterministic(self, query: str) -> None:
         """Same query must always classify to the same intent."""
         router = QueryRouter()
         assert router.classify(query) == router.classify(query)
 
-    def test_intent_enum_completeness(self) -> None:
+    def test_happy_intent_enum_completeness(self) -> None:
         """QueryIntent must have exactly 4 values. Adding a new intent requires an ADR."""
         assert set(QueryIntent) == {
             QueryIntent.SEMANTIC,
@@ -190,7 +190,7 @@ class TestMergeInvariants:
         k=st.integers(1, 100),
         limit=st.integers(1, 50),
     )
-    def test_rrf_score_always_non_negative(
+    def test_happy_rrf_score_always_non_negative(
         self,
         vector_list: list[tuple[str, float]],
         k: int,
@@ -213,7 +213,7 @@ class TestMergeInvariants:
         ),
         limit=st.integers(1, 50),
     )
-    def test_rrf_output_respects_limit(
+    def test_happy_rrf_output_respects_limit(
         self,
         vector_list: list[tuple[str, float]],
         graph_list: list[tuple[str, float]],
@@ -225,11 +225,11 @@ class TestMergeInvariants:
         merged = rrf_merge(vec, graph, limit=limit)
         assert len(merged) <= limit
 
-    def test_empty_inputs_return_empty(self) -> None:
+    def test_sad_empty_inputs_return_empty(self) -> None:
         """Empty inputs must produce empty output."""
         assert rrf_merge([], []) == []
 
-    def test_dual_source_beats_single_source(self) -> None:
+    def test_happy_dual_source_beats_single_source(self) -> None:
         """Entity in both sources must score >= entity in only one source."""
         vec = [{"_id": "e1", "_score": 0.8}]
         graph = [{"id": "e1"}]

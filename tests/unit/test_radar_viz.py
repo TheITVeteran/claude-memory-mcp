@@ -6,14 +6,14 @@
 from dashboard.radar_viz import _score_to_alpha, render_graph_with_radar
 
 
-def test_empty_suggestions() -> None:
+def test_sad_empty_suggestions() -> None:
     """No radar results → produces valid HTML with no crash."""
     html = render_graph_with_radar(existing_edges=[], radar_suggestions=[])
     assert isinstance(html, str)
     assert "<html" in html.lower() or "vis-network" in html.lower() or len(html) > 100
 
 
-def test_render_with_suggestions() -> None:
+def test_happy_render_with_suggestions() -> None:
     """5 suggestions → HTML contains dashed edge data."""
     edges = [
         {
@@ -54,7 +54,7 @@ def test_render_with_suggestions() -> None:
     assert "true" in html.lower() or "dashes" in html.lower()
 
 
-def test_color_scaling() -> None:
+def test_happy_color_scaling() -> None:
     """Verify alpha values scale with score."""
     # Low score → lower alpha
     low_alpha = _score_to_alpha(0.0)

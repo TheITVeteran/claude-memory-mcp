@@ -264,7 +264,7 @@ def _make_result(**kwargs: Any) -> SearchResult:
 class TestGoldenQueryFramework:
     """Tests for the assertion machinery itself — mocked, CI-fast."""
 
-    def test_all_golden_queries_have_required_fields(self) -> None:
+    def test_happy_all_golden_queries_have_required_fields(self) -> None:
         """Every GoldenQuery must have query, expected_intent, and at least one must."""
         for gq in GOLDEN_QUERIES:
             assert gq.query, "Empty query in golden set"
@@ -273,13 +273,13 @@ class TestGoldenQueryFramework:
             )
             assert len(gq.must) > 0, f"No must assertions for {gq.query!r}"
 
-    def test_golden_query_count_minimum(self) -> None:
+    def test_happy_golden_query_count_minimum(self) -> None:
         """Must have at least 20 golden queries."""
         assert len(GOLDEN_QUERIES) >= 20, (
             f"Only {len(GOLDEN_QUERIES)} golden queries — need at least 20"
         )
 
-    def test_all_intents_covered(self) -> None:
+    def test_happy_all_intents_covered(self) -> None:
         """Every QueryIntent must have at least 2 golden queries."""
         intent_counts: dict[QueryIntent, int] = {}
         for gq in GOLDEN_QUERIES:
@@ -289,21 +289,21 @@ class TestGoldenQueryFramework:
                 f"Intent {intent.value} has fewer than 2 golden queries"
             )
 
-    def test_must_assertions_pass_with_good_results(self) -> None:
+    def test_happy_must_assertions_pass_with_good_results(self) -> None:
         """All must assertions should pass with well-formed results."""
         results = [_make_result(score=0.7), _make_result(score=0.5)]
         for gq in GOLDEN_QUERIES:
             failures, _ = _run_assertions(gq, results)
             assert not failures, f"Assertion failed for {gq.query!r} with good results: {failures}"
 
-    def test_must_assertions_detect_empty_results_for_score_integrity(self) -> None:
+    def test_sad_must_assertions_detect_empty_results_for_score_integrity(self) -> None:
         """Score integrity queries should handle empty results gracefully."""
         results: list[SearchResult] = []
         for gq in GOLDEN_QUERIES:
             _failures, _ = _run_assertions(gq, results)
             # Empty results must not crash — they may or may not pass
 
-    def test_router_classifies_golden_queries_correctly(self) -> None:
+    def test_happy_router_classifies_golden_queries_correctly(self) -> None:
         """Router must classify each golden query to its expected intent."""
         from claude_memory.router import QueryRouter
 
@@ -317,7 +317,7 @@ class TestGoldenQueryFramework:
                 )
         assert not mismatches, "Router drift detected:\n" + "\n".join(mismatches)
 
-    def test_soft_assertions_produce_warnings(self) -> None:
+    def test_happy_soft_assertions_produce_warnings(self) -> None:
         """Should assertions that fail must produce warnings, not failures."""
         # Use a result that has strategy 'weird' — should fail soft assertions
         results = [_make_result(retrieval_strategy="weird")]
@@ -331,7 +331,7 @@ class TestGoldenQueryFramework:
         assert not failures
         assert len(soft_warnings) == 1
 
-    def test_assertion_error_captured(self) -> None:
+    def test_evil_assertion_error_captured(self) -> None:
         """A broken assertion expression must be captured, not crash the runner."""
         gq = GoldenQuery(
             query="test",
@@ -342,7 +342,7 @@ class TestGoldenQueryFramework:
         assert len(failures) == 1
         assert "ERROR" in failures[0]
 
-    def test_score_integrity_queries_exist(self) -> None:
+    def test_happy_score_integrity_queries_exist(self) -> None:
         """At least 2 queries must guard against the ADR-007 score-0 bug."""
         score_guards = [
             gq for gq in GOLDEN_QUERIES if any("score" in m and "0.0" in m for m in gq.must)

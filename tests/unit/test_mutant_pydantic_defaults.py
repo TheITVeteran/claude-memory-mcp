@@ -55,7 +55,7 @@ class TestEntityCreateDefaults:
         assert p.certainty == "speculative"
         assert p.evidence == ["ev1"]
 
-    def test_happy(self) -> None:
+    def test_happy_happy(self) -> None:
         """Happy: all defaults correct."""
         p = EntityCreateParams(name="X", node_type="Entity", project_id="p")
         assert p.certainty == "confirmed"
@@ -92,7 +92,7 @@ class TestEntityCommitReceiptDefaults:
         )
         assert r.message == "Custom"
 
-    def test_happy(self) -> None:
+    def test_happy_happy(self) -> None:
         """Happy: all defaults correct."""
         r = EntityCommitReceipt(id="1", name="X", operation_time_ms=0.0, total_memory_count=1)
         assert r.status == "committed"
@@ -117,7 +117,7 @@ class TestRelationshipDefaults:
         with pytest.raises(ValidationError):
             RelationshipCreateParams(from_entity="a", to_entity="b", relationship_type="INVALID")
 
-    def test_happy(self) -> None:
+    def test_happy_happy(self) -> None:
         p = RelationshipCreateParams(from_entity="a", to_entity="b", relationship_type="ENABLES")
         assert p.confidence == 1.0
         assert p.weight == 1.0
@@ -141,7 +141,7 @@ class TestBaseNodeDefaults:
         n = BaseNode(name="X", node_type="Entity", project_id="p")
         assert n.id is None
 
-    def test_happy(self) -> None:
+    def test_happy_happy(self) -> None:
         n = BaseNode(name="X", node_type="Entity", project_id="p")
         assert n.salience_score == 1.0
         assert n.retrieval_count == 0
@@ -167,7 +167,7 @@ class TestSearchResultDefaults:
         r = SearchResult(id="1", name="X", node_type="E", project_id="p", score=0.9, distance=0.1)
         assert r.content is None
 
-    def test_happy(self) -> None:
+    def test_happy_happy(self) -> None:
         r = SearchResult(id="1", name="X", node_type="E", project_id="p", score=0.9, distance=0.1)
         assert r.salience_score == 0.0
         assert r.observations == []
@@ -191,7 +191,7 @@ class TestEntityDeleteDefaults:
         p = EntityDeleteParams(entity_id="1", reason="")
         assert p.reason == ""
 
-    def test_happy(self) -> None:
+    def test_happy_happy(self) -> None:
         p = EntityDeleteParams(entity_id="1", reason="cleanup")
         assert p.soft_delete is True
 
@@ -215,7 +215,7 @@ class TestTemporalQueryDefaults:
         p1 = TemporalQueryParams(start=datetime.now(UTC), end=datetime.now(UTC), limit=1)
         assert p1.limit == 1
 
-    def test_happy(self) -> None:
+    def test_happy_happy(self) -> None:
         p = TemporalQueryParams(start=datetime.now(UTC), end=datetime.now(UTC))
         assert p.limit == 20
         assert p.project_id is None
@@ -240,7 +240,7 @@ class TestBottleQueryDefaults:
         fields = ("search_text", "before_date", "after_date", "project_id")
         assert all(getattr(p, f) is None for f in fields)
 
-    def test_happy(self) -> None:
+    def test_happy_happy(self) -> None:
         p = BottleQueryParams()
         assert p.limit == 10
         assert p.include_content is False
@@ -261,7 +261,7 @@ class TestGapDetectionDefaults:
     def test_sad_zero_ok(self) -> None:
         assert GapDetectionParams(max_edges=0).max_edges == 0
 
-    def test_happy(self) -> None:
+    def test_happy_happy(self) -> None:
         p = GapDetectionParams()
         assert p.min_similarity == 0.7
         assert p.max_edges == 2
@@ -282,7 +282,7 @@ class TestObservationDefaults:
         p = ObservationParams(entity_id="1", content="t", certainty="speculative")
         assert p.certainty == "speculative"
 
-    def test_happy(self) -> None:
+    def test_happy_happy(self) -> None:
         p = ObservationParams(entity_id="1", content="t")
         assert p.certainty == "confirmed"
         assert p.evidence == []
@@ -301,7 +301,7 @@ class TestSessionEndDefaults:
     def test_sad_empty_summary(self) -> None:
         assert SessionEndParams(session_id="s1", summary="").summary == ""
 
-    def test_happy(self) -> None:
+    def test_happy_happy(self) -> None:
         assert SessionEndParams(session_id="s1", summary="d").outcomes == []
 
 
@@ -319,7 +319,7 @@ class TestBreakthroughDefaults:
     def test_sad_empty_moment(self) -> None:
         assert BreakthroughParams(name="X", moment="", session_id="s1").moment == ""
 
-    def test_happy(self) -> None:
+    def test_happy_happy(self) -> None:
         p = BreakthroughParams(name="X", moment="Y", session_id="s1")
         assert p.analogy_used is None
         assert p.concepts_unlocked == []
@@ -341,7 +341,7 @@ class TestEntityUpdateDefaults:
     def test_sad_empty_properties(self) -> None:
         assert EntityUpdateParams(entity_id="1", properties={}).properties == {}
 
-    def test_happy(self) -> None:
+    def test_happy_happy(self) -> None:
         p = EntityUpdateParams(entity_id="1", properties={"k": "v"}, reason="fix")
         assert p.entity_id == "1"
         assert p.properties == {"k": "v"}
