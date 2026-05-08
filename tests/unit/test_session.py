@@ -17,14 +17,14 @@ def memory_service(mock_vector_store: Any) -> Generator[MemoryService, None, Non
         service = MemoryService(
             embedding_service=mock_embedder_cls.return_value, vector_store=mock_vector_store
         )
-        service.async_repo.client = MagicMock()
-        service.async_repo.client.select_graph.return_value = MagicMock()
+        service.repo.client = MagicMock()
+        service.repo.client.select_graph.return_value = MagicMock()
         yield service
 
 
 @pytest.mark.asyncio
 async def test_happy_start_session(memory_service: MemoryService) -> None:
-    graph = memory_service.async_repo.client.select_graph.return_value
+    graph = memory_service.repo.client.select_graph.return_value
 
     mock_node = MagicMock()
     mock_node.properties = {
@@ -54,7 +54,7 @@ async def test_happy_start_session(memory_service: MemoryService) -> None:
 
 @pytest.mark.asyncio
 async def test_happy_end_session(memory_service: MemoryService) -> None:
-    graph = memory_service.async_repo.client.select_graph.return_value
+    graph = memory_service.repo.client.select_graph.return_value
 
     mock_node = MagicMock()
     mock_node.properties = {"id": "sess-001", "status": "closed", "summary": "Done"}

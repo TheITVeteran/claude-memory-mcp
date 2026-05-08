@@ -7,7 +7,7 @@ that kills coverage instrumentation for claude_memory.* in subsequent tests.
 import os
 import sys
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 def _import_app() -> Any:
@@ -25,6 +25,8 @@ def _import_app() -> Any:
                 "claude_memory": MagicMock(),
                 "claude_memory.tools": MagicMock(),
                 "claude_memory.embedding": MagicMock(),
+                "claude_memory.schema": MagicMock(),
+                "claude_memory.activation": MagicMock(),
             },
         ):
             # Force reimport so we get a fresh module
@@ -40,7 +42,8 @@ def test_happy_get_stats() -> None:
     app = _import_app()
 
     mock_service = MagicMock()
-    mock_service.async_repo.execute_cypher.side_effect = [
+    mock_service.repo = AsyncMock()
+    mock_service.repo.execute_cypher.side_effect = [
         MagicMock(result_set=[[42]]),  # Nodes
         MagicMock(result_set=[[10]]),  # Edges
     ]
@@ -50,7 +53,7 @@ def test_happy_get_stats() -> None:
 
     assert nodes == 42
     assert edges == 10
-    assert mock_service.async_repo.execute_cypher.call_count == 2
+    assert mock_service.repo.execute_cypher.call_count == 2
 
 
 def test_happy_get_graph_data() -> None:
@@ -58,15 +61,16 @@ def test_happy_get_graph_data() -> None:
     app = _import_app()
 
     mock_service = MagicMock()
+    mock_service.repo = AsyncMock()
     mock_result = MagicMock()
     mock_result.result_set = []
-    mock_service.async_repo.execute_cypher.return_value = mock_result
+    mock_service.repo.execute_cypher.return_value = mock_result
 
     with patch.object(app, "get_service", return_value=mock_service):
         app.get_graph_data(limit=50)
 
     # Check if cypher query was correct
-    args = mock_service.async_repo.execute_cypher.call_args
+    args = mock_service.repo.execute_cypher.call_args
     query = args[0][0]
     params = args[0][1]
     assert "OPTIONAL MATCH (n)-[r]->(m:Entity)" in query

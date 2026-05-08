@@ -15,8 +15,8 @@ from claude_memory.schema import EntityCreateParams
 def _make_crud_mixin() -> CrudMixin:
     """Build a CrudMixin with all dependencies mocked."""
     mixin = CrudMixin.__new__(CrudMixin)
-    mixin.repo = MagicMock()
-    mixin.async_repo = AsyncMock()
+    mixin.repo = AsyncMock()
+    mixin.repo = AsyncMock()
     mixin.embedder = MagicMock()
     mixin.vector_store = AsyncMock()
     mixin.ontology = MagicMock()
@@ -24,10 +24,10 @@ def _make_crud_mixin() -> CrudMixin:
 
     # Default happy-path returns
     mixin.ontology.is_valid_type.return_value = True
-    mixin.async_repo.create_node.return_value = {"id": "test-123", "name": "Test"}
-    mixin.async_repo.get_most_recent_entity.return_value = None
-    mixin.async_repo.get_total_node_count.return_value = 42
-    mixin.async_repo.get_observations_for_entity.return_value = []
+    mixin.repo.create_node.return_value = {"id": "test-123", "name": "Test"}
+    mixin.repo.get_most_recent_entity.return_value = None
+    mixin.repo.get_total_node_count.return_value = 42
+    mixin.repo.get_observations_for_entity.return_value = []
     mixin.embedder.encode.return_value = [0.1] * 1024
 
     # Make the async context manager work

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Tests targeting specific uncovered lines to close coverage gaps.
 
 Covers:
@@ -5,7 +7,6 @@ Covers:
 - repository_queries: query_bottles optional filters (L169-176)
 """
 
-from __future__ import annotations
 
 from unittest.mock import MagicMock
 

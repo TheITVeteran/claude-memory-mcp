@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Tests for repository_queries.py — coverage gap remediation.
 
 3-evil/1-sad/1-happy per function for:
@@ -11,7 +13,6 @@
   - get_all_node_ids
 """
 
-from __future__ import annotations
 
 from types import SimpleNamespace
 from unittest.mock import MagicMock

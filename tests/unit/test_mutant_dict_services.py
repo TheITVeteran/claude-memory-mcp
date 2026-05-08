@@ -1,10 +1,11 @@
+from __future__ import annotations
+
 """Mutation-killing tests for dict values — service return dicts.
 
 Split from test_mutant_dict_values.py per 300-line module cap.
 Covers analysis.py, temporal.py, and librarian.py dict structures.
 """
 
-from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 

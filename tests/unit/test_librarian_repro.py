@@ -1,6 +1,6 @@
 """Reproduction test for Librarian create_node signature mismatch (B1).
 
-The bug: librarian.py:109 calls repo.create_node(name=..., entity_type=..., ...)
+The bug: librarian.py:109 calls await repo.create_node(name=..., entity_type=..., ...)
 but MemoryRepository.create_node expects (label: str, properties: dict).
 The TypeError is silently swallowed by the broad except on line 123.
 """
@@ -28,7 +28,7 @@ async def test_evil1_create_node_signature_produces_error_in_report():
     """run_cycle should report a GapReport error because create_node is called wrong."""
     # Setup mocks
     mock_memory = AsyncMock()
-    mock_repo = MagicMock()
+    mock_repo = AsyncMock()
     mock_memory.repo = mock_repo
 
     mock_clustering = MagicMock(spec=ClusteringService)

@@ -72,8 +72,8 @@ async def test_happy_create_entity_locks_project(
     # Mock ontology validation
     mock_service_with_lock.ontology.is_valid_type = MagicMock(return_value=True)
     # Mock repo create
-    mock_service_with_lock.repo.create_node = MagicMock(return_value={"id": "1", "name": "Test"})
-    mock_service_with_lock.repo.get_total_node_count = MagicMock(return_value=1)
+    mock_service_with_lock.repo.create_node = AsyncMock(return_value={"id": "1", "name": "Test"})
+    mock_service_with_lock.repo.get_total_node_count = AsyncMock(return_value=1)
 
     await mock_service_with_lock.create_entity(params)
 
@@ -94,8 +94,8 @@ async def test_happy_update_entity_locks_project(
     params = EntityUpdateParams(entity_id="e1", properties={"name": "New"})
 
     # Mock existing node fetch to return project_id
-    mock_service_with_lock.repo.get_node = MagicMock(return_value={"id": "e1", "project_id": "p2"})
-    mock_service_with_lock.repo.update_node = MagicMock(return_value={"id": "e1"})
+    mock_service_with_lock.repo.get_node = AsyncMock(return_value={"id": "e1", "project_id": "p2"})
+    mock_service_with_lock.repo.update_node = AsyncMock(return_value={"id": "e1"})
 
     await mock_service_with_lock.update_entity(params)
 

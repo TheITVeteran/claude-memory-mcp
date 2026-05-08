@@ -1,9 +1,10 @@
+from __future__ import annotations
+
 """Tests for RRF merge algorithm — ADR-007 §10.1.
 
 3-evil/1-sad/1-happy for rrf_merge() + spec checklist coverage.
 """
 
-from __future__ import annotations
 
 import pytest
 

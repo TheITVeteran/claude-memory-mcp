@@ -5,7 +5,7 @@
 
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -18,7 +18,7 @@ from claude_memory.search import SearchMixin
 def _make_mixin() -> SearchMixin:
     """Create a SearchMixin instance with a mocked repo."""
     mixin = SearchMixin.__new__(SearchMixin)
-    mixin.repo = MagicMock()
+    mixin.repo = AsyncMock()
     mixin.embedder = MagicMock()
     mixin.vector_store = MagicMock()
     mixin.router = MagicMock()
@@ -92,7 +92,7 @@ async def test_evil3_archived_entity_in_window() -> None:
     # Relationships and supersedes: empty
     empty = _empty_result()
 
-    mixin.repo.execute_cypher = MagicMock(
+    mixin.repo.execute_cypher = AsyncMock(
         side_effect=[start_result, end_result, empty, empty, empty]
     )
 
@@ -118,7 +118,7 @@ async def test_sad1_empty_graph() -> None:
 
     empty = _empty_result()
     # 5 cypher calls: start entities, end entities, start rels, end rels, supersedes
-    mixin.repo.execute_cypher = MagicMock(return_value=empty)
+    mixin.repo.execute_cypher = AsyncMock(return_value=empty)
 
     diff = await mixin.diff_knowledge_state(
         DiffKnowledgeStateParams(as_of_start=t1.isoformat(), as_of_end=t2.isoformat())
@@ -191,7 +191,7 @@ async def test_happy_full_diff() -> None:
     supersedes_result = MagicMock()
     supersedes_result.result_set = [["b1", "Bravo", "c1", "Charlie"]]
 
-    mixin.repo.execute_cypher = MagicMock(
+    mixin.repo.execute_cypher = AsyncMock(
         side_effect=[
             start_entities,
             end_entities,

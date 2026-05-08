@@ -1,9 +1,10 @@
+from __future__ import annotations
+
 """Mutation-killing tests for schema.py — Pydantic model default values.
 
 Split from test_mutant_schema_integrity.py per 300-line module cap.
 """
 
-from __future__ import annotations
 
 from datetime import UTC, datetime
 

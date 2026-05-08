@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Tests for purge_ghost_vectors.py — ghost detection and orphan cross-reference.
 
 Covers:
@@ -6,7 +8,6 @@ Covers:
   - main(): dry-run + execute modes
 """
 
-from __future__ import annotations
 
 import os
 import sys

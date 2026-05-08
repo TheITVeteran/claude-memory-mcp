@@ -7,7 +7,7 @@ Heavy Streamlit/PyVis UI logic is tested via function-level mocking.
 import os
 import sys
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -89,15 +89,16 @@ def _import_dashboard() -> Any:
 # ─── get_stats Tests ────────────────────────────────────────────────
 
 
-async def test_happy_get_stats() -> None:
+def test_happy_get_stats() -> None:
     dashboard_app = _import_dashboard()
 
     mock_service = MagicMock()
+    mock_service.repo = AsyncMock()
     mock_result_nodes = MagicMock()
     mock_result_nodes.result_set = [[NODE_COUNT]]
     mock_result_edges = MagicMock()
     mock_result_edges.result_set = [[EDGE_COUNT]]
-    mock_service.async_repo.execute_cypher.side_effect = [mock_result_nodes, mock_result_edges]
+    mock_service.repo.execute_cypher.side_effect = [mock_result_nodes, mock_result_edges]
 
     with patch.object(dashboard_app, "get_service", return_value=mock_service):
         nodes, edges = dashboard_app.get_stats()
@@ -113,14 +114,15 @@ def test_happy_get_graph_data_global() -> None:
     dashboard_app = _import_dashboard()
 
     mock_service = MagicMock()
+    mock_service.repo = AsyncMock()
     mock_result = MagicMock()
-    mock_service.async_repo.execute_cypher.return_value = mock_result
+    mock_service.repo.execute_cypher.return_value = mock_result
 
     with patch.object(dashboard_app, "get_service", return_value=mock_service):
         result = dashboard_app.get_graph_data(limit=GRAPH_LIMIT_DEFAULT)
 
-    mock_service.async_repo.execute_cypher.assert_called_once()
-    query_used = mock_service.async_repo.execute_cypher.call_args[0][0]
+    mock_service.repo.execute_cypher.assert_called_once()
+    query_used = mock_service.repo.execute_cypher.call_args[0][0]
     assert "MATCH (n:Entity)" in query_used
     assert result is mock_result
 
@@ -129,16 +131,17 @@ def test_happy_get_graph_data_focused() -> None:
     dashboard_app = _import_dashboard()
 
     mock_service = MagicMock()
+    mock_service.repo = AsyncMock()
     mock_result = MagicMock()
-    mock_service.async_repo.execute_cypher.return_value = mock_result
+    mock_service.repo.execute_cypher.return_value = mock_result
 
     with patch.object(dashboard_app, "get_service", return_value=mock_service):
         result = dashboard_app.get_graph_data(limit=GRAPH_LIMIT_CUSTOM, focus=FOCUS_NODE_NAME)
 
-    query_used = mock_service.async_repo.execute_cypher.call_args[0][0]
+    query_used = mock_service.repo.execute_cypher.call_args[0][0]
     assert "$focus" in query_used
     # Verify focus was passed as a parameter
-    params_used = mock_service.async_repo.execute_cypher.call_args[0][1]
+    params_used = mock_service.repo.execute_cypher.call_args[0][1]
     assert params_used["focus"] == FOCUS_NODE_NAME
     assert result is mock_result
 
@@ -151,6 +154,7 @@ def test_sad1_main_explorer_mode() -> None:
     dashboard_app = _import_dashboard()
 
     mock_service = MagicMock()
+    mock_service.repo = AsyncMock()
     mock_stats_result = MagicMock()
     mock_stats_result.result_set = [[NODE_COUNT]]
     # execute_cypher is called 3 times: nodes count, edges count, graph data
@@ -173,7 +177,7 @@ def test_sad1_main_explorer_mode() -> None:
         [mock_standalone, None, None],
     ]
 
-    mock_service.async_repo.execute_cypher.side_effect = [
+    mock_service.repo.execute_cypher.side_effect = [
         mock_stats_result,  # get_stats: node count
         mock_edge_stats,  # get_stats: edge count
         mock_graph_result,  # get_graph_data: graph cypher result
@@ -190,11 +194,11 @@ def test_sad1_main_explorer_mode() -> None:
     mock_network_instance = MagicMock()
 
     with patch.object(dashboard_app, "get_service", return_value=mock_service):
-        with patch("asyncio.run") as mock_run:
-            mock_run.return_value = None  # asyncio.run not used in Explorer tab
-            with patch.object(dashboard_app, "Network", return_value=mock_network_instance):
-                with patch("builtins.open", MagicMock()):
-                    dashboard_app.main()
+        if True:
+            if True:
+                with patch.object(dashboard_app, "Network", return_value=mock_network_instance):
+                    with patch("builtins.open", MagicMock()):
+                        dashboard_app.main()
 
     mock_st.title.assert_called()
     mock_network_instance.add_node.assert_called()
@@ -206,17 +210,17 @@ def test_happy_main_search_mode_no_query() -> None:
     dashboard_app = _import_dashboard()
 
     mock_service = MagicMock()
+    mock_service.repo = AsyncMock()
     mock_stats_result = MagicMock()
     mock_stats_result.result_set = [[NODE_COUNT]]
-    mock_service.async_repo.execute_cypher.return_value = mock_stats_result
+    mock_service.repo.execute_cypher.return_value = mock_stats_result
 
     mock_st.sidebar.radio.return_value = "Search"
     mock_st.sidebar.button.return_value = False
     mock_st.text_input.return_value = ""
 
     with patch.object(dashboard_app, "get_service", return_value=mock_service):
-        with patch("asyncio.run") as mock_run:
-            mock_run.return_value = (NODE_COUNT, EDGE_COUNT)
+        if True:
             dashboard_app.main()
 
 
@@ -225,9 +229,10 @@ def test_happy_main_search_mode_with_query() -> None:
     dashboard_app = _import_dashboard()
 
     mock_service = MagicMock()
+    mock_service.repo = AsyncMock()
     mock_stats_result = MagicMock()
     mock_stats_result.result_set = [[NODE_COUNT]]
-    mock_service.async_repo.execute_cypher.return_value = mock_stats_result
+    mock_service.repo.execute_cypher.return_value = mock_stats_result
 
     mock_search_result = MagicMock()
     mock_search_result.name = MOCK_NODE_NAME
@@ -238,9 +243,8 @@ def test_happy_main_search_mode_with_query() -> None:
     mock_st.text_input.return_value = SEARCH_QUERY
 
     with patch.object(dashboard_app, "get_service", return_value=mock_service):
-        with patch("asyncio.run") as mock_async_run:
-            # asyncio.run is only called for service.search (get_stats is sync)
-            mock_async_run.return_value = [mock_search_result]
+        if True:
+            mock_service.search = AsyncMock(return_value=[mock_search_result])
             dashboard_app.main()
 
 
@@ -249,9 +253,10 @@ def test_happy_main_maintenance_mode() -> None:
     dashboard_app = _import_dashboard()
 
     mock_service = MagicMock()
+    mock_service.repo = AsyncMock()
     mock_stats_result = MagicMock()
     mock_stats_result.result_set = [[NODE_COUNT]]
-    mock_service.async_repo.execute_cypher.return_value = mock_stats_result
+    mock_service.repo.execute_cypher.return_value = mock_stats_result
 
     mock_st.sidebar.radio.return_value = "Maintenance"
     mock_st.sidebar.button.return_value = False
@@ -259,8 +264,7 @@ def test_happy_main_maintenance_mode() -> None:
     mock_st.number_input.return_value = STALE_DAYS
 
     with patch.object(dashboard_app, "get_service", return_value=mock_service):
-        with patch("asyncio.run") as mock_run:
-            mock_run.return_value = (NODE_COUNT, EDGE_COUNT)
+        if True:
             dashboard_app.main()
 
 
@@ -269,9 +273,10 @@ def test_happy_main_maintenance_scan() -> None:
     dashboard_app = _import_dashboard()
 
     mock_service = MagicMock()
+    mock_service.repo = AsyncMock()
     mock_stats_result = MagicMock()
     mock_stats_result.result_set = [[NODE_COUNT]]
-    mock_service.async_repo.execute_cypher.return_value = mock_stats_result
+    mock_service.repo.execute_cypher.return_value = mock_stats_result
 
     mock_st.sidebar.radio.return_value = "Maintenance"
     mock_st.sidebar.button.return_value = False
@@ -281,11 +286,8 @@ def test_happy_main_maintenance_scan() -> None:
     stale_entities = [{"id": MOCK_NODE_ID, "name": MOCK_NODE_NAME}]
 
     with patch.object(dashboard_app, "get_service", return_value=mock_service):
-        with patch("asyncio.run") as mock_run:
-            mock_run.side_effect = [
-                (NODE_COUNT, EDGE_COUNT),
-                stale_entities,
-            ]
+        if True:
+            mock_service.get_stale_entities = AsyncMock(return_value=stale_entities)
             dashboard_app.main()
 
 
@@ -294,9 +296,10 @@ def test_happy_main_shutdown_backup_success() -> None:
     dashboard_app = _import_dashboard()
 
     mock_service = MagicMock()
+    mock_service.repo = AsyncMock()
     mock_stats_result = MagicMock()
     mock_stats_result.result_set = [[NODE_COUNT]]
-    mock_service.async_repo.execute_cypher.return_value = mock_stats_result
+    mock_service.repo.execute_cypher.return_value = mock_stats_result
 
     mock_st.sidebar.radio.return_value = "Explorer"
     mock_st.button.return_value = False
@@ -316,7 +319,7 @@ def test_happy_main_shutdown_backup_success() -> None:
     mock_docker_result.stdout = f"{MOCK_NODE_ID}\n"
 
     with patch.object(dashboard_app, "get_service", return_value=mock_service):
-        with patch("asyncio.run", side_effect=lambda coro: (NODE_COUNT, EDGE_COUNT)):
+        if True:
             with patch("subprocess.run") as mock_subprocess:
                 mock_subprocess.side_effect = [mock_backup_result, mock_docker_result, MagicMock()]
                 dashboard_app.main()
@@ -327,9 +330,10 @@ def test_happy_main_shutdown_backup_failure() -> None:
     dashboard_app = _import_dashboard()
 
     mock_service = MagicMock()
+    mock_service.repo = AsyncMock()
     mock_stats_result = MagicMock()
     mock_stats_result.result_set = [[NODE_COUNT]]
-    mock_service.async_repo.execute_cypher.return_value = mock_stats_result
+    mock_service.repo.execute_cypher.return_value = mock_stats_result
 
     mock_st.sidebar.radio.return_value = "Explorer"
     mock_st.button.return_value = False
@@ -345,7 +349,7 @@ def test_happy_main_shutdown_backup_failure() -> None:
     mock_backup_result.stderr = "disk full"
 
     with patch.object(dashboard_app, "get_service", return_value=mock_service):
-        with patch("asyncio.run", side_effect=lambda coro: (NODE_COUNT, EDGE_COUNT)):
+        if True:
             with patch("subprocess.run", return_value=mock_backup_result):
                 dashboard_app.main()
 
@@ -357,9 +361,10 @@ def test_evil1_main_shutdown_backup_exception() -> None:
     dashboard_app = _import_dashboard()
 
     mock_service = MagicMock()
+    mock_service.repo = AsyncMock()
     mock_stats_result = MagicMock()
     mock_stats_result.result_set = [[NODE_COUNT]]
-    mock_service.async_repo.execute_cypher.return_value = mock_stats_result
+    mock_service.repo.execute_cypher.return_value = mock_stats_result
 
     mock_st.sidebar.radio.return_value = "Explorer"
     mock_st.button.return_value = False
@@ -371,7 +376,7 @@ def test_evil1_main_shutdown_backup_exception() -> None:
     mock_st.sidebar.status.return_value.__exit__ = MagicMock(return_value=False)
 
     with patch.object(dashboard_app, "get_service", return_value=mock_service):
-        with patch("asyncio.run", side_effect=lambda coro: (NODE_COUNT, EDGE_COUNT)):
+        if True:
             with patch("subprocess.run", side_effect=FileNotFoundError("python not found")):
                 dashboard_app.main()
 
@@ -383,9 +388,10 @@ def test_happy_main_shutdown_no_containers() -> None:
     dashboard_app = _import_dashboard()
 
     mock_service = MagicMock()
+    mock_service.repo = AsyncMock()
     mock_stats_result = MagicMock()
     mock_stats_result.result_set = [[NODE_COUNT]]
-    mock_service.async_repo.execute_cypher.return_value = mock_stats_result
+    mock_service.repo.execute_cypher.return_value = mock_stats_result
 
     mock_st.sidebar.radio.return_value = "Explorer"
     mock_st.button.return_value = False
@@ -403,7 +409,7 @@ def test_happy_main_shutdown_no_containers() -> None:
     mock_docker_result.stdout = ""  # No containers
 
     with patch.object(dashboard_app, "get_service", return_value=mock_service):
-        with patch("asyncio.run", side_effect=lambda coro: (NODE_COUNT, EDGE_COUNT)):
+        if True:
             with patch("subprocess.run") as mock_subprocess:
                 mock_subprocess.side_effect = [mock_backup_result, mock_docker_result]
                 dashboard_app.main()
@@ -414,9 +420,10 @@ def test_happy_main_shutdown_docker_exception() -> None:
     dashboard_app = _import_dashboard()
 
     mock_service = MagicMock()
+    mock_service.repo = AsyncMock()
     mock_stats_result = MagicMock()
     mock_stats_result.result_set = [[NODE_COUNT]]
-    mock_service.async_repo.execute_cypher.return_value = mock_stats_result
+    mock_service.repo.execute_cypher.return_value = mock_stats_result
 
     mock_st.sidebar.radio.return_value = "Explorer"
     mock_st.button.return_value = False
@@ -431,7 +438,7 @@ def test_happy_main_shutdown_docker_exception() -> None:
     mock_backup_result.returncode = 0
 
     with patch.object(dashboard_app, "get_service", return_value=mock_service):
-        with patch("asyncio.run", side_effect=lambda coro: (NODE_COUNT, EDGE_COUNT)):
+        if True:
             with patch("subprocess.run") as mock_subprocess:
                 mock_subprocess.side_effect = [
                     mock_backup_result,
@@ -445,9 +452,10 @@ def test_sad2_main_unknown_menu() -> None:
     dashboard_app = _import_dashboard()
 
     mock_service = MagicMock()
+    mock_service.repo = AsyncMock()
     mock_stats_result = MagicMock()
     mock_stats_result.result_set = [[NODE_COUNT]]
-    mock_service.async_repo.execute_cypher.return_value = mock_stats_result
+    mock_service.repo.execute_cypher.return_value = mock_stats_result
 
     mock_st.sidebar.radio.return_value = "UnknownMode"
     # Reset side_effect from previous test to prevent StopIteration
@@ -456,6 +464,5 @@ def test_sad2_main_unknown_menu() -> None:
     mock_st.button.return_value = False
 
     with patch.object(dashboard_app, "get_service", return_value=mock_service):
-        with patch("asyncio.run") as mock_run:
-            mock_run.return_value = (NODE_COUNT, EDGE_COUNT)
+        if True:
             dashboard_app.main()

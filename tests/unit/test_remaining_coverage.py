@@ -73,6 +73,7 @@ class TestLibrarianAgent:
                 from claude_memory.librarian import LibrarianAgent
 
                 mock_memory = MagicMock()
+                mock_memory.repo = AsyncMock()
                 mock_clustering = MagicMock()
                 mock_clustering.min_samples = CLUSTER_MIN_SAMPLES
                 agent = LibrarianAgent(
@@ -168,7 +169,8 @@ class TestLibrarianAgent:
 class TestLockManager:
     """Tests for uncovered lines in LockManager and ProjectLock."""
 
-    def test_evil4_project_lock_enter_timeout(self) -> None:
+    @pytest.mark.asyncio
+    async def test_evil4_project_lock_enter_timeout(self) -> None:
         """Line 28: __enter__ raises TimeoutError when acquire fails."""
         from claude_memory.lock_manager import ProjectLock
 
@@ -179,7 +181,8 @@ class TestLockManager:
         with pytest.raises(TimeoutError, match=LOCK_PROJECT_ID):
             lock.__enter__()
 
-    def test_happy_lock_manager_custom_port(self) -> None:
+    @pytest.mark.asyncio
+    async def test_happy_lock_manager_custom_port(self) -> None:
         """Line 45: port argument provided directly."""
         with patch("claude_memory.lock_manager.redis.Redis") as mock_redis:
             mock_client = MagicMock()
@@ -192,7 +195,8 @@ class TestLockManager:
             assert mgr.port == LOCK_PORT
             assert mgr.host == LOCK_HOST
 
-    def test_evil5_file_lock_stale_cleanup(self, tmp_path: Any) -> None:
+    @pytest.mark.asyncio
+    async def test_evil5_file_lock_stale_cleanup(self, tmp_path: Any) -> None:
         """Lines 114-117: stale file lock detected, removed, and re-acquired."""
         from claude_memory.lock_manager import LockManager
 
@@ -211,7 +215,8 @@ class TestLockManager:
             result = mgr._acquire_file(LOCK_PROJECT_ID, timeout=LOCK_TIMEOUT)
             assert result is True
 
-    def test_evil6_release_file_not_found(self, tmp_path: Any) -> None:
+    @pytest.mark.asyncio
+    async def test_evil6_release_file_not_found(self, tmp_path: Any) -> None:
         """Lines 126-127: releasing a lock file that doesn't exist (FileNotFoundError)."""
         from claude_memory.lock_manager import LockManager
 
@@ -224,7 +229,8 @@ class TestLockManager:
             # Should not raise even though file doesn't exist
             mgr._release_file(LOCK_PROJECT_ID)
 
-    def test_evil7_acquire_redis_timeout(self) -> None:
+    @pytest.mark.asyncio
+    async def test_evil7_acquire_redis_timeout(self) -> None:
         """Line 90-91: Redis lock acquisition times out."""
         from claude_memory.lock_manager import LockManager
 
@@ -251,7 +257,8 @@ class TestLockManager:
 class TestClusteringGaps:
     """Tests for uncovered lines in ClusteringService."""
 
-    def test_sad1_cluster_nodes_no_embeddings(self) -> None:
+    @pytest.mark.asyncio
+    async def test_sad1_cluster_nodes_no_embeddings(self) -> None:
         """Lines 48-50: all nodes lack embeddings → empty result."""
         from claude_memory.clustering import ClusteringService
 
@@ -264,7 +271,8 @@ class TestClusteringGaps:
         result = svc.cluster_nodes(nodes_without_embeddings)
         assert result == []
 
-    def test_evil8_cluster_nodes_filters_invalid_embeddings(self) -> None:
+    @pytest.mark.asyncio
+    async def test_evil8_cluster_nodes_filters_invalid_embeddings(self) -> None:
         """Line 44→42: branch where embedding is falsy."""
         from claude_memory.clustering import ClusteringService
 
@@ -285,7 +293,8 @@ class TestClusteringGaps:
 class TestContextManagerGaps:
     """Tests for uncovered lines in ContextManager and TokenBudget."""
 
-    def test_happy_token_budget_reset(self) -> None:
+    @pytest.mark.asyncio
+    async def test_happy_token_budget_reset(self) -> None:
         """Line 35: TokenBudget.reset() sets used back to 0."""
         from claude_memory.context_manager import TokenBudget
 
@@ -295,7 +304,8 @@ class TestContextManagerGaps:
         budget.reset()
         assert budget.used == 0
 
-    def test_happy_optimize_truncates_description(self) -> None:
+    @pytest.mark.asyncio
+    async def test_happy_optimize_truncates_description(self) -> None:
         """Lines 97-104: node description truncated when it doesn't fit fully."""
         from claude_memory.context_manager import ContextManager
 
@@ -320,7 +330,8 @@ class TestContextManagerGaps:
 class TestOntologyGaps:
     """Tests for uncovered lines in OntologyManager."""
 
-    def test_sad2_load_failure_uses_defaults(self, tmp_path: Any) -> None:
+    @pytest.mark.asyncio
+    async def test_sad2_load_failure_uses_defaults(self, tmp_path: Any) -> None:
         """Lines 59-60: load raises exception, defaults are preserved."""
         config_path = os.path.join(str(tmp_path), ONTOLOGY_CONFIG_PATH)
         # Write invalid JSON to trigger load failure
@@ -334,7 +345,8 @@ class TestOntologyGaps:
         assert mgr.is_valid_type("Entity")
         assert mgr.is_valid_type("Concept")
 
-    def test_happy_add_type_overwrite_existing(self, tmp_path: Any) -> None:
+    @pytest.mark.asyncio
+    async def test_happy_add_type_overwrite_existing(self, tmp_path: Any) -> None:
         """Line 81: overwriting an existing type triggers warning."""
         config_path = os.path.join(str(tmp_path), ONTOLOGY_CONFIG_PATH)
 
@@ -355,7 +367,8 @@ class TestOntologyGaps:
         assert defn["description"] == "Overwritten description"
         assert defn["required_properties"] == [ONTOLOGY_REQUIRED_PROP]
 
-    def test_sad3_add_type_without_required_properties(self, tmp_path: Any) -> None:
+    @pytest.mark.asyncio
+    async def test_sad3_add_type_without_required_properties(self, tmp_path: Any) -> None:
         """Line 81: required_properties is None → default to empty list."""
         config_path = os.path.join(str(tmp_path), ONTOLOGY_CONFIG_PATH)
 
@@ -374,7 +387,8 @@ class TestOntologyGaps:
 class TestContextManagerBranchGaps:
     """Cover branch 98→103: node WITHOUT description key."""
 
-    def test_happy_optimize_pruned_node_without_description_key(self) -> None:
+    @pytest.mark.asyncio
+    async def test_happy_optimize_pruned_node_without_description_key(self) -> None:
         """Branch 98→103: pruned node has no 'description' key.
 
         Strategy: use a very tight budget so the first node barely fits full
@@ -422,6 +436,7 @@ class TestLibrarianBranchGaps:
                 from claude_memory.librarian import LibrarianAgent
 
                 mock_memory = MagicMock()
+                mock_memory.repo = AsyncMock()
                 mock_clustering = MagicMock()
                 mock_clustering.min_samples = CLUSTER_MIN_SAMPLES
                 return LibrarianAgent(
@@ -454,7 +469,8 @@ class TestLibrarianBranchGaps:
 class TestLockManagerBranchGaps:
     """Cover remaining lock_manager branches."""
 
-    def test_evil9_release_redis_no_client(self) -> None:
+    @pytest.mark.asyncio
+    async def test_evil9_release_redis_no_client(self) -> None:
         """Branch 94→exit: client is None, release is a no-op."""
         from claude_memory.lock_manager import LockManager
 
@@ -464,7 +480,8 @@ class TestLockManagerBranchGaps:
             assert mgr.client is None
             mgr._release_redis(LOCK_PROJECT_ID)
 
-    def test_evil10_file_lock_stale_value_error(self, tmp_path: Any) -> None:
+    @pytest.mark.asyncio
+    async def test_evil10_file_lock_stale_value_error(self, tmp_path: Any) -> None:
         """Lines 116-117: stale lock has non-numeric content → ValueError."""
         from claude_memory.lock_manager import LockManager
 

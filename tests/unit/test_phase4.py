@@ -12,14 +12,13 @@ from claude_memory.tools import MemoryService
 
 @pytest.fixture
 def mock_repo() -> Generator[Any, None, None]:
-    with patch("claude_memory.tools.MemoryRepository") as mock_repo_cls:
-        repo_instance = mock_repo_cls.return_value
-        # Default returns
-        repo_instance.create_node.return_value = {"id": "mock-id", "name": "Mock Node"}
-        repo_instance.create_edge.return_value = {"id": "mock-rel-id"}
-        repo_instance.update_node.return_value = {"id": "mock-id"}
-        repo_instance.execute_cypher.return_value = MagicMock(result_set=[])
-        yield repo_instance
+    repo_instance = AsyncMock()
+    # Default returns
+    repo_instance.create_node.return_value = {"id": "mock-id", "name": "Mock Node"}
+    repo_instance.create_edge.return_value = {"id": "mock-rel-id"}
+    repo_instance.update_node.return_value = {"id": "mock-id"}
+    repo_instance.execute_cypher.return_value = MagicMock(result_set=[])
+    yield repo_instance
 
 
 @pytest.fixture

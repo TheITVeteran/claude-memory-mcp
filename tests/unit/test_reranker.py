@@ -1,9 +1,10 @@
+from __future__ import annotations
+
 """Gold Stack tests for RerankerClient (Tier 1.3).
 
 Tests follow the 3-evil/1-sad/1-happy naming convention.
 """
 
-from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 

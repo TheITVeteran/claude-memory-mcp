@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Mutation-killing tests for function signature default parameters.
 
 Targets Pattern P4 (~40 kills): functions like get_neighbors(depth=1, limit=20, offset=0)
@@ -5,7 +7,6 @@ have defaults that mutmut mutates without any test noticing. These tests call fu
 WITHOUT specifying optional args and assert the defaults are active.
 """
 
-from __future__ import annotations
 
 import inspect
 

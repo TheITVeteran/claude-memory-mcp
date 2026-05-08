@@ -101,9 +101,9 @@ def service() -> MemoryService:
                 svc = MemoryService(embedding_service=mock_embedder)
 
     # Replace repo, vector_store, lock_manager with mocks
-    svc.repo = MagicMock()
-    svc.async_repo = AsyncMock()
-    svc.async_repo = AsyncMock()
+    svc.repo = AsyncMock()
+    svc.repo = AsyncMock()
+    svc.repo = AsyncMock()
     svc.vector_store = AsyncMock()
     svc.lock_manager = MagicMock()
 
@@ -116,7 +116,7 @@ def service() -> MemoryService:
     svc.lock_manager.lock.return_value = mock_lock
 
     # Default async_repo returns for _compute_entity_embedding_text
-    svc.async_repo.get_observations_for_entity.return_value = []
+    svc.repo.get_observations_for_entity.return_value = []
 
     return svc
 
@@ -133,8 +133,8 @@ def _make_cypher_result(rows: list[list[Any]]) -> MagicMock:
 
 async def test_happy_create_relationship_with_project_lock(service: MemoryService) -> None:
     """When source node has project_id, use project lock."""
-    service.async_repo.get_node.return_value = {"id": ENTITY_ID, "project_id": PROJECT_ID}
-    service.async_repo.create_edge.return_value = {"id": RELATIONSHIP_ID}
+    service.repo.get_node.return_value = {"id": ENTITY_ID, "project_id": PROJECT_ID}
+    service.repo.create_edge.return_value = {"id": RELATIONSHIP_ID}
 
     params = RelationshipCreateParams(
         from_entity=ENTITY_ID,
@@ -147,8 +147,8 @@ async def test_happy_create_relationship_with_project_lock(service: MemoryServic
 
 async def test_happy_create_relationship_without_project(service: MemoryService) -> None:
     """When source node has no project_id, proceed without lock."""
-    service.async_repo.get_node.return_value = {"id": ENTITY_ID}
-    service.async_repo.create_edge.return_value = {"id": RELATIONSHIP_ID}
+    service.repo.get_node.return_value = {"id": ENTITY_ID}
+    service.repo.create_edge.return_value = {"id": RELATIONSHIP_ID}
 
     params = RelationshipCreateParams(
         from_entity=ENTITY_ID,
@@ -161,8 +161,8 @@ async def test_happy_create_relationship_without_project(service: MemoryService)
 
 async def test_sad1_create_relationship_source_not_found(service: MemoryService) -> None:
     """When source node doesn't exist."""
-    service.async_repo.get_node.return_value = None
-    service.async_repo.create_edge.return_value = {"id": RELATIONSHIP_ID}
+    service.repo.get_node.return_value = None
+    service.repo.create_edge.return_value = {"id": RELATIONSHIP_ID}
 
     params = RelationshipCreateParams(
         from_entity=ENTITY_ID,
@@ -175,9 +175,9 @@ async def test_sad1_create_relationship_source_not_found(service: MemoryService)
 
 async def test_sad2_create_relationship_with_existing_id_in_props(service: MemoryService) -> None:
     """Branch 157→16: 'id' already in properties, UUID generation skipped."""
-    service.async_repo.get_node.return_value = None
+    service.repo.get_node.return_value = None
     pre_set_id = "custom-rel-id-999"
-    service.async_repo.create_edge.return_value = {"id": pre_set_id}
+    service.repo.create_edge.return_value = {"id": pre_set_id}
 
     params = RelationshipCreateParams(
         from_entity=ENTITY_ID,
@@ -188,14 +188,14 @@ async def test_sad2_create_relationship_with_existing_id_in_props(service: Memor
     result = await service.create_relationship(params)
     assert result["id"] == pre_set_id
     # Verify the id we passed was preserved (not overwritten by uuid)
-    call_args = service.async_repo.create_edge.call_args
+    call_args = service.repo.create_edge.call_args
     assert call_args[0][3]["id"] == pre_set_id
 
 
 async def test_evil1_create_relationship_edge_creation_fails(service: MemoryService) -> None:
     """When edge creation returns empty result."""
-    service.async_repo.get_node.return_value = None
-    service.async_repo.create_edge.return_value = {}
+    service.repo.get_node.return_value = None
+    service.repo.create_edge.return_value = {}
 
     params = RelationshipCreateParams(
         from_entity=ENTITY_ID,
@@ -210,8 +210,8 @@ async def test_evil1_create_relationship_edge_creation_fails(service: MemoryServ
 
 
 async def test_happy_update_entity_with_project_lock(service: MemoryService) -> None:
-    service.async_repo.get_node.return_value = MOCK_NODE_PROPS
-    service.async_repo.update_node.return_value = {**MOCK_NODE_PROPS, "version": "2.0"}
+    service.repo.get_node.return_value = MOCK_NODE_PROPS
+    service.repo.update_node.return_value = {**MOCK_NODE_PROPS, "version": "2.0"}
 
     params = EntityUpdateParams(entity_id=ENTITY_ID, properties={"version": "2.0"}, reason="update")
     result = await service.update_entity(params)
@@ -219,7 +219,7 @@ async def test_happy_update_entity_with_project_lock(service: MemoryService) -> 
 
 
 async def test_evil2_update_entity_not_found(service: MemoryService) -> None:
-    service.async_repo.get_node.return_value = None
+    service.repo.get_node.return_value = None
 
     params = EntityUpdateParams(entity_id=ENTITY_ID, properties={"version": "2.0"}, reason="update")
     result = await service.update_entity(params)
@@ -230,18 +230,18 @@ async def test_evil2_update_entity_not_found(service: MemoryService) -> None:
 
 
 async def test_happy_delete_entity_soft(service: MemoryService) -> None:
-    service.async_repo.get_node.return_value = MOCK_NODE_PROPS
+    service.repo.get_node.return_value = MOCK_NODE_PROPS
 
     params = EntityDeleteParams(entity_id=ENTITY_ID, reason=DELETE_REASON, soft_delete=True)
     result = await service.delete_entity(params)
     assert result["status"] == "archived"
-    service.async_repo.update_node.assert_called_once()
+    service.repo.update_node.assert_called_once()
     service.vector_store.delete.assert_awaited_once_with(ENTITY_ID)
 
 
 async def test_evil3_delete_entity_soft_vector_delete_raises(service: MemoryService) -> None:
     """Soft delete raises when vector store delete fails — no lenient path."""
-    service.async_repo.get_node.return_value = MOCK_NODE_PROPS
+    service.repo.get_node.return_value = MOCK_NODE_PROPS
     service.vector_store.delete.side_effect = ConnectionError("qdrant down")
 
     params = EntityDeleteParams(entity_id=ENTITY_ID, reason=DELETE_REASON, soft_delete=True)
@@ -250,17 +250,17 @@ async def test_evil3_delete_entity_soft_vector_delete_raises(service: MemoryServ
 
 
 async def test_happy_delete_entity_hard(service: MemoryService) -> None:
-    service.async_repo.get_node.return_value = MOCK_NODE_PROPS
+    service.repo.get_node.return_value = MOCK_NODE_PROPS
 
     params = EntityDeleteParams(entity_id=ENTITY_ID, reason=DELETE_REASON, soft_delete=False)
     result = await service.delete_entity(params)
     assert result["status"] == "deleted"
-    service.async_repo.delete_node.assert_called_once_with(ENTITY_ID)
+    service.repo.delete_node.assert_called_once_with(ENTITY_ID)
 
 
 async def test_evil4_delete_entity_hard_vector_delete_raises(service: MemoryService) -> None:
     """Hard delete raises when vector store delete fails — no lenient path."""
-    service.async_repo.get_node.return_value = MOCK_NODE_PROPS
+    service.repo.get_node.return_value = MOCK_NODE_PROPS
     service.vector_store.delete.side_effect = ConnectionError("qdrant down")
 
     params = EntityDeleteParams(entity_id=ENTITY_ID, reason=DELETE_REASON, soft_delete=False)
@@ -269,7 +269,7 @@ async def test_evil4_delete_entity_hard_vector_delete_raises(service: MemoryServ
 
 
 async def test_evil5_delete_entity_not_found(service: MemoryService) -> None:
-    service.async_repo.get_node.return_value = None
+    service.repo.get_node.return_value = None
 
     params = EntityDeleteParams(entity_id=ENTITY_ID, reason=DELETE_REASON, soft_delete=True)
     result = await service.delete_entity(params)
@@ -278,7 +278,7 @@ async def test_evil5_delete_entity_not_found(service: MemoryService) -> None:
 
 async def test_sad3_delete_entity_no_project(service: MemoryService) -> None:
     """Entity without project_id should still delete without lock."""
-    service.async_repo.get_node.return_value = {"id": ENTITY_ID, "name": ENTITY_NAME}
+    service.repo.get_node.return_value = {"id": ENTITY_ID, "name": ENTITY_NAME}
 
     params = EntityDeleteParams(entity_id=ENTITY_ID, reason=DELETE_REASON, soft_delete=True)
     result = await service.delete_entity(params)
@@ -292,7 +292,7 @@ async def test_happy_delete_relationship(service: MemoryService) -> None:
     params = RelationshipDeleteParams(relationship_id=RELATIONSHIP_ID, reason=DELETE_REASON)
     result = await service.delete_relationship(params)
     assert result == {"status": "deleted", "id": RELATIONSHIP_ID}
-    service.async_repo.delete_edge.assert_called_once_with(RELATIONSHIP_ID)
+    service.repo.delete_edge.assert_called_once_with(RELATIONSHIP_ID)
 
 
 # ─── add_observation Tests ─────────────────────────────────────────
@@ -301,7 +301,7 @@ async def test_happy_delete_relationship(service: MemoryService) -> None:
 async def test_happy_add_observation_success(service: MemoryService) -> None:
     mock_obs_node = MagicMock()
     mock_obs_node.properties = {"id": "obs-001", "content": OBSERVATION_CONTENT}
-    service.async_repo.execute_cypher.return_value = _make_cypher_result([[mock_obs_node]])
+    service.repo.execute_cypher.return_value = _make_cypher_result([[mock_obs_node]])
 
     params = ObservationParams(
         entity_id=ENTITY_ID,
@@ -314,7 +314,7 @@ async def test_happy_add_observation_success(service: MemoryService) -> None:
 
 
 async def test_evil6_add_observation_entity_not_found(service: MemoryService) -> None:
-    service.async_repo.execute_cypher.return_value = _make_cypher_result([])
+    service.repo.execute_cypher.return_value = _make_cypher_result([])
 
     params = ObservationParams(
         entity_id=ENTITY_ID,
@@ -336,7 +336,7 @@ async def test_happy_add_observation_creates_vector(service: MemoryService) -> N
         "content": "GPU needs 16GB VRAM for fine-tuning",
         "project_id": "proj-1",
     }
-    service.async_repo.execute_cypher.return_value = _make_cypher_result([[mock_obs_node]])
+    service.repo.execute_cypher.return_value = _make_cypher_result([[mock_obs_node]])
     service.embedder.encode.return_value = [0.1] * 1024
 
     params = ObservationParams(
@@ -359,7 +359,7 @@ async def test_happy_add_observation_creates_vector(service: MemoryService) -> N
 
 async def test_evil7_add_observation_skip_embed_on_entity_not_found(service: MemoryService) -> None:
     """E-3: No embedding when entity not found."""
-    service.async_repo.execute_cypher.return_value = _make_cypher_result([])
+    service.repo.execute_cypher.return_value = _make_cypher_result([])
 
     params = ObservationParams(
         entity_id=ENTITY_ID,
@@ -380,7 +380,7 @@ async def test_evil8_add_observation_vector_upsert_failure_raises(service: Memor
         "content": OBSERVATION_CONTENT,
         "project_id": PROJECT_ID,
     }
-    service.async_repo.execute_cypher.return_value = _make_cypher_result([[mock_obs_node]])
+    service.repo.execute_cypher.return_value = _make_cypher_result([[mock_obs_node]])
     service.embedder.encode.return_value = [0.1] * 1024
     service.vector_store.upsert.side_effect = ConnectionError("qdrant down")
 
@@ -397,7 +397,7 @@ async def test_evil8_add_observation_vector_upsert_failure_raises(service: Memor
 
 
 async def test_evil9_end_session_not_found(service: MemoryService) -> None:
-    service.async_repo.execute_cypher.return_value = _make_cypher_result([])
+    service.repo.execute_cypher.return_value = _make_cypher_result([])
 
     params = SessionEndParams(
         session_id=SESSION_ID, summary=SESSION_SUMMARY, outcomes=SESSION_OUTCOMES
@@ -410,7 +410,7 @@ async def test_evil9_end_session_not_found(service: MemoryService) -> None:
 
 
 async def test_happy_record_breakthrough_with_session(service: MemoryService) -> None:
-    service.async_repo.create_node.return_value = {"id": "b-001", "name": BREAKTHROUGH_NAME}
+    service.repo.create_node.return_value = {"id": "b-001", "name": BREAKTHROUGH_NAME}
 
     params = BreakthroughParams(
         name=BREAKTHROUGH_NAME,
@@ -422,12 +422,12 @@ async def test_happy_record_breakthrough_with_session(service: MemoryService) ->
     result = await service.record_breakthrough(params)
     assert result["name"] == BREAKTHROUGH_NAME
     # Verify edge was created linking session to breakthrough
-    service.async_repo.create_edge.assert_called_once()
+    service.repo.create_edge.assert_called_once()
 
 
 async def test_happy_record_breakthrough_without_session(service: MemoryService) -> None:
     """When session_id is empty, no edge should be created."""
-    service.async_repo.create_node.return_value = {"id": "b-001", "name": BREAKTHROUGH_NAME}
+    service.repo.create_node.return_value = {"id": "b-001", "name": BREAKTHROUGH_NAME}
 
     params = BreakthroughParams(
         name=BREAKTHROUGH_NAME,
@@ -436,7 +436,7 @@ async def test_happy_record_breakthrough_without_session(service: MemoryService)
     )
     result = await service.record_breakthrough(params)
     assert result["name"] == BREAKTHROUGH_NAME
-    service.async_repo.create_edge.assert_not_called()
+    service.repo.create_edge.assert_not_called()
 
 
 # ─── traverse_path Tests ──────────────────────────────────────────
@@ -452,7 +452,7 @@ async def test_happy_traverse_path_with_nodes(service: MemoryService) -> None:
     mock_path = MagicMock()
     mock_path.nodes = [mock_node_a, mock_node_b]
 
-    service.async_repo.execute_cypher.return_value = _make_cypher_result([[mock_path]])
+    service.repo.execute_cypher.return_value = _make_cypher_result([[mock_path]])
 
     result = await service.traverse_path(TraversePathParams(from_id=ENTITY_ID, to_id=ENTITY_ID_2))
     assert len(result) == 2
@@ -461,7 +461,7 @@ async def test_happy_traverse_path_with_nodes(service: MemoryService) -> None:
 
 
 async def test_sad4_traverse_path_no_path_found(service: MemoryService) -> None:
-    service.async_repo.execute_cypher.return_value = _make_cypher_result([])
+    service.repo.execute_cypher.return_value = _make_cypher_result([])
 
     result = await service.traverse_path(TraversePathParams(from_id=ENTITY_ID, to_id=ENTITY_ID_2))
     assert result == []
@@ -470,7 +470,7 @@ async def test_sad4_traverse_path_no_path_found(service: MemoryService) -> None:
 async def test_sad5_traverse_path_no_nodes_attr(service: MemoryService) -> None:
     """When path object doesn't have .nodes attribute."""
     mock_path = MagicMock(spec=[])  # No attributes
-    service.async_repo.execute_cypher.return_value = _make_cypher_result([[mock_path]])
+    service.repo.execute_cypher.return_value = _make_cypher_result([[mock_path]])
 
     result = await service.traverse_path(TraversePathParams(from_id=ENTITY_ID, to_id=ENTITY_ID_2))
     assert result == []
@@ -495,7 +495,7 @@ async def test_happy_search_with_results(service: MemoryService) -> None:
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
-    service.async_repo.get_subgraph.return_value = {
+    service.repo.get_subgraph.return_value = {
         "nodes": [
             {
                 "id": ENTITY_ID,
@@ -520,7 +520,7 @@ async def test_sad8_search_node_not_in_graph(service: MemoryService) -> None:
     service.vector_store.search.return_value = [
         {"_id": "orphan-id", "_score": PAGERANK_SCORE},
     ]
-    service.async_repo.get_subgraph.return_value = {"nodes": [], "edges": []}
+    service.repo.get_subgraph.return_value = {"nodes": [], "edges": []}
 
     result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
     assert result == []
@@ -536,7 +536,7 @@ async def test_happy_search_deep_returns_observations(service: MemoryService) ->
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
-    service.async_repo.get_subgraph.return_value = {
+    service.repo.get_subgraph.return_value = {
         "nodes": [
             {
                 "id": ENTITY_ID,
@@ -551,7 +551,7 @@ async def test_happy_search_deep_returns_observations(service: MemoryService) ->
     # Mock observation lookup
     obs_result = MagicMock()
     obs_result.result_set = [["First observation"], ["Second observation"]]
-    service.async_repo.execute_cypher.return_value = obs_result
+    service.repo.execute_cypher.return_value = obs_result
 
     result = await service.search(
         SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT, deep=True)
@@ -567,7 +567,7 @@ async def test_happy_search_deep_returns_relationships(service: MemoryService) -
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
-    service.async_repo.get_subgraph.return_value = {
+    service.repo.get_subgraph.return_value = {
         "nodes": [
             {
                 "id": ENTITY_ID,
@@ -583,7 +583,7 @@ async def test_happy_search_deep_returns_relationships(service: MemoryService) -
     }
     obs_result = MagicMock()
     obs_result.result_set = []
-    service.async_repo.execute_cypher.return_value = obs_result
+    service.repo.execute_cypher.return_value = obs_result
 
     result = await service.search(
         SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT, deep=True)
@@ -597,7 +597,7 @@ async def test_sad9_search_shallow_backward_compat(service: MemoryService) -> No
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
-    service.async_repo.get_subgraph.return_value = {
+    service.repo.get_subgraph.return_value = {
         "nodes": [
             {
                 "id": ENTITY_ID,
@@ -624,7 +624,7 @@ async def test_happy_search_with_project_id_filter(service: MemoryService) -> No
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
-    service.async_repo.get_subgraph.return_value = {
+    service.repo.get_subgraph.return_value = {
         "nodes": [
             {
                 "id": ENTITY_ID,
@@ -652,7 +652,7 @@ async def test_happy_search_with_mmr_flag(service: MemoryService) -> None:
     service.vector_store.search_mmr.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
-    service.async_repo.get_subgraph.return_value = {
+    service.repo.get_subgraph.return_value = {
         "nodes": [
             {
                 "id": ENTITY_ID,
@@ -690,7 +690,7 @@ async def test_happy_point_in_time_query_with_results(service: MemoryService) ->
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID},
     ]
-    service.async_repo.get_subgraph.return_value = {
+    service.repo.get_subgraph.return_value = {
         "nodes": [{"id": ENTITY_ID, "name": ENTITY_NAME}],
         "edges": [],
     }
@@ -714,7 +714,7 @@ async def test_happy_analyze_graph_pagerank_success(service: MemoryService) -> N
     mock_node_b.properties = {"name": "NodeB"}
     mock_node_b.labels = ["Entity"]
 
-    service.async_repo.execute_cypher.side_effect = [
+    service.repo.execute_cypher.side_effect = [
         _make_cypher_result([[mock_node_a], [mock_node_b]]),  # nodes
         _make_cypher_result([["NodeB", ENTITY_NAME]]),  # edges: B->A
     ]
@@ -732,7 +732,7 @@ async def test_happy_analyze_graph_pagerank_only_entity_label(service: MemorySer
     mock_node.properties = {"name": ENTITY_NAME}
     mock_node.labels = ["Entity"]  # Only Entity label
 
-    service.async_repo.execute_cypher.side_effect = [
+    service.repo.execute_cypher.side_effect = [
         _make_cypher_result([[mock_node]]),  # nodes
         _make_cypher_result([]),  # no edges
     ]
@@ -743,7 +743,7 @@ async def test_happy_analyze_graph_pagerank_only_entity_label(service: MemorySer
 
 async def test_evil10_analyze_graph_pagerank_error(service: MemoryService) -> None:
     """Errors propagate loudly from PageRank (no silent swallowing)."""
-    service.async_repo.execute_cypher.side_effect = RuntimeError("algo not available")
+    service.repo.execute_cypher.side_effect = RuntimeError("algo not available")
 
     with pytest.raises(RuntimeError, match="algo not available"):
         await service.analyze_graph(AnalyzeGraphParams(algorithm="pagerank"))
@@ -758,7 +758,7 @@ async def test_happy_analyze_graph_louvain_success(service: MemoryService) -> No
         n.labels = ["Entity"]
         nodes.append(n)
 
-    service.async_repo.execute_cypher.side_effect = [
+    service.repo.execute_cypher.side_effect = [
         _make_cypher_result([[n] for n in nodes]),  # nodes
         _make_cypher_result([["A", "B"], ["B", "C"], ["A", "C"]]),  # edges
     ]
@@ -772,7 +772,7 @@ async def test_happy_analyze_graph_louvain_success(service: MemoryService) -> No
 
 async def test_evil11_analyze_graph_louvain_error(service: MemoryService) -> None:
     """Errors propagate loudly from Louvain (no silent swallowing)."""
-    service.async_repo.execute_cypher.side_effect = RuntimeError("algo not available")
+    service.repo.execute_cypher.side_effect = RuntimeError("algo not available")
 
     with pytest.raises(RuntimeError, match="algo not available"):
         await service.analyze_graph(AnalyzeGraphParams(algorithm="louvain"))
@@ -792,7 +792,7 @@ async def test_sad12_get_stale_entities(service: MemoryService) -> None:
     mock_node = MagicMock()
     mock_node.properties = {"id": ENTITY_ID, "name": ENTITY_NAME, "embedding": MOCK_EMBEDDING}
 
-    service.async_repo.execute_cypher.return_value = _make_cypher_result([[mock_node]])
+    service.repo.execute_cypher.return_value = _make_cypher_result([[mock_node]])
 
     result = await service.get_stale_entities(days=STALE_DAYS)
     assert len(result) == 1
@@ -805,7 +805,7 @@ async def test_sad12_get_stale_entities(service: MemoryService) -> None:
 
 
 async def test_happy_consolidate_memories(service: MemoryService) -> None:
-    service.async_repo.create_node.return_value = {"id": "consolidated-001", "name": "Consolidated"}
+    service.repo.create_node.return_value = {"id": "consolidated-001", "name": "Consolidated"}
 
     result = await service.consolidate_memories(
         entity_ids=[ENTITY_ID, ENTITY_ID_2],
@@ -817,12 +817,12 @@ async def test_happy_consolidate_memories(service: MemoryService) -> None:
 
 async def test_evil12_consolidate_memories_edge_error(service: MemoryService) -> None:
     """When linking an old entity fails, continue with remaining."""
-    service.async_repo.create_node.return_value = {"id": "consolidated-001", "name": "Consolidated"}
-    service.async_repo.create_edge.side_effect = [
+    service.repo.create_node.return_value = {"id": "consolidated-001", "name": "Consolidated"}
+    service.repo.create_edge.side_effect = [
         ConnectionError("edge failed"),  # First entity fails
         MagicMock(),  # Second succeeds
     ]
-    service.async_repo.update_node.return_value = {}
+    service.repo.update_node.return_value = {}
 
     result = await service.consolidate_memories(
         entity_ids=[ENTITY_ID, ENTITY_ID_2],
@@ -879,7 +879,7 @@ async def test_happy_get_hologram_with_non_dict_nodes(service: MemoryService) ->
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
-    service.async_repo.get_subgraph.return_value = {
+    service.repo.get_subgraph.return_value = {
         "nodes": [
             {
                 "id": ENTITY_ID,
@@ -901,7 +901,7 @@ async def test_happy_get_hologram_with_non_dict_nodes(service: MemoryService) ->
     # Hologram's internal search call returns results
     with patch.object(service, "search", return_value=[mock_search_result]):
         # get_subgraph returns both dict and non-dict nodes
-        service.async_repo.get_subgraph.return_value = {
+        service.repo.get_subgraph.return_value = {
             "nodes": [
                 {"id": ENTITY_ID, "name": ENTITY_NAME, "embedding": MOCK_EMBEDDING},
                 MagicMock(),  # non-dict node → branch 733→732 False
@@ -937,13 +937,13 @@ async def test_happy_create_entity_initializes_salience(service: MemoryService) 
     """create_entity sets salience_score=1.0 and retrieval_count=0 on the node."""
     from claude_memory.schema import EntityCreateParams
 
-    service.async_repo.create_node.return_value = {
+    service.repo.create_node.return_value = {
         "id": ENTITY_ID,
         "name": ENTITY_NAME,
         "salience_score": SALIENCE_DEFAULT,
         "retrieval_count": RETRIEVAL_COUNT_DEFAULT,
     }
-    service.async_repo.get_total_node_count.return_value = 1
+    service.repo.get_total_node_count.return_value = 1
     service.ontology = MagicMock()
     service.ontology.is_valid_type.return_value = True
 
@@ -956,7 +956,7 @@ async def test_happy_create_entity_initializes_salience(service: MemoryService) 
     assert result.id == ENTITY_ID
 
     # Verify salience fields were passed to create_node
-    call_args = service.async_repo.create_node.call_args
+    call_args = service.repo.create_node.call_args
     props = call_args[0][1]
     assert props["salience_score"] == SALIENCE_DEFAULT
     assert props["retrieval_count"] == RETRIEVAL_COUNT_DEFAULT
@@ -967,7 +967,7 @@ async def test_happy_search_fires_salience_async(service: MemoryService) -> None
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
-    service.async_repo.get_subgraph.return_value = {
+    service.repo.get_subgraph.return_value = {
         "nodes": [
             {
                 "id": ENTITY_ID,
@@ -980,7 +980,7 @@ async def test_happy_search_fires_salience_async(service: MemoryService) -> None
         ],
         "edges": [],
     }
-    service.async_repo.increment_salience.return_value = [
+    service.repo.increment_salience.return_value = [
         {
             "id": ENTITY_ID,
             "salience_score": SALIENCE_AFTER_ONE_RETRIEVAL,
@@ -999,8 +999,8 @@ async def test_happy_search_fires_salience_async(service: MemoryService) -> None
     if service._background_tasks:
         await asyncio.gather(*service._background_tasks, return_exceptions=True)
     # Verify salience was still fired in background (entity-001 must be present)
-    service.async_repo.increment_salience.assert_called_once()
-    salience_ids = service.async_repo.increment_salience.call_args[0][0]
+    service.repo.increment_salience.assert_called_once()
+    salience_ids = service.repo.increment_salience.call_args[0][0]
     assert ENTITY_ID in salience_ids
 
 
@@ -1009,7 +1009,7 @@ async def test_evil13_search_salience_background_error_silent(service: MemorySer
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
-    service.async_repo.get_subgraph.return_value = {
+    service.repo.get_subgraph.return_value = {
         "nodes": [
             {
                 "id": ENTITY_ID,
@@ -1022,7 +1022,7 @@ async def test_evil13_search_salience_background_error_silent(service: MemorySer
         ],
         "edges": [],
     }
-    service.async_repo.increment_salience.side_effect = ConnectionError("FalkorDB down")
+    service.repo.increment_salience.side_effect = ConnectionError("FalkorDB down")
 
     result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
     assert len(result) == 1
@@ -1041,7 +1041,7 @@ async def test_sad15_search_salience_fallback_default(service: MemoryService) ->
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
-    service.async_repo.get_subgraph.return_value = {
+    service.repo.get_subgraph.return_value = {
         "nodes": [
             {
                 "id": ENTITY_ID,
@@ -1052,7 +1052,7 @@ async def test_sad15_search_salience_fallback_default(service: MemoryService) ->
         ],
         "edges": [],
     }
-    service.async_repo.increment_salience.return_value = []  # No updates returned
+    service.repo.increment_salience.return_value = []  # No updates returned
 
     result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
     assert len(result) == 1
@@ -1155,10 +1155,10 @@ async def test_happy_temporal_query_params_with_project() -> None:
 @pytest.mark.asyncio
 async def test_happy_query_timeline_with_project(service: MemoryService) -> None:
     """query_timeline filters by project_id when provided."""
-    service.async_repo.query_timeline.return_value = [
+    service.repo.query_timeline.return_value = [
         {"id": ENTITY_ID, "name": ENTITY_NAME, "project_id": PROJECT_ID}
     ]
-    result = await service.async_repo.query_timeline(
+    result = await service.repo.query_timeline(
         start="2026-01-01", end="2026-02-01", project_id=PROJECT_ID
     )
     assert len(result) == 1
@@ -1168,47 +1168,45 @@ async def test_happy_query_timeline_with_project(service: MemoryService) -> None
 @pytest.mark.asyncio
 async def test_happy_get_temporal_neighbors_before(service: MemoryService) -> None:
     """get_temporal_neighbors returns predecessors."""
-    service.async_repo.get_temporal_neighbors.return_value = [{"id": "prev-1", "name": "Previous"}]
-    result = await service.async_repo.get_temporal_neighbors(ENTITY_ID, direction="before")
+    service.repo.get_temporal_neighbors.return_value = [{"id": "prev-1", "name": "Previous"}]
+    result = await service.repo.get_temporal_neighbors(ENTITY_ID, direction="before")
     assert len(result) == 1
-    service.async_repo.get_temporal_neighbors.assert_called_once_with(ENTITY_ID, direction="before")
+    service.repo.get_temporal_neighbors.assert_called_once_with(ENTITY_ID, direction="before")
 
 
 @pytest.mark.asyncio
 async def test_happy_get_temporal_neighbors_after(service: MemoryService) -> None:
     """get_temporal_neighbors returns successors."""
-    service.async_repo.get_temporal_neighbors.return_value = [{"id": "next-1", "name": "Next"}]
-    result = await service.async_repo.get_temporal_neighbors(ENTITY_ID, direction="forward")
+    service.repo.get_temporal_neighbors.return_value = [{"id": "next-1", "name": "Next"}]
+    result = await service.repo.get_temporal_neighbors(ENTITY_ID, direction="forward")
     assert len(result) == 1
 
 
 @pytest.mark.asyncio
 async def test_happy_get_temporal_neighbors_both(service: MemoryService) -> None:
     """get_temporal_neighbors default direction returns both."""
-    service.async_repo.get_temporal_neighbors.return_value = [{"id": "prev-1"}, {"id": "next-1"}]
-    result = await service.async_repo.get_temporal_neighbors(ENTITY_ID)
+    service.repo.get_temporal_neighbors.return_value = [{"id": "prev-1"}, {"id": "next-1"}]
+    result = await service.repo.get_temporal_neighbors(ENTITY_ID)
     assert len(result) == 2
 
 
 @pytest.mark.asyncio
 async def test_happy_create_temporal_edge_success(service: MemoryService) -> None:
     """create_temporal_edge returns relationship metadata."""
-    service.async_repo.create_temporal_edge.return_value = {
+    service.repo.create_temporal_edge.return_value = {
         "rel_type": "PRECEDED_BY",
         "from_id": "entity-a",
         "to_id": "entity-b",
     }
-    result = await service.async_repo.create_temporal_edge("entity-a", "entity-b")
+    result = await service.repo.create_temporal_edge("entity-a", "entity-b")
     assert result["rel_type"] == "PRECEDED_BY"
 
 
 @pytest.mark.asyncio
 async def test_evil14_create_temporal_edge_not_found(service: MemoryService) -> None:
     """create_temporal_edge returns error when entities not found."""
-    service.async_repo.create_temporal_edge.return_value = {
-        "error": "One or both entities not found"
-    }
-    result = await service.async_repo.create_temporal_edge("missing-a", "missing-b")
+    service.repo.create_temporal_edge.return_value = {"error": "One or both entities not found"}
+    result = await service.repo.create_temporal_edge("missing-a", "missing-b")
     assert "error" in result
 
 
@@ -1223,14 +1221,14 @@ async def test_happy_create_entity_initializes_occurred_at(
     from claude_memory.schema import EntityCreateParams
 
     service.ontology.is_valid_type = MagicMock(return_value=True)
-    service.async_repo.create_node.return_value = {
+    service.repo.create_node.return_value = {
         "id": "new-id",
         "name": ENTITY_NAME,
         "node_type": "Concept",
     }
     service.embedder.encode.return_value = [0.1] * 384
     service.vector_store.upsert = AsyncMock()
-    service.async_repo.get_total_node_count.return_value = 1
+    service.repo.get_total_node_count.return_value = 1
 
     await service.create_entity(
         EntityCreateParams(
@@ -1239,7 +1237,7 @@ async def test_happy_create_entity_initializes_occurred_at(
             project_id=PROJECT_ID,
         )
     )
-    create_call_props = service.async_repo.create_node.call_args[0][1]
+    create_call_props = service.repo.create_node.call_args[0][1]
     assert "occurred_at" in create_call_props
 
 
@@ -1251,13 +1249,13 @@ async def test_happy_create_entity_respects_user_occurred_at(
     from claude_memory.schema import EntityCreateParams
 
     service.ontology.is_valid_type = MagicMock(return_value=True)
-    service.async_repo.create_node.return_value = {
+    service.repo.create_node.return_value = {
         "id": "new-id",
         "name": ENTITY_NAME,
     }
     service.embedder.encode.return_value = [0.1] * 384
     service.vector_store.upsert = AsyncMock()
-    service.async_repo.get_total_node_count.return_value = 1
+    service.repo.get_total_node_count.return_value = 1
 
     custom_ts = "2026-01-15T12:00:00+00:00"
     await service.create_entity(
@@ -1268,7 +1266,7 @@ async def test_happy_create_entity_respects_user_occurred_at(
             properties={"occurred_at": custom_ts},
         )
     )
-    create_call_props = service.async_repo.create_node.call_args[0][1]
+    create_call_props = service.repo.create_node.call_args[0][1]
     assert create_call_props["occurred_at"] == custom_ts
 
 
@@ -1279,14 +1277,14 @@ async def test_happy_service_query_timeline(service: MemoryService) -> None:
 
     from claude_memory.schema import TemporalQueryParams
 
-    service.async_repo.query_timeline.return_value = [{"id": ENTITY_ID, "name": ENTITY_NAME}]
+    service.repo.query_timeline.return_value = [{"id": ENTITY_ID, "name": ENTITY_NAME}]
     params = TemporalQueryParams(
         start=datetime(2026, 1, 1, tzinfo=UTC),
         end=datetime(2026, 2, 1, tzinfo=UTC),
     )
     result = await service.query_timeline(params)
     assert len(result) == 1
-    service.async_repo.query_timeline.assert_called_once()
+    service.repo.query_timeline.assert_called_once()
 
 
 @pytest.mark.asyncio()
@@ -1298,14 +1296,14 @@ async def test_sad20_service_query_timeline_with_project(
 
     from claude_memory.schema import TemporalQueryParams
 
-    service.async_repo.query_timeline.return_value = []
+    service.repo.query_timeline.return_value = []
     params = TemporalQueryParams(
         start=datetime(2026, 1, 1, tzinfo=UTC),
         end=datetime(2026, 2, 1, tzinfo=UTC),
         project_id=PROJECT_ID,
     )
     await service.query_timeline(params)
-    call_kwargs = service.async_repo.query_timeline.call_args[1]
+    call_kwargs = service.repo.query_timeline.call_args[1]
     assert call_kwargs["project_id"] == PROJECT_ID
 
 
@@ -1316,11 +1314,11 @@ async def test_happy_service_get_temporal_neighbors(
     """MemoryService.get_temporal_neighbors delegates to repo."""
     from claude_memory.schema import GetTemporalNeighborsParams
 
-    service.async_repo.get_temporal_neighbors.return_value = [{"id": "neighbor-1"}]
+    service.repo.get_temporal_neighbors.return_value = [{"id": "neighbor-1"}]
     params = GetTemporalNeighborsParams(entity_id=ENTITY_ID, direction="forward", limit=5)  # type: ignore[arg-type]
     result = await service.get_temporal_neighbors(params)
     assert len(result) == 1
-    service.async_repo.get_temporal_neighbors.assert_called_once_with(
+    service.repo.get_temporal_neighbors.assert_called_once_with(
         entity_id=ENTITY_ID, direction="forward", limit=5
     )
 
@@ -1330,16 +1328,16 @@ async def test_happy_service_get_temporal_neighbors(
 
 async def test_happy_create_entity_links_preceded_by(service: MemoryService) -> None:
     """create_entity links new entity to most recent in same project via PRECEDED_BY."""
-    service.async_repo.create_node.return_value = {
+    service.repo.create_node.return_value = {
         "id": "new-entity-id",
         "name": "New Entity",
     }
-    service.async_repo.get_most_recent_entity.return_value = {
+    service.repo.get_most_recent_entity.return_value = {
         "id": "prev-entity-id",
         "name": "Previous Entity",
     }
-    service.async_repo.create_edge.return_value = {"id": "edge-id"}
-    service.async_repo.get_total_node_count.return_value = 10
+    service.repo.create_edge.return_value = {"id": "edge-id"}
+    service.repo.get_total_node_count.return_value = 10
 
     from claude_memory.schema import EntityCreateParams
 
@@ -1353,7 +1351,7 @@ async def test_happy_create_entity_links_preceded_by(service: MemoryService) -> 
 
     # Verify PRECEDED_BY edge was created from prev → new
     found_preceded = False
-    for call in service.async_repo.create_edge.call_args_list:
+    for call in service.repo.create_edge.call_args_list:
         if call[0][2] == "PRECEDED_BY":
             assert call[0][0] == "prev-entity-id"
             assert call[0][1] == "new-entity-id"
@@ -1363,12 +1361,12 @@ async def test_happy_create_entity_links_preceded_by(service: MemoryService) -> 
 
 async def test_sad21_create_entity_no_preceded_by_when_first(service: MemoryService) -> None:
     """create_entity skips PRECEDED_BY when no previous entity exists in project."""
-    service.async_repo.create_node.return_value = {
+    service.repo.create_node.return_value = {
         "id": "first-entity-id",
         "name": "First Entity",
     }
-    service.async_repo.get_most_recent_entity.return_value = None
-    service.async_repo.get_total_node_count.return_value = 1
+    service.repo.get_most_recent_entity.return_value = None
+    service.repo.get_total_node_count.return_value = 1
 
     from claude_memory.schema import EntityCreateParams
 
@@ -1381,18 +1379,18 @@ async def test_sad21_create_entity_no_preceded_by_when_first(service: MemoryServ
     assert receipt.id == "first-entity-id"
 
     # create_edge should NOT have been called with PRECEDED_BY
-    for call in service.async_repo.create_edge.call_args_list:
+    for call in service.repo.create_edge.call_args_list:
         assert call[0][2] != "PRECEDED_BY"
 
 
 async def test_evil15_create_entity_preceded_by_error_surfaced(service: MemoryService) -> None:
     """PRECEDED_BY link failure doesn't block entity creation but surfaces warning."""
-    service.async_repo.create_node.return_value = {
+    service.repo.create_node.return_value = {
         "id": "new-id",
         "name": "Entity",
     }
-    service.async_repo.get_most_recent_entity.side_effect = ConnectionError("FalkorDB down")
-    service.async_repo.get_total_node_count.return_value = 5
+    service.repo.get_most_recent_entity.side_effect = ConnectionError("FalkorDB down")
+    service.repo.get_total_node_count.return_value = 5
 
     from claude_memory.schema import EntityCreateParams
 
@@ -1418,7 +1416,7 @@ async def test_happy_get_bottles_basic(service: MemoryService) -> None:
 
     from claude_memory.schema import BottleQueryParams
 
-    service.async_repo.get_bottles.return_value = [
+    service.repo.get_bottles.return_value = [
         {"id": "bottle-1", "name": "Remember this", "node_type": "Bottle"}
     ]
     params = BottleQueryParams(
@@ -1429,7 +1427,7 @@ async def test_happy_get_bottles_basic(service: MemoryService) -> None:
     result = await service.get_bottles(params)
     assert len(result) == 1
     assert result[0]["id"] == "bottle-1"
-    service.async_repo.get_bottles.assert_called_once_with(
+    service.repo.get_bottles.assert_called_once_with(
         limit=5,
         search_text="remember",
         before_date=None,
@@ -1442,7 +1440,7 @@ async def test_sad22_get_bottles_empty(service: MemoryService) -> None:
     """get_bottles returns empty list when no bottles found."""
     from claude_memory.schema import BottleQueryParams
 
-    service.async_repo.get_bottles.return_value = []
+    service.repo.get_bottles.return_value = []
     params = BottleQueryParams()
     result = await service.get_bottles(params)
     assert result == []
@@ -1458,7 +1456,7 @@ async def test_happy_get_bottles_with_content(service: MemoryService) -> None:
     from claude_memory.schema import BottleQueryParams
 
     # Repo returns bottles
-    service.async_repo.get_bottles.return_value = [
+    service.repo.get_bottles.return_value = [
         {"id": "bottle-1", "name": "Bottle: Remember this"},
         {"id": "bottle-2", "name": "Bottle: Future note"},
     ]
@@ -1468,7 +1466,7 @@ async def test_happy_get_bottles_with_content(service: MemoryService) -> None:
     obs_results_1.result_set = [["This is the bottle message body"]]
     obs_results_2 = MagicMock()
     obs_results_2.result_set = [["Second bottle body"], ["PS: extra note"]]
-    service.async_repo.execute_cypher.side_effect = [obs_results_1, obs_results_2]
+    service.repo.execute_cypher.side_effect = [obs_results_1, obs_results_2]
 
     params = BottleQueryParams(include_content=True)
     result = await service.get_bottles(params)
@@ -1488,7 +1486,7 @@ async def test_sad23_get_bottles_backward_compat(service: MemoryService) -> None
     """E-1: Default include_content=False returns bottles WITHOUT observations key."""
     from claude_memory.schema import BottleQueryParams
 
-    service.async_repo.get_bottles.return_value = [
+    service.repo.get_bottles.return_value = [
         {"id": "bottle-1", "name": "Bottle: Remember this"},
     ]
 
@@ -1500,7 +1498,7 @@ async def test_sad23_get_bottles_backward_compat(service: MemoryService) -> None
     # No observations key when include_content is False
     assert "observations" not in result[0]
     # execute_cypher should NOT have been called for observation lookup
-    service.async_repo.execute_cypher.assert_not_called()
+    service.repo.execute_cypher.assert_not_called()
 
 
 # ─── Phase 15A: Graph Health Metrics Tests ──────────────────────────
@@ -1508,25 +1506,25 @@ async def test_sad23_get_bottles_backward_compat(service: MemoryService) -> None
 
 async def test_sad24_get_graph_health_basic(service: MemoryService) -> None:
     """get_graph_health returns repo stats plus community_count."""
-    service.async_repo.get_graph_health.return_value = {
+    service.repo.get_graph_health.return_value = {
         "total_nodes": 10,
         "total_edges": 15,
         "density": 0.166667,
         "orphan_count": 2,
         "avg_degree": 1.5,
     }
-    service.async_repo.get_all_nodes.return_value = []
+    service.repo.get_all_nodes.return_value = []
 
     result = await service.get_graph_health()
     assert result["total_nodes"] == 10
     assert result["total_edges"] == 15
     assert "community_count" in result
-    service.async_repo.get_graph_health.assert_called_once()
+    service.repo.get_graph_health.assert_called_once()
 
 
 async def test_happy_get_graph_health_few_nodes(service: MemoryService) -> None:
     """get_graph_health skips clustering when fewer than 3 nodes."""
-    service.async_repo.get_graph_health.return_value = {
+    service.repo.get_graph_health.return_value = {
         "total_nodes": 2,
         "total_edges": 1,
         "density": 0.5,
@@ -1537,7 +1535,7 @@ async def test_happy_get_graph_health_few_nodes(service: MemoryService) -> None:
     result = await service.get_graph_health()
     assert result["community_count"] == 0
     # Should not call get_all_nodes since total_nodes < 3
-    service.async_repo.get_all_nodes.assert_not_called()
+    service.repo.get_all_nodes.assert_not_called()
 
 
 # ─── Phase 15C: Structural Gap Detection Service Tests ──────────────
@@ -1545,7 +1543,7 @@ async def test_happy_get_graph_health_few_nodes(service: MemoryService) -> None:
 
 async def test_sad25_detect_structural_gaps_no_clusters(service: MemoryService) -> None:
     """detect_structural_gaps returns empty when too few nodes for clustering."""
-    service.async_repo.get_all_nodes.return_value = [{"id": "a1", "embedding": [1.0]}]
+    service.repo.get_all_nodes.return_value = [{"id": "a1", "embedding": [1.0]}]
 
     from claude_memory.schema import GapDetectionParams
 
@@ -1563,8 +1561,8 @@ async def test_sad26_detect_structural_gaps_with_gaps(service: MemoryService) ->
 
     # Mock nodes — enough for clustering
     nodes = [{"id": f"n{i}", "name": f"Node{i}", "embedding": [float(i)]} for i in range(6)]
-    service.async_repo.get_all_nodes.return_value = nodes
-    service.async_repo.get_all_edges.return_value = []
+    service.repo.get_all_nodes.return_value = nodes
+    service.repo.get_all_edges.return_value = []
 
     # Mock clustering to return 2 clusters
     mock_clusters = [
@@ -1606,9 +1604,9 @@ async def test_evil16_create_entity_vector_failure_always_raises(
     """When vector upsert fails during create, it always raises — no lenient path."""
     from claude_memory.schema import EntityCreateParams
 
-    service.async_repo.create_node.return_value = {"id": ENTITY_ID, "name": ENTITY_NAME}
-    service.async_repo.get_most_recent_entity.return_value = None
-    service.async_repo.get_total_node_count.return_value = 42
+    service.repo.create_node.return_value = {"id": ENTITY_ID, "name": ENTITY_NAME}
+    service.repo.get_most_recent_entity.return_value = None
+    service.repo.get_total_node_count.return_value = 42
     service.ontology = MagicMock()
     service.ontology.is_valid_type.return_value = True
     service.vector_store.upsert.side_effect = RuntimeError("Qdrant down")
@@ -1626,8 +1624,8 @@ async def test_evil17_update_entity_vector_failure_always_raises(
     service: MemoryService,
 ) -> None:
     """When vector upsert fails during update, it always raises — no lenient path."""
-    service.async_repo.get_node.return_value = MOCK_NODE_PROPS.copy()
-    service.async_repo.update_node.return_value = MOCK_NODE_PROPS.copy()
+    service.repo.get_node.return_value = MOCK_NODE_PROPS.copy()
+    service.repo.update_node.return_value = MOCK_NODE_PROPS.copy()
     service.vector_store.upsert.side_effect = RuntimeError("Qdrant timeout")
 
     params = EntityUpdateParams(
@@ -1642,7 +1640,7 @@ async def test_evil18_delete_entity_soft_vector_failure_always_raises(
     service: MemoryService,
 ) -> None:
     """When vector delete fails during soft delete, it always raises."""
-    service.async_repo.get_node.return_value = MOCK_NODE_PROPS.copy()
+    service.repo.get_node.return_value = MOCK_NODE_PROPS.copy()
     service.vector_store.delete.side_effect = RuntimeError("Qdrant unreachable")
 
     params = EntityDeleteParams(
@@ -1658,7 +1656,7 @@ async def test_evil19_delete_entity_hard_vector_failure_always_raises(
     service: MemoryService,
 ) -> None:
     """When vector delete fails during hard delete, it always raises."""
-    service.async_repo.get_node.return_value = MOCK_NODE_PROPS.copy()
+    service.repo.get_node.return_value = MOCK_NODE_PROPS.copy()
     service.vector_store.delete.side_effect = RuntimeError("Qdrant gone")
 
     params = EntityDeleteParams(
@@ -1768,7 +1766,7 @@ async def test_happy_search_normal_operation_returns_results(service: MemoryServ
 
 async def test_happy_system_diagnostics_returns_all_sections(service: MemoryService) -> None:
     """E-5: system_diagnostics returns graph, vector, and split_brain sections."""
-    service.async_repo.get_graph_health.return_value = {
+    service.repo.get_graph_health.return_value = {
         "total_nodes": 100,
         "total_edges": 200,
         "density": 0.04,
@@ -1776,7 +1774,7 @@ async def test_happy_system_diagnostics_returns_all_sections(service: MemoryServ
         "avg_degree": 4.0,
     }
     service.vector_store.count.return_value = 95
-    service.async_repo.get_all_node_ids.return_value = [f"id-{i}" for i in range(100)]
+    service.repo.get_all_node_ids.return_value = [f"id-{i}" for i in range(100)]
     service.vector_store.list_ids.return_value = [f"id-{i}" for i in range(95)]
 
     result = await service.system_diagnostics()
@@ -1790,7 +1788,7 @@ async def test_happy_system_diagnostics_returns_all_sections(service: MemoryServ
 
 async def test_happy_system_diagnostics_detects_split_brain(service: MemoryService) -> None:
     """E-5: Detects entities in graph but missing from vector store."""
-    service.async_repo.get_graph_health.return_value = {
+    service.repo.get_graph_health.return_value = {
         "total_nodes": 5,
         "total_edges": 3,
         "density": 0.3,
@@ -1799,7 +1797,7 @@ async def test_happy_system_diagnostics_detects_split_brain(service: MemoryServi
     }
     service.vector_store.count.return_value = 3
     # IDs in graph: 1..5; IDs in vector: 1..3 → missing: 4, 5
-    service.async_repo.get_all_node_ids.return_value = ["id-1", "id-2", "id-3", "id-4", "id-5"]
+    service.repo.get_all_node_ids.return_value = ["id-1", "id-2", "id-3", "id-4", "id-5"]
     service.vector_store.list_ids.return_value = ["id-1", "id-2", "id-3"]
 
     result = await service.system_diagnostics()
@@ -1810,7 +1808,7 @@ async def test_happy_system_diagnostics_detects_split_brain(service: MemoryServi
 
 async def test_evil24_system_diagnostics_handles_backend_failure(service: MemoryService) -> None:
     """E-5: Graceful degradation when vector store is unreachable."""
-    service.async_repo.get_graph_health.return_value = {
+    service.repo.get_graph_health.return_value = {
         "total_nodes": 10,
         "total_edges": 5,
         "density": 0.1,
@@ -1818,7 +1816,7 @@ async def test_evil24_system_diagnostics_handles_backend_failure(service: Memory
         "avg_degree": 1.0,
     }
     service.vector_store.count.side_effect = ConnectionError("Qdrant down")
-    service.async_repo.get_all_node_ids.return_value = [f"id-{i}" for i in range(10)]
+    service.repo.get_all_node_ids.return_value = [f"id-{i}" for i in range(10)]
 
     result = await service.system_diagnostics()
 
@@ -1834,12 +1832,12 @@ async def test_happy_reconnect_returns_structured_briefing(service: MemoryServic
     """E-4: reconnect returns recent_entities, recent_sessions, and health."""
 
     # Mock recent entities via timeline query
-    service.async_repo.query_timeline.return_value = [
+    service.repo.query_timeline.return_value = [
         {"id": "e-1", "name": "Python", "node_type": "Technology", "created_at": "2026-01-01"},
         {"id": "e-2", "name": "Rust", "node_type": "Technology", "created_at": "2026-01-02"},
     ]
     # Mock graph health
-    service.async_repo.get_graph_health.return_value = {
+    service.repo.get_graph_health.return_value = {
         "total_nodes": 50,
         "total_edges": 80,
         "density": 0.06,
@@ -1857,10 +1855,10 @@ async def test_happy_reconnect_returns_structured_briefing(service: MemoryServic
 
 async def test_happy_reconnect_filters_by_project(service: MemoryService) -> None:
     """E-4: reconnect accepts project_id to filter results."""
-    service.async_repo.query_timeline.return_value = [
+    service.repo.query_timeline.return_value = [
         {"id": "e-1", "name": "Django", "node_type": "Framework", "project_id": "proj-1"},
     ]
-    service.async_repo.get_graph_health.return_value = {
+    service.repo.get_graph_health.return_value = {
         "total_nodes": 10,
         "total_edges": 5,
         "density": 0.1,
@@ -1873,14 +1871,14 @@ async def test_happy_reconnect_filters_by_project(service: MemoryService) -> Non
     assert len(result["recent_entities"]) == 1
     assert result["recent_entities"][0]["name"] == "Django"
     # Verify project_id was passed to timeline query
-    call_args = service.async_repo.query_timeline.call_args
+    call_args = service.repo.query_timeline.call_args
     assert call_args.kwargs.get("project_id") == "proj-1" or "proj-1" in str(call_args)
 
 
 async def test_sad27_reconnect_handles_empty_graph(service: MemoryService) -> None:
     """E-4: reconnect handles empty graph gracefully."""
-    service.async_repo.query_timeline.return_value = []
-    service.async_repo.get_graph_health.return_value = {
+    service.repo.query_timeline.return_value = []
+    service.repo.get_graph_health.return_value = {
         "total_nodes": 0,
         "total_edges": 0,
         "density": 0.0,
@@ -1903,9 +1901,9 @@ async def test_happy_b10b_concurrency_stress_create_entity(service: MemoryServic
 
     from claude_memory.schema import EntityCreateParams
 
-    service.async_repo.get_most_recent_entity.return_value = None
-    service.async_repo.get_total_node_count.return_value = 0
-    service.async_repo.get_observations_for_entity.return_value = []
+    service.repo.get_most_recent_entity.return_value = None
+    service.repo.get_total_node_count.return_value = 0
+    service.repo.get_observations_for_entity.return_value = []
 
     # We want create_node to return a unique ID for each call
     call_counter = 0
@@ -1915,7 +1913,7 @@ async def test_happy_b10b_concurrency_stress_create_entity(service: MemoryServic
         call_counter += 1
         return {"id": f"concurrent-ent-{call_counter}"}
 
-    service.async_repo.create_node.side_effect = mock_create_node
+    service.repo.create_node.side_effect = mock_create_node
 
     # Create 10 tasks
     tasks = []
@@ -1935,7 +1933,7 @@ async def test_happy_b10b_concurrency_stress_create_entity(service: MemoryServic
     assert len(results) == 10
     ids = [r.id for r in results]
     assert len(set(ids)) == 10
-    assert service.async_repo.create_node.call_count == 10
+    assert service.repo.create_node.call_count == 10
 
 
 @pytest.mark.asyncio
@@ -1951,8 +1949,8 @@ async def test_evil_concurrent_consolidate_memories(service: MemoryService) -> N
         call_counter += 1
         return {"id": f"consolidated-ent-{call_counter}", "name": "Consolidated"}
 
-    service.async_repo.create_node.side_effect = mock_create_node
-    service.async_repo.update_node.return_value = {"status": "archived"}
+    service.repo.create_node.side_effect = mock_create_node
+    service.repo.update_node.return_value = {"status": "archived"}
 
     tasks = []
     for i in range(5):
@@ -1969,6 +1967,6 @@ async def test_evil_concurrent_consolidate_memories(service: MemoryService) -> N
         assert not isinstance(r, Exception), f"Exception raised: {r}"
         assert "id" in r
 
-    assert service.async_repo.create_node.call_count == 5
-    assert service.async_repo.create_edge.call_count == 10
-    assert service.async_repo.update_node.call_count == 10
+    assert service.repo.create_node.call_count == 5
+    assert service.repo.create_edge.call_count == 10
+    assert service.repo.update_node.call_count == 10

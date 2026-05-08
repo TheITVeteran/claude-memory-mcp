@@ -26,8 +26,8 @@ def memory_service(mock_vector_store: Any) -> Generator[MemoryService, None, Non
         mock_instance.encode.return_value = [0.1] * 1024
 
         service = MemoryService(embedding_service=mock_instance, vector_store=mock_vector_store)
-        service.async_repo.client = MagicMock()
-        service.async_repo.client.select_graph.return_value = MagicMock()
+        service.repo.client = MagicMock()
+        service.repo.client.select_graph.return_value = MagicMock()
 
         # Ensure service uses our mock
         service.embedder = mock_instance
@@ -37,7 +37,7 @@ def memory_service(mock_vector_store: Any) -> Generator[MemoryService, None, Non
 
 @pytest.mark.asyncio
 async def test_happy_get_evolution(memory_service: MemoryService) -> None:
-    graph = memory_service.async_repo.client.select_graph.return_value
+    graph = memory_service.repo.client.select_graph.return_value
 
     # Mock observations
     obs1 = MagicMock()
@@ -64,7 +64,7 @@ async def test_happy_point_in_time_query(memory_service: Any, mock_vector_store:
 
     # Repo get_subgraph should hydrate nodes
     # We access repo via memory_service.repo
-    memory_service.async_repo.get_subgraph = MagicMock(
+    memory_service.repo.get_subgraph = AsyncMock(
         return_value={
             "nodes": [
                 {"id": "e1", "name": "Match", "created_at": "2023-01-01"},
@@ -89,11 +89,11 @@ async def test_happy_point_in_time_query(memory_service: Any, mock_vector_store:
 
 @pytest.mark.asyncio
 async def test_happy_archive_entity(memory_service: MemoryService) -> None:
-    graph = memory_service.async_repo.client.select_graph.return_value
+    graph = memory_service.repo.client.select_graph.return_value
 
     # AUDIT-B2: archive_entity now checks existence first
-    memory_service.async_repo.get_node = MagicMock(return_value={"id": "e1", "name": "Test Entity"})
-    memory_service.async_repo.get_node = AsyncMock(return_value={"id": "e1", "name": "Test Entity"})
+    memory_service.repo.get_node = AsyncMock(return_value={"id": "e1", "name": "Test Entity"})
+    memory_service.repo.get_node = AsyncMock(return_value={"id": "e1", "name": "Test Entity"})
 
     mock_node = MagicMock()
     mock_node.properties = {"id": "e1", "status": "archived"}
@@ -114,7 +114,7 @@ async def test_happy_archive_entity(memory_service: MemoryService) -> None:
 
 @pytest.mark.asyncio
 async def test_sad1_prune_stale(memory_service: MemoryService) -> None:
-    graph = memory_service.async_repo.client.select_graph.return_value
+    graph = memory_service.repo.client.select_graph.return_value
 
     graph.query.return_value.result_set = [[5]]  # 5 deleted nodes
 

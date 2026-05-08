@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 """Tests for stats.py — 3 evil / 1 sad / 1 happy + accumulator tests."""
 
-from __future__ import annotations
 
 from datetime import UTC, datetime
 from unittest.mock import patch

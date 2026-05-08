@@ -55,7 +55,7 @@ def service_with_ontology() -> Generator[Any, None, None]:
     with patch("claude_memory.ontology.OntologyManager", return_value=real_ontology):
         service = MemoryService(embedding_service=embedder_mock, vector_store=vector_mock)
         service.repo = repo_mock
-        service.async_repo = async_repo_mock
+        service.repo = async_repo_mock
     yield service
 
     if os.path.exists("test_dynamic_ontology.json"):
@@ -85,4 +85,4 @@ async def test_happy_create_entity_valid_dynamic_type(service_with_ontology: Any
 
     assert receipt.id == "123"
     # Verify async_repo called with "Recipe" (B10.B: CrudMixin uses async_repo)
-    service_with_ontology.async_repo.create_node.assert_called_with("Recipe", ANY)
+    service_with_ontology.repo.create_node.assert_called_with("Recipe", ANY)

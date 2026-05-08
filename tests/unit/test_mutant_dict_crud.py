@@ -1,9 +1,10 @@
+from __future__ import annotations
+
 """Mutation-killing tests for dict values — entity creation (crud.py).
 
 Split from test_mutant_dict_values.py per 300-line module cap.
 """
 
-from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 

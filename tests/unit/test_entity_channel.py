@@ -1,10 +1,11 @@
+from __future__ import annotations
+
 """Gold Stack tests for _entity_extraction_enrichment channel (Tier 2.2).
 
 TDD Red phase — tests written BEFORE the channel implementation.
 Tests the pipeline integration: query → NER → entity lookup → channel results.
 """
 
-from __future__ import annotations
 
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -39,7 +40,7 @@ def service():
 
                 svc = MemoryService(embedding_service=mock_embedder)
 
-    svc.repo = MagicMock()
+    svc.repo = AsyncMock()
     svc.activation_engine.repo = svc.repo
     svc.vector_store = AsyncMock()
     svc.router = MagicMock(spec=QueryRouter)
@@ -69,7 +70,7 @@ class TestEntityExtractionChannel:
         # Mock: Cypher finds a node named "Google"
         mock_node = MagicMock()
         mock_node.properties = {"id": "google-001", "name": "Google"}
-        service.async_repo.execute_cypher.return_value = _make_cypher_result([[mock_node]])
+        service.repo.execute_cypher.return_value = _make_cypher_result([[mock_node]])
 
         results = await service._entity_extraction_enrichment("Tell me about Google")
 
@@ -85,7 +86,7 @@ class TestEntityExtractionChannel:
         mock_node_b = MagicMock()
         mock_node_b.properties = {"id": "bob-001", "name": "Bob"}
 
-        service.async_repo.execute_cypher.return_value = _make_cypher_result(
+        service.repo.execute_cypher.return_value = _make_cypher_result(
             [
                 [mock_node_a],
                 [mock_node_b],
@@ -108,7 +109,7 @@ class TestEntityExtractionChannel:
     @pytest.mark.asyncio()
     async def test_sad1_entities_not_in_graph(self, service) -> None:
         """NER extracts entities but graph has no matching nodes → empty."""
-        service.async_repo.execute_cypher.return_value = _make_cypher_result([])
+        service.repo.execute_cypher.return_value = _make_cypher_result([])
 
         results = await service._entity_extraction_enrichment("Tell me about Elon Musk")
 
@@ -117,7 +118,7 @@ class TestEntityExtractionChannel:
     @pytest.mark.asyncio()
     async def test_evil1_cypher_error_returns_empty(self, service) -> None:
         """Cypher query failure → graceful degradation (empty list)."""
-        service.async_repo.execute_cypher.side_effect = ConnectionError("FalkorDB down")
+        service.repo.execute_cypher.side_effect = ConnectionError("FalkorDB down")
 
         results = await service._entity_extraction_enrichment("Tell me about Google")
 
@@ -135,7 +136,7 @@ class TestEntityExtractionChannel:
         """Results must have 'id' key for RRF merge compatibility."""
         mock_node = MagicMock()
         mock_node.properties = {"id": "test-001", "name": "TestEntity"}
-        service.async_repo.execute_cypher.return_value = _make_cypher_result([[mock_node]])
+        service.repo.execute_cypher.return_value = _make_cypher_result([[mock_node]])
 
         results = await service._entity_extraction_enrichment("Tell me about TestEntity")
 

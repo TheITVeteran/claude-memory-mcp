@@ -1,9 +1,10 @@
+from __future__ import annotations
+
 """Mutation-killing tests for router.py — keywords, QueryIntent, classification.
 
 Split from test_mutant_schema_integrity.py per 300-line module cap.
 """
 
-from __future__ import annotations
 
 import pytest
 

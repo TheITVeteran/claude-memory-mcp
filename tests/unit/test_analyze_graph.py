@@ -6,7 +6,7 @@ Tests verify BEHAVIOR: given a known graph structure, the algorithms
 return correct relative rankings and community groupings.
 """
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -17,7 +17,7 @@ from claude_memory.schema import AnalyzeGraphParams
 def _make_analysis_mixin() -> AnalysisMixin:
     """Build an AnalysisMixin with all dependencies mocked."""
     mixin = AnalysisMixin.__new__(AnalysisMixin)
-    mixin.repo = MagicMock()
+    mixin.repo = AsyncMock()
     mixin.embedder = MagicMock()
     mixin.vector_store = MagicMock()
     mixin.ontology = MagicMock()

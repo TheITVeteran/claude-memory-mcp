@@ -43,12 +43,13 @@ def service(mock_vector_store: Any) -> Generator[MemoryService, None, None]:
 # ─── shortest_path_length Tests ─────────────────────────────────────
 
 
-def test_evil1_forward_succeeds(service: MemoryService) -> None:
+@pytest.mark.asyncio
+async def test_evil1_forward_succeeds(service: MemoryService) -> None:
     """Evil: forward direction returns length — use it directly."""
-    graph = service.async_repo.client.select_graph.return_value
+    graph = service.repo.client.select_graph.return_value
     graph.query.return_value.result_set = [[3]]
 
-    result = service.async_repo.shortest_path_length(ENTITY_ID, ENTITY_ID_2)
+    result = await service.repo.shortest_path_length(ENTITY_ID, ENTITY_ID_2)
 
     assert result == 3
     # Only one call (forward succeeded)
@@ -56,28 +57,30 @@ def test_evil1_forward_succeeds(service: MemoryService) -> None:
     assert "shortestPath" in graph.query.call_args[0][0]
 
 
-def test_evil2_forward_fails_reverse_succeeds(service: MemoryService) -> None:
+@pytest.mark.asyncio
+async def test_evil2_forward_fails_reverse_succeeds(service: MemoryService) -> None:
     """Evil: forward throws exception, reverse returns length."""
-    graph = service.async_repo.client.select_graph.return_value
+    graph = service.repo.client.select_graph.return_value
 
     # First call (forward) raises, second call (reverse) returns 5
     graph.query.side_effect = [Exception("no directed path"), MagicMock(result_set=[[5]])]
 
-    result = service.async_repo.shortest_path_length(ENTITY_ID, ENTITY_ID_2)
+    result = await service.repo.shortest_path_length(ENTITY_ID, ENTITY_ID_2)
 
     assert result == 5
     assert graph.query.call_count == 2
 
 
-def test_evil3_both_directions_fail(service: MemoryService) -> None:
+@pytest.mark.asyncio
+async def test_evil3_both_directions_fail(service: MemoryService) -> None:
     """Evil: both forward and reverse return no result — returns None."""
-    graph = service.async_repo.client.select_graph.return_value
+    graph = service.repo.client.select_graph.return_value
 
     # Both calls return empty result sets
     empty_result = MagicMock(result_set=[])
     graph.query.return_value = empty_result
 
-    result = service.async_repo.shortest_path_length(ENTITY_ID, ENTITY_ID_2)
+    result = await service.repo.shortest_path_length(ENTITY_ID, ENTITY_ID_2)
 
     assert result is None
 

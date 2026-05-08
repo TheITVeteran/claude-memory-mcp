@@ -1,10 +1,11 @@
+from __future__ import annotations
+
 """Mutation-killing tests for lock_manager.py — ProjectLock context manager, env chains.
 
 Targets ~15 kills: ProjectLock project_id propagation, acquire/release,
 async context manager, release-on-exception.
 """
 
-from __future__ import annotations
 
 from unittest.mock import patch
 

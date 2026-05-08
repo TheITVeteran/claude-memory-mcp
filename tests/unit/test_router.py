@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Tests for QueryRouter — intent classification and dispatch.
 
 Covers:
@@ -7,7 +9,6 @@ Covers:
 - Edge cases: empty query, relational with/without quoted entities
 """
 
-from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -233,7 +234,7 @@ class TestSearchStrategy:
         svc.vector_store.search = AsyncMock(return_value=[{"_id": "a", "_score": 0.9}])
         svc.router = MagicMock()
         svc.router.classify.return_value = QueryIntent.SEMANTIC
-        svc.repo = MagicMock()
+        svc.repo = AsyncMock()
         svc.repo.get_subgraph.return_value = {
             "nodes": [
                 {

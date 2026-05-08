@@ -15,7 +15,7 @@ from claude_memory.schema import PruneStaleParams
 def _make_analysis_mixin() -> AnalysisMixin:
     """Build an AnalysisMixin with all dependencies mocked."""
     mixin = AnalysisMixin.__new__(AnalysisMixin)
-    mixin.repo = MagicMock()
+    mixin.repo = AsyncMock()
     mixin.embedder = MagicMock()
     mixin.vector_store = AsyncMock()
     mixin.ontology = MagicMock()

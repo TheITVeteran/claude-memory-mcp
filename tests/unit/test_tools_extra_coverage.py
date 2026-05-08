@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Tests for tools_extra.py — coverage gap remediation.
 
 Covers the thin runtime-registered MCP tool functions:
@@ -10,7 +12,6 @@ Covers the thin runtime-registered MCP tool functions:
   - system_diagnostics
 """
 
-from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
 
