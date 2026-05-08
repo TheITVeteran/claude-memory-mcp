@@ -91,7 +91,7 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
         SKIP $offset
         LIMIT $limit
         """
-        res = await self.async_repo.execute_cypher(
+        res = await self.repo.execute_cypher(
             query, {"entity_id": params.entity_id, "limit": params.limit, "offset": params.offset}
         )
         nodes = [row[0].properties for row in res.result_set if row]
@@ -130,7 +130,7 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
         RETURN p
         """
         try:
-            res = await self.async_repo.execute_cypher(fwd_query, cypher_params)
+            res = await self.repo.execute_cypher(fwd_query, cypher_params)
             path_data = _extract_path(res)
             if path_data:
                 return path_data
@@ -144,7 +144,7 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
         WITH shortestPath((b)-[*..10]->(a)) AS p
         RETURN p
         """
-        res = await self.async_repo.execute_cypher(rev_query, cypher_params)
+        res = await self.repo.execute_cypher(rev_query, cypher_params)
         path_data = _extract_path(res)
         if path_data:
             path_data.reverse()
@@ -162,7 +162,7 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
         RETURN distinct m
         LIMIT $limit
         """
-        res = await self.async_repo.execute_cypher(
+        res = await self.repo.execute_cypher(
             query, {"entity_id": params.entity_id, "limit": params.limit}
         )
         nodes = [row[0].properties for row in res.result_set if row]
@@ -178,7 +178,7 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
         RETURN o
         ORDER BY o.created_at DESC
         """
-        res = await self.async_repo.execute_cypher(query, {"entity_id": params.entity_id})
+        res = await self.repo.execute_cypher(query, {"entity_id": params.entity_id})
         nodes = [row[0].properties for row in res.result_set if row]
         for n in nodes:
             n.pop("embedding", None)
@@ -198,7 +198,7 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
 
         # Hydrate from Graph
         ids = [item["_id"] for item in vector_results]
-        graph_data = await self.async_repo.get_subgraph(ids, depth=0)
+        graph_data = await self.repo.get_subgraph(ids, depth=0)
 
         # Flatten
         nodes = list(graph_data["nodes"])
@@ -310,8 +310,8 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
           {project_clause}
         RETURN n
         """
-        start_res = await self.async_repo.execute_cypher(start_q, params)
-        end_res = await self.async_repo.execute_cypher(end_q, params)
+        start_res = await self.repo.execute_cypher(start_q, params)
+        end_res = await self.repo.execute_cypher(end_q, params)
         return (
             self._diff_extract_entities(start_res),
             self._diff_extract_entities(end_res),
@@ -347,8 +347,8 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
         RETURN r.id AS rid, type(r) AS rtype,
                a.id AS src, b.id AS dst, r.created_at AS cat
         """
-        start_res = await self.async_repo.execute_cypher(start_q, params)
-        end_res = await self.async_repo.execute_cypher(end_q, params)
+        start_res = await self.repo.execute_cypher(start_q, params)
+        end_res = await self.repo.execute_cypher(end_q, params)
         return self._diff_extract_rels(start_res), self._diff_extract_rels(end_res)
 
     @staticmethod
@@ -379,7 +379,7 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
         RETURN old.id AS old_id, old.name AS old_name,
                new.id AS new_id, new.name AS new_name
         """
-        res = await self.async_repo.execute_cypher(q, params)
+        res = await self.repo.execute_cypher(q, params)
         return [
             {"old_id": row[0], "old_name": row[1], "new_id": row[2], "new_name": row[3]}
             for row in res.result_set
@@ -398,7 +398,7 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
             RETURN o.content AS content, o.created_at AS cat
             ORDER BY o.created_at ASC
             """
-            res = await self.async_repo.execute_cypher(
+            res = await self.repo.execute_cypher(
                 obs_q, {"eid": entity["id"], "start": start_iso, "end": end_iso}
             )
             new_obs = [

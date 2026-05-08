@@ -150,12 +150,12 @@ class SearchChannelsMixin:
                             "WHERE toLower(e.name) = toLower($name) "
                             "AND e.project_id = $pid RETURN e"
                         )
-                        res = await self.async_repo.execute_cypher(
+                        res = await self.repo.execute_cypher(
                             cypher, {"name": name, "pid": project_id}
                         )
                     else:
                         cypher = "MATCH (e:Entity) WHERE toLower(e.name) = toLower($name) RETURN e"
-                        res = await self.async_repo.execute_cypher(cypher, {"name": name})
+                        res = await self.repo.execute_cypher(cypher, {"name": name})
                     for row in res.result_set:
                         node = row[0]
                         props = dict(node.properties)
@@ -226,14 +226,14 @@ class SearchChannelsMixin:
                             "MATCH (e:Entity) WHERE toLower(e.name) = toLower($name) "
                             "AND e.project_id = $pid RETURN e.id"
                         )
-                        res = await self.async_repo.execute_cypher(
+                        res = await self.repo.execute_cypher(
                             cypher, {"name": name, "pid": project_id}
                         )
                     else:
                         cypher = (
                             "MATCH (e:Entity) WHERE toLower(e.name) = toLower($name) RETURN e.id"
                         )
-                        res = await self.async_repo.execute_cypher(cypher, {"name": name})
+                        res = await self.repo.execute_cypher(cypher, {"name": name})
                     if res.result_set:
                         resolved_ids.append(str(res.result_set[0][0]))
                 except Exception:
@@ -261,11 +261,11 @@ class SearchChannelsMixin:
 
         seed_ids = [vr["_id"] for vr in vector_results]
         activation_map = self.activation_engine.activate(seed_ids)
-        spread_map = self.activation_engine.spread(activation_map, decay=0.6, max_hops=3)
+        spread_map = await self.activation_engine.spread(activation_map, decay=0.6, max_hops=3)
 
         # Gather all activated entity IDs
         all_ids = list(set(seed_ids) | set(spread_map.keys()))
-        graph_data = await self.async_repo.get_subgraph(all_ids, depth=0)
+        graph_data = await self.repo.get_subgraph(all_ids, depth=0)
 
         return [
             {"id": n.get("id", ""), **n}
@@ -336,7 +336,7 @@ class SearchChannelsMixin:
         # (observations, relationships) is handled by _deep_hydrate_node.
         # depth=1 causes get_subgraph to fail on isolated nodes due to
         # UNWIND relationships(path) producing zero rows for unconnected nodes.
-        graph_data = await self.async_repo.get_subgraph(ids, depth=0)
+        graph_data = await self.repo.get_subgraph(ids, depth=0)
         nodes_map = {n["id"]: n for n in graph_data["nodes"]}
 
         # Fire-and-forget salience update
@@ -466,7 +466,7 @@ class SearchChannelsMixin:
             "MATCH (e:Entity {id: $eid})-[:HAS_OBSERVATION]->(o) "
             "RETURN o.content ORDER BY o.created_at ASC"
         )
-        obs_res = await self.async_repo.execute_cypher(obs_query, {"eid": node_id})
+        obs_res = await self.repo.execute_cypher(obs_query, {"eid": node_id})
         observations = [row[0] for row in obs_res.result_set if row[0]]
         relationships = [
             {

@@ -48,7 +48,7 @@ class LibrarianAgent:
 
         # 1. Fetch
         try:
-            nodes = self.memory.repo.get_all_nodes(limit=2000)
+            nodes = await self.memory.repo.get_all_nodes(limit=2000)
             logger.info("Fetched %d nodes for analysis.", len(nodes))
         except (ConnectionError, TimeoutError, OSError) as e:
             logger.error("Failed to fetch nodes: %s", e)
@@ -67,10 +67,10 @@ class LibrarianAgent:
         await self._consolidate_clusters(clusters, report)
 
         # 4. Gap Detection
-        edges = self.memory.repo.get_all_edges()
+        edges = await self.memory.repo.get_all_edges()
         gaps = detect_gaps(clusters, edges)
         report["gaps_detected"] = len(gaps)
-        self._store_gap_reports(clusters, gaps, report)
+        await self._store_gap_reports(clusters, gaps, report)
 
         # 5. Prune Stale
         await self._prune_stale(report)
@@ -93,7 +93,7 @@ class LibrarianAgent:
                 logger.error("Failed to consolidate cluster %s: %s", cluster.id, e)
                 report["errors"].append(f"Cluster {cluster.id}: {e!s}")
 
-    def _store_gap_reports(
+    async def _store_gap_reports(
         self, clusters: list[Any], gaps: list[Any], report: dict[str, Any]
     ) -> None:
         """Store top 3 structural gaps as GapReport entities."""
@@ -101,7 +101,7 @@ class LibrarianAgent:
         for gap in gaps[:gap_limit]:
             try:
                 props = self._build_gap_report(clusters, gap)
-                self.memory.repo.create_node("GapReport", props)
+                await self.memory.repo.create_node("GapReport", props)
                 report["gap_reports_stored"] += 1
             except (ConnectionError, TimeoutError, OSError) as e:
                 report["errors"].append(f"GapReport: {e!s}")

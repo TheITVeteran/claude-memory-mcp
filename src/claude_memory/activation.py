@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # pragma: no cover
-    from claude_memory.repository import MemoryRepository
+    from claude_memory.repository_async import AsyncMemoryRepository
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ class ActivationEngine:
         ranked = engine.rank(candidates, vector_scores, activation, salience_scores)
     """
 
-    def __init__(self, repo: MemoryRepository) -> None:
+    def __init__(self, repo: AsyncMemoryRepository) -> None:
         """Initialise with a graph repository for subgraph queries."""
         self.repo = repo
 
@@ -95,7 +95,7 @@ class ActivationEngine:
     # Step 2: BFS spread with decay + lateral inhibition
     # ------------------------------------------------------------------
 
-    def spread(
+    async def spread(
         self,
         activation_map: dict[str, float],
         decay: float = 0.6,
@@ -135,7 +135,7 @@ class ActivationEngine:
             frontier_ids = list(frontier.keys())
 
             # Fetch 1-hop neighbors for the entire frontier
-            subgraph = self.repo.get_subgraph(frontier_ids, depth=1)
+            subgraph = await self.repo.get_subgraph(frontier_ids, depth=1)
             edges = subgraph.get("edges", [])
 
             for edge in edges:

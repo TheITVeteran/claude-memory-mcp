@@ -39,21 +39,21 @@ def get_graph_data(limit: int = 100, focus: str = "") -> Any:
         OPTIONAL MATCH (n)-[r]-(m:Entity)
         RETURN n, r, m LIMIT $limit
         """
-        return service.repo.execute_cypher(q, {"focus": focus, "limit": limit})
+        return asyncio.run(service.repo.execute_cypher(q, {"focus": focus, "limit": limit}))
     else:
         q = """
         MATCH (n:Entity)
         OPTIONAL MATCH (n)-[r]->(m:Entity)
         RETURN n, r, m LIMIT $limit
         """
-        return service.repo.execute_cypher(q, {"limit": limit})
+        return asyncio.run(service.repo.execute_cypher(q, {"limit": limit}))
 
 
 def get_stats() -> tuple[int, int]:
     """Return total node and edge counts from the graph."""
     service = get_service()
-    nodes = service.repo.execute_cypher("MATCH (n) RETURN count(n)").result_set[0][0]
-    edges = service.repo.execute_cypher("MATCH ()-[r]->() RETURN count(r)").result_set[0][0]
+    nodes = asyncio.run(service.repo.execute_cypher("MATCH (n) RETURN count(n)")).result_set[0][0]
+    edges = asyncio.run(service.repo.execute_cypher("MATCH ()-[r]->() RETURN count(r)")).result_set[0][0]
     return nodes, edges
 
 
@@ -107,7 +107,7 @@ def _resolve_entity_a_names(service: MemoryService, opportunities: list[dict[str
     if not a_ids:
         return
     name_q = "MATCH (n:Entity) WHERE n.id IN $ids RETURN n.id, n.name"
-    name_res = service.repo.execute_cypher(name_q, {"ids": a_ids})
+    name_res = asyncio.run(service.repo.execute_cypher(name_q, {"ids": a_ids}))
     name_map = {r[0]: r[1] for r in name_res.result_set if r}
     for opp in opportunities:
         aid = opp.get("entity_a_id", "")
@@ -173,7 +173,7 @@ def _render_radar_tab(service: MemoryService) -> None:
                 "MATCH (a:Entity)-[r]->(b:Entity) "
                 "RETURN a.id, b.id, type(r), a.name, b.name LIMIT 500"
             )
-            edge_res = service.repo.execute_cypher(edge_q, {})
+            edge_res = asyncio.run(service.repo.execute_cypher(edge_q, {}))
             existing_edges = [
                 {
                     "source": r[0],

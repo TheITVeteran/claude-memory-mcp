@@ -79,8 +79,7 @@ class MemoryService(
         password: str | None = None,
     ) -> None:
         """Wire up repository, embedder, vector store, ontology, and lock manager."""
-        self.repo = MemoryRepository(host, port, password)
-        self.async_repo = AsyncMemoryRepository(self.repo)
+        self.repo = AsyncMemoryRepository(MemoryRepository(host, port, password))
         self.embedder = embedding_service
         self.vector_store = vector_store or QdrantVectorStore()
 

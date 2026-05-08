@@ -45,14 +45,14 @@ class AnalysisMixin:
         """
         from .clustering import ClusteringService  # noqa: PLC0415
 
-        health = await self.async_repo.get_graph_health()
+        health = await self.repo.get_graph_health()
 
         # Compute community count via clustering
         community_count = 0
         cs = ClusteringService()
         if health["total_nodes"] >= cs.min_samples:
             try:
-                nodes = await self.async_repo.get_all_nodes(limit=2000)
+                nodes = await self.repo.get_all_nodes(limit=2000)
                 clusters = cs.cluster_nodes(nodes)
                 community_count = len(clusters)
             except Exception:
@@ -75,7 +75,7 @@ class AnalysisMixin:
         result: dict[str, Any] = {}
 
         # Graph section
-        result["graph"] = await self.async_repo.get_graph_health()
+        result["graph"] = await self.repo.get_graph_health()
 
         # Vector section
         vector_section: dict[str, Any] = {}
@@ -95,7 +95,7 @@ class AnalysisMixin:
             split["graph_only_ids"] = []
         else:
             try:
-                graph_ids = set(await self.async_repo.get_all_node_ids())
+                graph_ids = set(await self.repo.get_all_node_ids())
                 vector_ids = set(await self.vector_store.list_ids())
                 graph_only = graph_ids - vector_ids
                 split["status"] = "ok" if not graph_only else "drift"
@@ -120,14 +120,14 @@ class AnalysisMixin:
         since = (now - timedelta(days=1)).isoformat()
         until = now.isoformat()
 
-        recent = await self.async_repo.query_timeline(
+        recent = await self.repo.query_timeline(
             start=since,
             end=until,
             limit=limit,
             project_id=project_id,
         )
 
-        health = await self.async_repo.get_graph_health()
+        health = await self.repo.get_graph_health()
 
         return {
             "recent_entities": recent,
@@ -144,7 +144,7 @@ class AnalysisMixin:
         from .clustering import ClusteringService, detect_gaps  # noqa: PLC0415
 
         # 1. Cluster all nodes
-        nodes = await self.async_repo.get_all_nodes(limit=2000)
+        nodes = await self.repo.get_all_nodes(limit=2000)
         cs = ClusteringService()
         clusters = cs.cluster_nodes(nodes)
 
@@ -152,7 +152,7 @@ class AnalysisMixin:
             return []
 
         # 2. Get all edges for cross-cluster connectivity
-        edges = await self.async_repo.get_all_edges()
+        edges = await self.repo.get_all_edges()
 
         # 3. Detect gaps
         gaps = detect_gaps(
@@ -199,12 +199,12 @@ class AnalysisMixin:
         Checks entity existence first, then deletes Qdrant vector BEFORE
         graph update to prevent ghost search results.
         """
-        existing = await self.async_repo.get_node(params.entity_id)
+        existing = await self.repo.get_node(params.entity_id)
         if existing and existing.get("status") == "archived":
             return {"error": f"Entity {params.entity_id} is already archived"}
 
         await self.vector_store.delete(params.entity_id)
-        return await self.async_repo.update_node(params.entity_id, {"status": "archived"})  # type: ignore[no-any-return]
+        return await self.repo.update_node(params.entity_id, {"status": "archived"})  # type: ignore[no-any-return]
 
     async def prune_stale(self, params: "PruneStaleParams") -> dict[str, Any]:
         """Hard delete archived entities older than N days.
@@ -220,7 +220,7 @@ class AnalysisMixin:
         WHERE n.status = 'archived' AND n.archived_at < $cutoff
         RETURN n.id
         """
-        res = await self.async_repo.execute_cypher(select_query, {"cutoff": cutoff})
+        res = await self.repo.execute_cypher(select_query, {"cutoff": cutoff})
         entity_ids = [row[0] for row in res.result_set] if res.result_set else []
 
         if not entity_ids:
@@ -237,7 +237,7 @@ class AnalysisMixin:
         DETACH DELETE n
         RETURN count(n) as deleted_count
         """
-        del_res = await self.async_repo.execute_cypher(delete_query, {"cutoff": cutoff})
+        del_res = await self.repo.execute_cypher(delete_query, {"cutoff": cutoff})
         count = del_res.result_set[0][0] if del_res.result_set else 0
         return {"status": "success", "deleted_count": count}
 
@@ -251,7 +251,7 @@ class AnalysisMixin:
             algorithm: 'pagerank' for influence, 'louvain' for communities.
         """
         # Fetch all nodes
-        node_res = await self.async_repo.execute_cypher("MATCH (n:Entity) RETURN n")
+        node_res = await self.repo.execute_cypher("MATCH (n:Entity) RETURN n")
         if not node_res.result_set:
             return []
 
@@ -259,7 +259,7 @@ class AnalysisMixin:
         node_names = list(nodes.keys())
 
         # Fetch all edges
-        edge_res = await self.async_repo.execute_cypher(
+        edge_res = await self.repo.execute_cypher(
             "MATCH (a:Entity)-[r]->(b:Entity) RETURN a.name, b.name"
         )
         edges = [(row[0], row[1]) for row in edge_res.result_set] if edge_res.result_set else []
@@ -281,7 +281,7 @@ class AnalysisMixin:
         ORDER BY n.updated_at ASC
         LIMIT 20
         """
-        res = await self.async_repo.execute_cypher(query, {"cutoff": cutoff})
+        res = await self.repo.execute_cypher(query, {"cutoff": cutoff})
         entities = [row[0].properties for row in res.result_set]
         for e in entities:
             e.pop("embedding", None)
@@ -316,7 +316,7 @@ class AnalysisMixin:
         )
 
         # 1. Write Graph
-        new_node_props = await self.async_repo.create_node("Concept", props)
+        new_node_props = await self.repo.create_node("Concept", props)
 
         # 2. Write Vector
         payload = {
@@ -334,10 +334,10 @@ class AnalysisMixin:
                     "confidence": 1.0,
                     "created_at": datetime.now(UTC).isoformat(),
                 }
-                await self.async_repo.create_edge(old_id, new_id, "PART_OF", link_props)
+                await self.repo.create_edge(old_id, new_id, "PART_OF", link_props)
 
                 # Archive old
-                updated = await self.async_repo.update_node(
+                updated = await self.repo.update_node(
                     old_id,
                     {"status": "archived", "archived_at": datetime.now(UTC).isoformat()},
                 )

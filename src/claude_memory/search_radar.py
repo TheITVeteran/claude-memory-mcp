@@ -63,10 +63,10 @@ class SearchRadarMixin:
         # Fetch entity IDs — optionally filtered by project
         if project_id:
             query = "MATCH (n:Entity {project_id: $pid}) RETURN n.id LIMIT 200"
-            res = await self.async_repo.execute_cypher(query, {"pid": project_id})
+            res = await self.repo.execute_cypher(query, {"pid": project_id})
             entity_ids = [row[0] for row in res.result_set if row]
         else:
-            entity_ids = await self.async_repo.get_all_node_ids(limit=200)
+            entity_ids = await self.repo.get_all_node_ids(limit=200)
 
         if not entity_ids:
             return {
@@ -99,7 +99,7 @@ class SearchRadarMixin:
                     cid = candidate["_id"]
                     cosine_sim = candidate["_score"]
 
-                    graph_dist = await self.async_repo.shortest_path_length(entity_id, cid)
+                    graph_dist = await self.repo.shortest_path_length(entity_id, cid)
 
                     if graph_dist is not None and graph_dist < min_graph_distance:
                         already_connected += 1

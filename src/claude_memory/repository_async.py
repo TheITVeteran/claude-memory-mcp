@@ -45,6 +45,16 @@ class AsyncMemoryRepository:
         """Wrap an already-connected sync repository instance."""
         self._sync_repo = sync_repo
 
+    @property
+    def client(self) -> Any:
+        """Access the underlying FalkorDB client (primarily for testing/diagnostics)."""
+        return self._sync_repo.client
+
+    @client.setter
+    def client(self, value: Any) -> None:
+        """Override the underlying FalkorDB client (primarily for testing)."""
+        self._sync_repo.client = value
+
     # ── MemoryRepository core (repository.py) ─────────────────────────
 
     async def select_graph(self) -> Any:

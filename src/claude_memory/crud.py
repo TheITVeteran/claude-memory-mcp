@@ -119,7 +119,7 @@ class CrudMixin:
 
             # Compute embedding (AI Layer)
             text_to_embed = await _compute_entity_embedding_text(
-                self.async_repo,
+                self.repo,
                 entity_id=None,  # new entity, no observations yet
                 name=params.name,
                 node_type=params.node_type,
@@ -128,7 +128,7 @@ class CrudMixin:
             embedding = self.embedder.encode(text_to_embed)
 
             # 1. Write to Graph (FalkorDB) - Source of Truth for Structure
-            node_props = await self.async_repo.create_node(params.node_type, props)
+            node_props = await self.repo.create_node(params.node_type, props)
 
             # 2. Write to Vector Engine (Qdrant) - Source of Truth for Search
             node_id = str(node_props["id"])
@@ -162,9 +162,9 @@ class CrudMixin:
             # 4. Link to most recent entity in same project via PRECEDED_BY
             warnings: list[str] = []
             try:
-                prev = await self.async_repo.get_most_recent_entity(project_id)
+                prev = await self.repo.get_most_recent_entity(project_id)
                 if prev and prev.get("id") != node_id:
-                    await self.async_repo.create_edge(
+                    await self.repo.create_edge(
                         prev["id"],
                         node_id,
                         "PRECEDED_BY",
@@ -182,7 +182,7 @@ class CrudMixin:
             status = "created"
 
             # Get total count (for receipt)
-            total_count = await self.async_repo.get_total_node_count()
+            total_count = await self.repo.get_total_node_count()
 
             return EntityCommitReceipt(
                 id=final_id,
@@ -197,7 +197,7 @@ class CrudMixin:
     async def create_relationship(self, params: "RelationshipCreateParams") -> dict[str, Any]:
         """Creates a typed relationship between two entities."""
 
-        source_node = await self.async_repo.get_node(params.from_entity)
+        source_node = await self.repo.get_node(params.from_entity)
 
         if source_node and "project_id" in source_node:
             pass
@@ -220,7 +220,7 @@ class CrudMixin:
             if "id" not in props:
                 props["id"] = str(uuid.uuid4())
 
-            res = await self.async_repo.create_edge(
+            res = await self.repo.create_edge(
                 params.from_entity, params.to_entity, params.relationship_type, props
             )
             if not res:
@@ -236,7 +236,7 @@ class CrudMixin:
     async def update_entity(self, params: "EntityUpdateParams") -> dict[str, Any]:
         """Updates properties of an existing entity."""
 
-        existing_node = await self.async_repo.get_node(params.entity_id)
+        existing_node = await self.repo.get_node(params.entity_id)
         if not existing_node:
             return {"error": "Entity not found"}
 
@@ -259,7 +259,7 @@ class CrudMixin:
             node_type = merged_props.get("node_type", "Entity")
 
             text_to_embed = await _compute_entity_embedding_text(
-                self.async_repo,
+                self.repo,
                 entity_id=params.entity_id,
                 name=name,
                 node_type=node_type,
@@ -268,7 +268,7 @@ class CrudMixin:
             embedding = self.embedder.encode(text_to_embed)
 
             # 1. Update Graph
-            updated_node = await self.async_repo.update_node(params.entity_id, props)
+            updated_node = await self.repo.update_node(params.entity_id, props)
 
             # 2. Update Vector Store
             payload = {
@@ -315,7 +315,7 @@ class CrudMixin:
     async def delete_entity(self, params: "EntityDeleteParams") -> dict[str, Any]:
         """Deletes an entity."""
 
-        existing_node = await self.async_repo.get_node(params.entity_id)
+        existing_node = await self.repo.get_node(params.entity_id)
         if not existing_node:
             return {"error": "Entity not found"}
 
@@ -326,7 +326,7 @@ class CrudMixin:
             logger.info("Deleting entity: %s (%s)", params.entity_id, params.reason)
 
             if params.soft_delete:
-                await self.async_repo.update_node(
+                await self.repo.update_node(
                     params.entity_id,
                     {"status": "archived", "archived_at": datetime.now(UTC).isoformat()},
                 )
@@ -334,7 +334,7 @@ class CrudMixin:
                 self._safe_fts_delete(params.entity_id)
                 return {"status": "archived", "id": params.entity_id}
             else:
-                await self.async_repo.delete_node(params.entity_id)
+                await self.repo.delete_node(params.entity_id)
                 await self._safe_vector_delete(params.entity_id)
                 self._safe_fts_delete(params.entity_id)
                 return {"status": "deleted", "id": params.entity_id}
@@ -354,7 +354,7 @@ class CrudMixin:
         # Look up the edge's source node project_id for locking
         project_id: str | None = None
         try:
-            res = await self.async_repo.execute_cypher(
+            res = await self.repo.execute_cypher(
                 "MATCH (s)-[r]->() WHERE r.id = $id RETURN s.project_id",
                 {"id": params.relationship_id},
             )
@@ -368,7 +368,7 @@ class CrudMixin:
             )
 
         async def _do_delete() -> dict[str, Any]:
-            await self.async_repo.delete_edge(params.relationship_id)
+            await self.repo.delete_edge(params.relationship_id)
             return {"status": "deleted", "id": params.relationship_id}
 
         if project_id:

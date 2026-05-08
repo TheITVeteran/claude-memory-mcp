@@ -39,7 +39,7 @@ class CrudMaintenanceMixin:
         async def _do_update() -> None:
             """Execute the salience increment in the background."""
             try:
-                await self.async_repo.increment_salience(ids)
+                await self.repo.increment_salience(ids)
             except (ConnectionError, TimeoutError, OSError) as exc:
                 logger.error("Background salience update failed: %s", exc)
 
@@ -65,7 +65,7 @@ class CrudMaintenanceMixin:
         # Look up project_id for locking
         project_id: str | None = None
         try:
-            res = await self.async_repo.execute_cypher(
+            res = await self.repo.execute_cypher(
                 "MATCH (e) WHERE e.id = $eid RETURN e.project_id",
                 {"eid": params.entity_id},
             )
@@ -115,7 +115,7 @@ class CrudMaintenanceMixin:
             "evidence": params.evidence,
             "timestamp": timestamp,
         }
-        res = await self.async_repo.execute_cypher(query, params_dict)
+        res = await self.repo.execute_cypher(query, params_dict)
         if not res.result_set:
             return {"error": "Entity not found"}
 
@@ -142,10 +142,10 @@ class CrudMaintenanceMixin:
 
         # Re-embed the parent entity with the new observation included
         try:
-            entity = await self.async_repo.get_node(params.entity_id)
+            entity = await self.repo.get_node(params.entity_id)
             if entity:
                 entity_text = await _compute_entity_embedding_text(
-                    self.async_repo,
+                    self.repo,
                     entity_id=params.entity_id,
                     name=entity.get("name", ""),
                     node_type=entity.get("node_type", "Entity"),
@@ -177,7 +177,7 @@ class CrudMaintenanceMixin:
                 entity = (
                     entity
                     if "entity" in dir()
-                    else await self.async_repo.get_node(params.entity_id)
+                    else await self.repo.get_node(params.entity_id)
                 )
                 if entity:
                     # Fetch all observations for this entity
@@ -185,7 +185,7 @@ class CrudMaintenanceMixin:
                         "MATCH (e:Entity {id: $eid})-[:HAS_OBSERVATION]->(o) "
                         "RETURN o.content ORDER BY o.created_at ASC"
                     )
-                    obs_res = await self.async_repo.execute_cypher(
+                    obs_res = await self.repo.execute_cypher(
                         obs_query, {"eid": params.entity_id}
                     )
                     obs_texts = [row[0] for row in obs_res.result_set if row[0]]
