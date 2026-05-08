@@ -10,7 +10,7 @@ from claude_memory.librarian import LibrarianAgent
 def mock_memory_service() -> MagicMock:
     service = MagicMock()
     service.repo = MagicMock()
-    service.repo.get_all_nodes = MagicMock()
+    service.async_repo.get_all_nodes = MagicMock()
     service.consolidate_memories = AsyncMock()
     service.prune_stale = AsyncMock()
     service.clustering = MagicMock()  # Not used by agent instantly, but good to have
@@ -30,7 +30,7 @@ async def test_happy_librarian_cycle_success(
     mock_memory_service: MagicMock, mock_clustering_service: MagicMock
 ) -> None:
     # Setup Data
-    mock_memory_service.repo.get_all_nodes.return_value = [
+    mock_memory_service.async_repo.get_all_nodes.return_value = [
         {"id": "1", "name": "A"},
         {"id": "2", "name": "B"},
     ]
@@ -57,7 +57,7 @@ async def test_happy_librarian_cycle_success(
     assert report["consolidations_created"] == 1
     assert report["deleted_stale"] == 5
 
-    mock_memory_service.repo.get_all_nodes.assert_called_once()
+    mock_memory_service.async_repo.get_all_nodes.assert_called_once()
     mock_clustering_service.cluster_nodes.assert_called_once()
     mock_memory_service.consolidate_memories.assert_awaited_once()
     from claude_memory.schema import PruneStaleParams
@@ -69,7 +69,7 @@ async def test_happy_librarian_cycle_success(
 async def test_sad1_librarian_cycle_no_nodes(
     mock_memory_service: MagicMock, mock_clustering_service: MagicMock
 ) -> None:
-    mock_memory_service.repo.get_all_nodes.return_value = []
+    mock_memory_service.async_repo.get_all_nodes.return_value = []
 
     agent = LibrarianAgent(mock_memory_service, mock_clustering_service)
     report = await agent.run_cycle()

@@ -97,7 +97,7 @@ async def test_happy_get_stats() -> None:
     mock_result_nodes.result_set = [[NODE_COUNT]]
     mock_result_edges = MagicMock()
     mock_result_edges.result_set = [[EDGE_COUNT]]
-    mock_service.repo.execute_cypher.side_effect = [mock_result_nodes, mock_result_edges]
+    mock_service.async_repo.execute_cypher.side_effect = [mock_result_nodes, mock_result_edges]
 
     with patch.object(dashboard_app, "get_service", return_value=mock_service):
         nodes, edges = dashboard_app.get_stats()
@@ -114,13 +114,13 @@ def test_happy_get_graph_data_global() -> None:
 
     mock_service = MagicMock()
     mock_result = MagicMock()
-    mock_service.repo.execute_cypher.return_value = mock_result
+    mock_service.async_repo.execute_cypher.return_value = mock_result
 
     with patch.object(dashboard_app, "get_service", return_value=mock_service):
         result = dashboard_app.get_graph_data(limit=GRAPH_LIMIT_DEFAULT)
 
-    mock_service.repo.execute_cypher.assert_called_once()
-    query_used = mock_service.repo.execute_cypher.call_args[0][0]
+    mock_service.async_repo.execute_cypher.assert_called_once()
+    query_used = mock_service.async_repo.execute_cypher.call_args[0][0]
     assert "MATCH (n:Entity)" in query_used
     assert result is mock_result
 
@@ -130,15 +130,15 @@ def test_happy_get_graph_data_focused() -> None:
 
     mock_service = MagicMock()
     mock_result = MagicMock()
-    mock_service.repo.execute_cypher.return_value = mock_result
+    mock_service.async_repo.execute_cypher.return_value = mock_result
 
     with patch.object(dashboard_app, "get_service", return_value=mock_service):
         result = dashboard_app.get_graph_data(limit=GRAPH_LIMIT_CUSTOM, focus=FOCUS_NODE_NAME)
 
-    query_used = mock_service.repo.execute_cypher.call_args[0][0]
+    query_used = mock_service.async_repo.execute_cypher.call_args[0][0]
     assert "$focus" in query_used
     # Verify focus was passed as a parameter
-    params_used = mock_service.repo.execute_cypher.call_args[0][1]
+    params_used = mock_service.async_repo.execute_cypher.call_args[0][1]
     assert params_used["focus"] == FOCUS_NODE_NAME
     assert result is mock_result
 
@@ -173,7 +173,7 @@ def test_sad1_main_explorer_mode() -> None:
         [mock_standalone, None, None],
     ]
 
-    mock_service.repo.execute_cypher.side_effect = [
+    mock_service.async_repo.execute_cypher.side_effect = [
         mock_stats_result,  # get_stats: node count
         mock_edge_stats,  # get_stats: edge count
         mock_graph_result,  # get_graph_data: graph cypher result
@@ -208,7 +208,7 @@ def test_happy_main_search_mode_no_query() -> None:
     mock_service = MagicMock()
     mock_stats_result = MagicMock()
     mock_stats_result.result_set = [[NODE_COUNT]]
-    mock_service.repo.execute_cypher.return_value = mock_stats_result
+    mock_service.async_repo.execute_cypher.return_value = mock_stats_result
 
     mock_st.sidebar.radio.return_value = "Search"
     mock_st.sidebar.button.return_value = False
@@ -227,7 +227,7 @@ def test_happy_main_search_mode_with_query() -> None:
     mock_service = MagicMock()
     mock_stats_result = MagicMock()
     mock_stats_result.result_set = [[NODE_COUNT]]
-    mock_service.repo.execute_cypher.return_value = mock_stats_result
+    mock_service.async_repo.execute_cypher.return_value = mock_stats_result
 
     mock_search_result = MagicMock()
     mock_search_result.name = MOCK_NODE_NAME
@@ -251,7 +251,7 @@ def test_happy_main_maintenance_mode() -> None:
     mock_service = MagicMock()
     mock_stats_result = MagicMock()
     mock_stats_result.result_set = [[NODE_COUNT]]
-    mock_service.repo.execute_cypher.return_value = mock_stats_result
+    mock_service.async_repo.execute_cypher.return_value = mock_stats_result
 
     mock_st.sidebar.radio.return_value = "Maintenance"
     mock_st.sidebar.button.return_value = False
@@ -271,7 +271,7 @@ def test_happy_main_maintenance_scan() -> None:
     mock_service = MagicMock()
     mock_stats_result = MagicMock()
     mock_stats_result.result_set = [[NODE_COUNT]]
-    mock_service.repo.execute_cypher.return_value = mock_stats_result
+    mock_service.async_repo.execute_cypher.return_value = mock_stats_result
 
     mock_st.sidebar.radio.return_value = "Maintenance"
     mock_st.sidebar.button.return_value = False
@@ -296,7 +296,7 @@ def test_happy_main_shutdown_backup_success() -> None:
     mock_service = MagicMock()
     mock_stats_result = MagicMock()
     mock_stats_result.result_set = [[NODE_COUNT]]
-    mock_service.repo.execute_cypher.return_value = mock_stats_result
+    mock_service.async_repo.execute_cypher.return_value = mock_stats_result
 
     mock_st.sidebar.radio.return_value = "Explorer"
     mock_st.button.return_value = False
@@ -329,7 +329,7 @@ def test_happy_main_shutdown_backup_failure() -> None:
     mock_service = MagicMock()
     mock_stats_result = MagicMock()
     mock_stats_result.result_set = [[NODE_COUNT]]
-    mock_service.repo.execute_cypher.return_value = mock_stats_result
+    mock_service.async_repo.execute_cypher.return_value = mock_stats_result
 
     mock_st.sidebar.radio.return_value = "Explorer"
     mock_st.button.return_value = False
@@ -359,7 +359,7 @@ def test_evil1_main_shutdown_backup_exception() -> None:
     mock_service = MagicMock()
     mock_stats_result = MagicMock()
     mock_stats_result.result_set = [[NODE_COUNT]]
-    mock_service.repo.execute_cypher.return_value = mock_stats_result
+    mock_service.async_repo.execute_cypher.return_value = mock_stats_result
 
     mock_st.sidebar.radio.return_value = "Explorer"
     mock_st.button.return_value = False
@@ -385,7 +385,7 @@ def test_happy_main_shutdown_no_containers() -> None:
     mock_service = MagicMock()
     mock_stats_result = MagicMock()
     mock_stats_result.result_set = [[NODE_COUNT]]
-    mock_service.repo.execute_cypher.return_value = mock_stats_result
+    mock_service.async_repo.execute_cypher.return_value = mock_stats_result
 
     mock_st.sidebar.radio.return_value = "Explorer"
     mock_st.button.return_value = False
@@ -416,7 +416,7 @@ def test_happy_main_shutdown_docker_exception() -> None:
     mock_service = MagicMock()
     mock_stats_result = MagicMock()
     mock_stats_result.result_set = [[NODE_COUNT]]
-    mock_service.repo.execute_cypher.return_value = mock_stats_result
+    mock_service.async_repo.execute_cypher.return_value = mock_stats_result
 
     mock_st.sidebar.radio.return_value = "Explorer"
     mock_st.button.return_value = False
@@ -447,7 +447,7 @@ def test_sad2_main_unknown_menu() -> None:
     mock_service = MagicMock()
     mock_stats_result = MagicMock()
     mock_stats_result.result_set = [[NODE_COUNT]]
-    mock_service.repo.execute_cypher.return_value = mock_stats_result
+    mock_service.async_repo.execute_cypher.return_value = mock_stats_result
 
     mock_st.sidebar.radio.return_value = "UnknownMode"
     # Reset side_effect from previous test to prevent StopIteration

@@ -18,15 +18,15 @@ def memory_service(mock_vector_store: Any) -> Generator[MemoryService, None, Non
             embedding_service=mock_embedder_cls.return_value, vector_store=mock_vector_store
         )
         # Mock the client and graph
-        service.repo.client = MagicMock()
-        service.repo.client.select_graph.return_value = MagicMock()
+        service.async_repo.client = MagicMock()
+        service.async_repo.client.select_graph.return_value = MagicMock()
         yield service
 
 
 @pytest.mark.asyncio
 async def test_happy_update_entity_success(memory_service: MemoryService) -> None:
     # Setup mocks
-    graph = memory_service.repo.client.select_graph.return_value
+    graph = memory_service.async_repo.client.select_graph.return_value
     # Mock return for the final update query
     mock_result_set = MagicMock()
     # Return a dummy node structure: [[Node(properties={...})]]
@@ -52,7 +52,7 @@ async def test_happy_update_entity_success(memory_service: MemoryService) -> Non
 
 @pytest.mark.asyncio
 async def test_happy_soft_delete_entity(memory_service: MemoryService) -> None:
-    graph = memory_service.repo.client.select_graph.return_value
+    graph = memory_service.async_repo.client.select_graph.return_value
     mock_node = MagicMock()
     mock_node.properties = {"id": "123", "deleted": True}
     graph.query.return_value.result_set = [[mock_node]]
@@ -78,7 +78,7 @@ async def test_happy_soft_delete_entity(memory_service: MemoryService) -> None:
 
 @pytest.mark.asyncio
 async def test_happy_hard_delete_entity(memory_service: MemoryService) -> None:
-    graph = memory_service.repo.client.select_graph.return_value
+    graph = memory_service.async_repo.client.select_graph.return_value
 
     params = EntityDeleteParams(entity_id="123", reason="Spam", soft_delete=False)
 
@@ -90,7 +90,7 @@ async def test_happy_hard_delete_entity(memory_service: MemoryService) -> None:
 
 @pytest.mark.asyncio
 async def test_happy_add_observation(memory_service: MemoryService) -> None:
-    graph = memory_service.repo.client.select_graph.return_value
+    graph = memory_service.async_repo.client.select_graph.return_value
 
     # Mock observation node returned by the CREATE query
     mock_obs_node = MagicMock()

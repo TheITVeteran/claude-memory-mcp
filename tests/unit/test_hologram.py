@@ -20,9 +20,9 @@ def mock_service(mock_vector_store: Any) -> Any:
             embedding_service=mock_embedder_cls.return_value, vector_store=mock_vector_store
         )
         # Mock the repository client interactions
-        service.repo.client = MagicMock()
-        service.repo.select_graph = MagicMock()
-        service.repo.select_graph.return_value = service.repo.client
+        service.async_repo.client = MagicMock()
+        service.async_repo.select_graph = MagicMock()
+        service.async_repo.select_graph.return_value = service.async_repo.client
 
         yield service
 
@@ -54,8 +54,8 @@ async def test_happy_get_hologram_orchestration(mock_service: Any) -> None:
     ]
 
     # Setup Repository Mock
-    mock_service.repo.get_subgraph = MagicMock()
-    mock_service.repo.get_subgraph.return_value = {
+    mock_service.async_repo.get_subgraph = MagicMock()
+    mock_service.async_repo.get_subgraph.return_value = {
         "nodes": [{"id": "1"}, {"id": "2"}, {"id": "3"}],
         "edges": [{"source": "1", "target": "3"}],
     }
@@ -67,7 +67,7 @@ async def test_happy_get_hologram_orchestration(mock_service: Any) -> None:
     from claude_memory.schema import SearchMemoryParams
 
     mock_service.search.assert_awaited_once_with(SearchMemoryParams(query="test query", limit=5))
-    mock_service.repo.get_subgraph.assert_called_once_with(["1", "2"], 2)
+    mock_service.async_repo.get_subgraph.assert_called_once_with(["1", "2"], 2)
     assert len(result["nodes"]) == 3
     assert len(result["edges"]) == 1
 
@@ -89,10 +89,10 @@ def test_happy_repository_get_subgraph_parsing(mock_service: Any) -> None:
     mock_row = [[edge1_map], [node1_map, node2_map]]  # Edges  # Nodes
 
     mock_result_set.result_set = [mock_row]
-    mock_service.repo.client.query.return_value = mock_result_set
+    mock_service.async_repo.client.query.return_value = mock_result_set
 
     # Execute
-    result = mock_service.repo.get_subgraph(["1"])
+    result = mock_service.async_repo.get_subgraph(["1"])
 
     # Verify
     assert len(result["nodes"]) == 2

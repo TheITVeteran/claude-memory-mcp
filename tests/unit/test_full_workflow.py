@@ -39,7 +39,7 @@ def memory_service(mock_vector_store: Any) -> Any:
 async def test_happy_day_in_the_life(memory_service: Any) -> None:
     """Simulates a full user workflow."""
     # Access graph via repo
-    graph = memory_service.repo.client.select_graph.return_value
+    graph = memory_service.async_repo.client.select_graph.return_value
 
     # Patch UUID generation to return deterministic IDs
 

@@ -714,7 +714,7 @@ async def test_happy_analyze_graph_pagerank_success(service: MemoryService) -> N
     mock_node_b.properties = {"name": "NodeB"}
     mock_node_b.labels = ["Entity"]
 
-    service.repo.execute_cypher.side_effect = [
+    service.async_repo.execute_cypher.side_effect = [
         _make_cypher_result([[mock_node_a], [mock_node_b]]),  # nodes
         _make_cypher_result([["NodeB", ENTITY_NAME]]),  # edges: B->A
     ]
@@ -732,7 +732,7 @@ async def test_happy_analyze_graph_pagerank_only_entity_label(service: MemorySer
     mock_node.properties = {"name": ENTITY_NAME}
     mock_node.labels = ["Entity"]  # Only Entity label
 
-    service.repo.execute_cypher.side_effect = [
+    service.async_repo.execute_cypher.side_effect = [
         _make_cypher_result([[mock_node]]),  # nodes
         _make_cypher_result([]),  # no edges
     ]
@@ -743,7 +743,7 @@ async def test_happy_analyze_graph_pagerank_only_entity_label(service: MemorySer
 
 async def test_evil10_analyze_graph_pagerank_error(service: MemoryService) -> None:
     """Errors propagate loudly from PageRank (no silent swallowing)."""
-    service.repo.execute_cypher.side_effect = RuntimeError("algo not available")
+    service.async_repo.execute_cypher.side_effect = RuntimeError("algo not available")
 
     with pytest.raises(RuntimeError, match="algo not available"):
         await service.analyze_graph(AnalyzeGraphParams(algorithm="pagerank"))
@@ -758,7 +758,7 @@ async def test_happy_analyze_graph_louvain_success(service: MemoryService) -> No
         n.labels = ["Entity"]
         nodes.append(n)
 
-    service.repo.execute_cypher.side_effect = [
+    service.async_repo.execute_cypher.side_effect = [
         _make_cypher_result([[n] for n in nodes]),  # nodes
         _make_cypher_result([["A", "B"], ["B", "C"], ["A", "C"]]),  # edges
     ]
@@ -772,7 +772,7 @@ async def test_happy_analyze_graph_louvain_success(service: MemoryService) -> No
 
 async def test_evil11_analyze_graph_louvain_error(service: MemoryService) -> None:
     """Errors propagate loudly from Louvain (no silent swallowing)."""
-    service.repo.execute_cypher.side_effect = RuntimeError("algo not available")
+    service.async_repo.execute_cypher.side_effect = RuntimeError("algo not available")
 
     with pytest.raises(RuntimeError, match="algo not available"):
         await service.analyze_graph(AnalyzeGraphParams(algorithm="louvain"))
@@ -792,7 +792,7 @@ async def test_sad12_get_stale_entities(service: MemoryService) -> None:
     mock_node = MagicMock()
     mock_node.properties = {"id": ENTITY_ID, "name": ENTITY_NAME, "embedding": MOCK_EMBEDDING}
 
-    service.repo.execute_cypher.return_value = _make_cypher_result([[mock_node]])
+    service.async_repo.execute_cypher.return_value = _make_cypher_result([[mock_node]])
 
     result = await service.get_stale_entities(days=STALE_DAYS)
     assert len(result) == 1
@@ -805,7 +805,7 @@ async def test_sad12_get_stale_entities(service: MemoryService) -> None:
 
 
 async def test_happy_consolidate_memories(service: MemoryService) -> None:
-    service.repo.create_node.return_value = {"id": "consolidated-001", "name": "Consolidated"}
+    service.async_repo.create_node.return_value = {"id": "consolidated-001", "name": "Consolidated"}
 
     result = await service.consolidate_memories(
         entity_ids=[ENTITY_ID, ENTITY_ID_2],
@@ -817,12 +817,12 @@ async def test_happy_consolidate_memories(service: MemoryService) -> None:
 
 async def test_evil12_consolidate_memories_edge_error(service: MemoryService) -> None:
     """When linking an old entity fails, continue with remaining."""
-    service.repo.create_node.return_value = {"id": "consolidated-001", "name": "Consolidated"}
-    service.repo.create_edge.side_effect = [
+    service.async_repo.create_node.return_value = {"id": "consolidated-001", "name": "Consolidated"}
+    service.async_repo.create_edge.side_effect = [
         ConnectionError("edge failed"),  # First entity fails
         MagicMock(),  # Second succeeds
     ]
-    service.repo.update_node.return_value = {}
+    service.async_repo.update_node.return_value = {}
 
     result = await service.consolidate_memories(
         entity_ids=[ENTITY_ID, ENTITY_ID_2],
@@ -1022,7 +1022,7 @@ async def test_evil13_search_salience_background_error_silent(service: MemorySer
         ],
         "edges": [],
     }
-    service.repo.increment_salience.side_effect = ConnectionError("FalkorDB down")
+    service.async_repo.increment_salience.side_effect = ConnectionError("FalkorDB down")
 
     result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
     assert len(result) == 1
@@ -1052,7 +1052,7 @@ async def test_sad15_search_salience_fallback_default(service: MemoryService) ->
         ],
         "edges": [],
     }
-    service.repo.increment_salience.return_value = []  # No updates returned
+    service.async_repo.increment_salience.return_value = []  # No updates returned
 
     result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
     assert len(result) == 1
@@ -1193,20 +1193,22 @@ async def test_happy_get_temporal_neighbors_both(service: MemoryService) -> None
 @pytest.mark.asyncio
 async def test_happy_create_temporal_edge_success(service: MemoryService) -> None:
     """create_temporal_edge returns relationship metadata."""
-    service.repo.create_temporal_edge.return_value = {
+    service.async_repo.create_temporal_edge.return_value = {
         "rel_type": "PRECEDED_BY",
         "from_id": "entity-a",
         "to_id": "entity-b",
     }
-    result = service.repo.create_temporal_edge("entity-a", "entity-b")
+    result = await service.async_repo.create_temporal_edge("entity-a", "entity-b")
     assert result["rel_type"] == "PRECEDED_BY"
 
 
 @pytest.mark.asyncio
 async def test_evil14_create_temporal_edge_not_found(service: MemoryService) -> None:
     """create_temporal_edge returns error when entities not found."""
-    service.repo.create_temporal_edge.return_value = {"error": "One or both entities not found"}
-    result = service.repo.create_temporal_edge("missing-a", "missing-b")
+    service.async_repo.create_temporal_edge.return_value = {
+        "error": "One or both entities not found"
+    }
+    result = await service.async_repo.create_temporal_edge("missing-a", "missing-b")
     assert "error" in result
 
 
@@ -1506,25 +1508,25 @@ async def test_sad23_get_bottles_backward_compat(service: MemoryService) -> None
 
 async def test_sad24_get_graph_health_basic(service: MemoryService) -> None:
     """get_graph_health returns repo stats plus community_count."""
-    service.repo.get_graph_health.return_value = {
+    service.async_repo.get_graph_health.return_value = {
         "total_nodes": 10,
         "total_edges": 15,
         "density": 0.166667,
         "orphan_count": 2,
         "avg_degree": 1.5,
     }
-    service.repo.get_all_nodes.return_value = []
+    service.async_repo.get_all_nodes.return_value = []
 
     result = await service.get_graph_health()
     assert result["total_nodes"] == 10
     assert result["total_edges"] == 15
     assert "community_count" in result
-    service.repo.get_graph_health.assert_called_once()
+    service.async_repo.get_graph_health.assert_called_once()
 
 
 async def test_happy_get_graph_health_few_nodes(service: MemoryService) -> None:
     """get_graph_health skips clustering when fewer than 3 nodes."""
-    service.repo.get_graph_health.return_value = {
+    service.async_repo.get_graph_health.return_value = {
         "total_nodes": 2,
         "total_edges": 1,
         "density": 0.5,
@@ -1535,7 +1537,7 @@ async def test_happy_get_graph_health_few_nodes(service: MemoryService) -> None:
     result = await service.get_graph_health()
     assert result["community_count"] == 0
     # Should not call get_all_nodes since total_nodes < 3
-    service.repo.get_all_nodes.assert_not_called()
+    service.async_repo.get_all_nodes.assert_not_called()
 
 
 # ─── Phase 15C: Structural Gap Detection Service Tests ──────────────
@@ -1543,7 +1545,7 @@ async def test_happy_get_graph_health_few_nodes(service: MemoryService) -> None:
 
 async def test_sad25_detect_structural_gaps_no_clusters(service: MemoryService) -> None:
     """detect_structural_gaps returns empty when too few nodes for clustering."""
-    service.repo.get_all_nodes.return_value = [{"id": "a1", "embedding": [1.0]}]
+    service.async_repo.get_all_nodes.return_value = [{"id": "a1", "embedding": [1.0]}]
 
     from claude_memory.schema import GapDetectionParams
 
@@ -1561,8 +1563,8 @@ async def test_sad26_detect_structural_gaps_with_gaps(service: MemoryService) ->
 
     # Mock nodes — enough for clustering
     nodes = [{"id": f"n{i}", "name": f"Node{i}", "embedding": [float(i)]} for i in range(6)]
-    service.repo.get_all_nodes.return_value = nodes
-    service.repo.get_all_edges.return_value = []
+    service.async_repo.get_all_nodes.return_value = nodes
+    service.async_repo.get_all_edges.return_value = []
 
     # Mock clustering to return 2 clusters
     mock_clusters = [
@@ -1605,8 +1607,8 @@ async def test_evil16_create_entity_vector_failure_always_raises(
     from claude_memory.schema import EntityCreateParams
 
     service.async_repo.create_node.return_value = {"id": ENTITY_ID, "name": ENTITY_NAME}
-    service.repo.get_most_recent_entity.return_value = None
-    service.repo.get_total_node_count.return_value = 42
+    service.async_repo.get_most_recent_entity.return_value = None
+    service.async_repo.get_total_node_count.return_value = 42
     service.ontology = MagicMock()
     service.ontology.is_valid_type.return_value = True
     service.vector_store.upsert.side_effect = RuntimeError("Qdrant down")
@@ -1766,7 +1768,7 @@ async def test_happy_search_normal_operation_returns_results(service: MemoryServ
 
 async def test_happy_system_diagnostics_returns_all_sections(service: MemoryService) -> None:
     """E-5: system_diagnostics returns graph, vector, and split_brain sections."""
-    service.repo.get_graph_health.return_value = {
+    service.async_repo.get_graph_health.return_value = {
         "total_nodes": 100,
         "total_edges": 200,
         "density": 0.04,
@@ -1788,7 +1790,7 @@ async def test_happy_system_diagnostics_returns_all_sections(service: MemoryServ
 
 async def test_happy_system_diagnostics_detects_split_brain(service: MemoryService) -> None:
     """E-5: Detects entities in graph but missing from vector store."""
-    service.repo.get_graph_health.return_value = {
+    service.async_repo.get_graph_health.return_value = {
         "total_nodes": 5,
         "total_edges": 3,
         "density": 0.3,
@@ -1797,7 +1799,7 @@ async def test_happy_system_diagnostics_detects_split_brain(service: MemoryServi
     }
     service.vector_store.count.return_value = 3
     # IDs in graph: 1..5; IDs in vector: 1..3 → missing: 4, 5
-    service.repo.get_all_node_ids.return_value = ["id-1", "id-2", "id-3", "id-4", "id-5"]
+    service.async_repo.get_all_node_ids.return_value = ["id-1", "id-2", "id-3", "id-4", "id-5"]
     service.vector_store.list_ids.return_value = ["id-1", "id-2", "id-3"]
 
     result = await service.system_diagnostics()
@@ -1808,7 +1810,7 @@ async def test_happy_system_diagnostics_detects_split_brain(service: MemoryServi
 
 async def test_evil24_system_diagnostics_handles_backend_failure(service: MemoryService) -> None:
     """E-5: Graceful degradation when vector store is unreachable."""
-    service.repo.get_graph_health.return_value = {
+    service.async_repo.get_graph_health.return_value = {
         "total_nodes": 10,
         "total_edges": 5,
         "density": 0.1,
@@ -1832,12 +1834,12 @@ async def test_happy_reconnect_returns_structured_briefing(service: MemoryServic
     """E-4: reconnect returns recent_entities, recent_sessions, and health."""
 
     # Mock recent entities via timeline query
-    service.repo.query_timeline.return_value = [
+    service.async_repo.query_timeline.return_value = [
         {"id": "e-1", "name": "Python", "node_type": "Technology", "created_at": "2026-01-01"},
         {"id": "e-2", "name": "Rust", "node_type": "Technology", "created_at": "2026-01-02"},
     ]
     # Mock graph health
-    service.repo.get_graph_health.return_value = {
+    service.async_repo.get_graph_health.return_value = {
         "total_nodes": 50,
         "total_edges": 80,
         "density": 0.06,
@@ -1855,10 +1857,10 @@ async def test_happy_reconnect_returns_structured_briefing(service: MemoryServic
 
 async def test_happy_reconnect_filters_by_project(service: MemoryService) -> None:
     """E-4: reconnect accepts project_id to filter results."""
-    service.repo.query_timeline.return_value = [
+    service.async_repo.query_timeline.return_value = [
         {"id": "e-1", "name": "Django", "node_type": "Framework", "project_id": "proj-1"},
     ]
-    service.repo.get_graph_health.return_value = {
+    service.async_repo.get_graph_health.return_value = {
         "total_nodes": 10,
         "total_edges": 5,
         "density": 0.1,
@@ -1871,14 +1873,14 @@ async def test_happy_reconnect_filters_by_project(service: MemoryService) -> Non
     assert len(result["recent_entities"]) == 1
     assert result["recent_entities"][0]["name"] == "Django"
     # Verify project_id was passed to timeline query
-    call_args = service.repo.query_timeline.call_args
+    call_args = service.async_repo.query_timeline.call_args
     assert call_args.kwargs.get("project_id") == "proj-1" or "proj-1" in str(call_args)
 
 
 async def test_sad27_reconnect_handles_empty_graph(service: MemoryService) -> None:
     """E-4: reconnect handles empty graph gracefully."""
-    service.repo.query_timeline.return_value = []
-    service.repo.get_graph_health.return_value = {
+    service.async_repo.query_timeline.return_value = []
+    service.async_repo.get_graph_health.return_value = {
         "total_nodes": 0,
         "total_edges": 0,
         "density": 0.0,
@@ -1934,3 +1936,39 @@ async def test_happy_b10b_concurrency_stress_create_entity(service: MemoryServic
     ids = [r.id for r in results]
     assert len(set(ids)) == 10
     assert service.async_repo.create_node.call_count == 10
+
+
+@pytest.mark.asyncio
+async def test_evil_concurrent_consolidate_memories(service: MemoryService) -> None:
+    """B10.E: concurrent consolidations don't corrupt state."""
+    import asyncio
+
+    # Mock create_node to return unique nodes
+    call_counter = 0
+
+    def mock_create_node(*args, **kwargs):
+        nonlocal call_counter
+        call_counter += 1
+        return {"id": f"consolidated-ent-{call_counter}", "name": "Consolidated"}
+
+    service.async_repo.create_node.side_effect = mock_create_node
+    service.async_repo.update_node.return_value = {"status": "archived"}
+
+    tasks = []
+    for i in range(5):
+        tasks.append(
+            service.consolidate_memories(
+                entity_ids=[f"ent-{i}-A", f"ent-{i}-B"], summary=f"Consolidated memory {i}"
+            )
+        )
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    assert len(results) == 5
+    for r in results:
+        assert not isinstance(r, Exception), f"Exception raised: {r}"
+        assert "id" in r
+
+    assert service.async_repo.create_node.call_count == 5
+    assert service.async_repo.create_edge.call_count == 10
+    assert service.async_repo.update_node.call_count == 10

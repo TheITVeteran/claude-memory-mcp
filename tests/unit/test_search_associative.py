@@ -104,7 +104,7 @@ async def test_happy_search_associative_full_pipeline(service: MemoryService) ->
     service.vector_store.search.return_value = _vector_results("a", "b")
 
     # Spread hop 1: ActivationEngine uses sync repo (unmigrated)
-    service.repo.get_subgraph.return_value = {
+    service.async_repo.get_subgraph.return_value = {
         "nodes": [{"id": "a"}, {"id": "b"}, {"id": "c"}],
         "edges": [{"source": "a", "target": "c"}],
     }

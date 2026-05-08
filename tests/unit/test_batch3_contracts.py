@@ -81,8 +81,8 @@ def search_service():
 
         service = MemoryService(embedding_service=embedder, vector_store=vector_store)
         service.repo = MagicMock()
-        service.repo.client = MagicMock()
-        service.repo.client.select_graph.return_value = MagicMock()
+        service.async_repo.client = MagicMock()
+        service.async_repo.client.select_graph.return_value = MagicMock()
 
         # FTS store
         fts_mock = MagicMock()

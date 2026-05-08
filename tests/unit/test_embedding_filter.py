@@ -38,13 +38,13 @@ def mock_service():
 @pytest.mark.asyncio
 async def test_happy_create_entity_strips_embedding_from_receipt(mock_service):
     """create_entity receipt must not contain the embedding array."""
-    mock_service.repo.create_node.return_value = {
+    mock_service.async_repo.create_node.return_value = {
         "id": "123",
         "name": "Test",
         "node_type": "Entity",
         "embedding": [0.1] * 1024,  # THE LEAK
     }
-    mock_service.repo.get_total_node_count.return_value = 1
+    mock_service.async_repo.get_total_node_count.return_value = 1
     mock_service.embedder.encode.return_value = [0.1] * 1024
 
     # Mock vector upsert (async)
@@ -68,8 +68,12 @@ async def test_sad1_create_entity_receipt_missing_embedding_key_evil():
     mock_vector = AsyncMock()
     service = MemoryService(embedding_service=mock_embedder, vector_store=mock_vector)
     service.repo = MagicMock()
-    service.repo.create_node.return_value = {"id": "456", "name": "Clean", "node_type": "Entity"}
-    service.repo.get_total_node_count.return_value = 1
+    service.async_repo.create_node.return_value = {
+        "id": "456",
+        "name": "Clean",
+        "node_type": "Entity",
+    }
+    service.async_repo.get_total_node_count.return_value = 1
     service.embedder.encode.return_value = [0.1] * 1024
     service.vector_store.upsert = AsyncMock()
 

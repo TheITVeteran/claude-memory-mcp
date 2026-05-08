@@ -562,7 +562,7 @@ async def test_happy_analyze_graph_pagerank_only_entity_label(service: MemorySer
 
 
 async def test_evil8_analyze_graph_pagerank_error(service: MemoryService) -> None:
-    service.repo.execute_cypher.side_effect = RuntimeError("algo not available")
+    service.async_repo.execute_cypher.side_effect = RuntimeError("algo not available")
 
     with pytest.raises(RuntimeError, match="algo not available"):
         await service.analyze_graph(AnalyzeGraphParams(algorithm="pagerank"))
@@ -591,7 +591,7 @@ async def test_happy_analyze_graph_louvain_success(service: MemoryService) -> No
 
 
 async def test_evil9_analyze_graph_louvain_error(service: MemoryService) -> None:
-    service.repo.execute_cypher.side_effect = RuntimeError("algo not available")
+    service.async_repo.execute_cypher.side_effect = RuntimeError("algo not available")
 
     with pytest.raises(RuntimeError, match="algo not available"):
         await service.analyze_graph(AnalyzeGraphParams(algorithm="louvain"))
@@ -612,7 +612,7 @@ async def test_sad11_get_stale_entities(service: MemoryService) -> None:
     mock_node = MagicMock()
     mock_node.properties = {"id": ENTITY_ID, "name": ENTITY_NAME, "embedding": MOCK_EMBEDDING}
 
-    service.repo.execute_cypher.return_value = _make_cypher_result([[mock_node]])
+    service.async_repo.execute_cypher.return_value = _make_cypher_result([[mock_node]])
 
     result = await service.get_stale_entities(days=STALE_DAYS)
     assert len(result) == 1
@@ -625,7 +625,7 @@ async def test_sad11_get_stale_entities(service: MemoryService) -> None:
 
 
 async def test_happy_consolidate_memories(service: MemoryService) -> None:
-    service.repo.create_node.return_value = {"id": "consolidated-001", "name": "Consolidated"}
+    service.async_repo.create_node.return_value = {"id": "consolidated-001", "name": "Consolidated"}
 
     result = await service.consolidate_memories(
         entity_ids=[ENTITY_ID, ENTITY_ID_2],
@@ -634,19 +634,19 @@ async def test_happy_consolidate_memories(service: MemoryService) -> None:
     assert result["id"] == "consolidated-001"
 
     # Verify edges and archives for each old entity
-    assert service.repo.create_edge.call_count == 2
-    assert service.repo.update_node.call_count == 2
+    assert service.async_repo.create_edge.call_count == 2
+    assert service.async_repo.update_node.call_count == 2
     service.vector_store.upsert.assert_awaited_once()
 
 
 async def test_evil10_consolidate_memories_edge_error(service: MemoryService) -> None:
     """When linking an old entity fails, continue with remaining."""
-    service.repo.create_node.return_value = {"id": "consolidated-001", "name": "Consolidated"}
-    service.repo.create_edge.side_effect = [
+    service.async_repo.create_node.return_value = {"id": "consolidated-001", "name": "Consolidated"}
+    service.async_repo.create_edge.side_effect = [
         OSError("edge failed"),  # First entity fails
         MagicMock(),  # Second succeeds
     ]
-    service.repo.update_node.return_value = {}
+    service.async_repo.update_node.return_value = {}
 
     result = await service.consolidate_memories(
         entity_ids=[ENTITY_ID, ENTITY_ID_2],
@@ -654,7 +654,7 @@ async def test_evil10_consolidate_memories_edge_error(service: MemoryService) ->
     )
     assert result["id"] == "consolidated-001"
     # Only one update_node since first one errored before reaching it
-    assert service.repo.update_node.call_count == 1
+    assert service.async_repo.update_node.call_count == 1
 
 
 # ─── create_memory_type Tests ──────────────────────────────────────

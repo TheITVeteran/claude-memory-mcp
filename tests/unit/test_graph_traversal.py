@@ -17,14 +17,14 @@ def memory_service(mock_vector_store: Any) -> Generator[MemoryService, None, Non
         service = MemoryService(
             embedding_service=mock_embedder_cls.return_value, vector_store=mock_vector_store
         )
-        service.repo.client = MagicMock()
-        service.repo.client.select_graph.return_value = MagicMock()
+        service.async_repo.client = MagicMock()
+        service.async_repo.client.select_graph.return_value = MagicMock()
         yield service
 
 
 @pytest.mark.asyncio
 async def test_happy_get_neighbors(memory_service: MemoryService) -> None:
-    graph = memory_service.repo.client.select_graph.return_value
+    graph = memory_service.async_repo.client.select_graph.return_value
 
     # Mock result for get_neighbors
     mock_node = MagicMock()
@@ -41,7 +41,7 @@ async def test_happy_get_neighbors(memory_service: MemoryService) -> None:
 
 @pytest.mark.asyncio
 async def test_happy_traverse_path(memory_service: MemoryService) -> None:
-    graph = memory_service.repo.client.select_graph.return_value
+    graph = memory_service.async_repo.client.select_graph.return_value
 
     # Mock result for traverse_path
     mock_path = MagicMock()
@@ -68,7 +68,7 @@ async def test_happy_traverse_path(memory_service: MemoryService) -> None:
 
 @pytest.mark.asyncio
 async def test_happy_find_cross_domain_patterns(memory_service: MemoryService) -> None:
-    graph = memory_service.repo.client.select_graph.return_value
+    graph = memory_service.async_repo.client.select_graph.return_value
 
     # Mock result (list of nodes)
     mock_node = MagicMock()

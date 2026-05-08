@@ -69,7 +69,7 @@ class TestEntityExtractionChannel:
         # Mock: Cypher finds a node named "Google"
         mock_node = MagicMock()
         mock_node.properties = {"id": "google-001", "name": "Google"}
-        service.repo.execute_cypher.return_value = _make_cypher_result([[mock_node]])
+        service.async_repo.execute_cypher.return_value = _make_cypher_result([[mock_node]])
 
         results = await service._entity_extraction_enrichment("Tell me about Google")
 
@@ -85,7 +85,7 @@ class TestEntityExtractionChannel:
         mock_node_b = MagicMock()
         mock_node_b.properties = {"id": "bob-001", "name": "Bob"}
 
-        service.repo.execute_cypher.return_value = _make_cypher_result(
+        service.async_repo.execute_cypher.return_value = _make_cypher_result(
             [
                 [mock_node_a],
                 [mock_node_b],
@@ -108,7 +108,7 @@ class TestEntityExtractionChannel:
     @pytest.mark.asyncio()
     async def test_sad1_entities_not_in_graph(self, service) -> None:
         """NER extracts entities but graph has no matching nodes → empty."""
-        service.repo.execute_cypher.return_value = _make_cypher_result([])
+        service.async_repo.execute_cypher.return_value = _make_cypher_result([])
 
         results = await service._entity_extraction_enrichment("Tell me about Elon Musk")
 
@@ -117,7 +117,7 @@ class TestEntityExtractionChannel:
     @pytest.mark.asyncio()
     async def test_evil1_cypher_error_returns_empty(self, service) -> None:
         """Cypher query failure → graceful degradation (empty list)."""
-        service.repo.execute_cypher.side_effect = ConnectionError("FalkorDB down")
+        service.async_repo.execute_cypher.side_effect = ConnectionError("FalkorDB down")
 
         results = await service._entity_extraction_enrichment("Tell me about Google")
 
@@ -135,7 +135,7 @@ class TestEntityExtractionChannel:
         """Results must have 'id' key for RRF merge compatibility."""
         mock_node = MagicMock()
         mock_node.properties = {"id": "test-001", "name": "TestEntity"}
-        service.repo.execute_cypher.return_value = _make_cypher_result([[mock_node]])
+        service.async_repo.execute_cypher.return_value = _make_cypher_result([[mock_node]])
 
         results = await service._entity_extraction_enrichment("Tell me about TestEntity")
 
