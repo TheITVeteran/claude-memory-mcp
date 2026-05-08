@@ -27,6 +27,7 @@ def mock_service():
 
     service = MemoryService(embedding_service=mock_embedder, vector_store=mock_vector)
     service.repo = mock_repo
+    service.async_repo = AsyncMock()
 
     return service
 
@@ -90,7 +91,7 @@ async def test_happy_search_results_have_no_embedding_field(mock_service):
     """search() returns SearchResult models which have no embedding field."""
     mock_service.embedder.encode.return_value = [0.1] * 1024
     mock_service.vector_store.search = AsyncMock(return_value=[{"_id": "123", "_score": 0.9}])
-    mock_service.repo.get_subgraph.return_value = {
+    mock_service.async_repo.get_subgraph.return_value = {
         "nodes": [
             {
                 "id": "123",
@@ -125,7 +126,7 @@ async def test_happy_get_hologram_strips_embedding(mock_service):
     anchor_mock.model_dump.return_value = {"id": "1", "name": "Anchor"}
 
     mock_service.search = AsyncMock(return_value=[anchor_mock])
-    mock_service.repo.get_subgraph.return_value = {
+    mock_service.async_repo.get_subgraph.return_value = {
         "nodes": [{"id": "1", "name": "LeakyNode", "embedding": [0.001] * 1536}],
         "edges": [],
     }
@@ -150,7 +151,7 @@ async def test_happy_get_neighbors_strips_embedding(mock_service):
 
     mock_res = MagicMock()
     mock_res.result_set = [[mock_node]]
-    mock_service.repo.execute_cypher.return_value = mock_res
+    mock_service.async_repo.execute_cypher.return_value = mock_res
 
     neighbors = await mock_service.get_neighbors(GetNeighborsParams(entity_id="root_id"))
 

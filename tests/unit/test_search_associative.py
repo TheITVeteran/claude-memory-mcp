@@ -49,6 +49,8 @@ def service() -> MemoryService:
                 svc = MemoryService(embedding_service=mock_embedder)
 
     svc.repo = MagicMock()
+    svc.async_repo = AsyncMock()
+    svc.async_repo = AsyncMock()
     svc.activation_engine.repo = svc.repo  # sync so spread() uses same mock
     svc.vector_store = AsyncMock()
     return svc
@@ -101,16 +103,13 @@ async def test_happy_search_associative_full_pipeline(service: MemoryService) ->
     """Full pipeline: seeds → spread → rank → SearchResult list."""
     service.vector_store.search.return_value = _vector_results("a", "b")
 
-    # With max_hops=1: spread makes 1 get_subgraph call, then hydrate makes 1
-    service.repo.get_subgraph.side_effect = [
-        # Spread hop 1: a connects to c
-        {
-            "nodes": [{"id": "a"}, {"id": "b"}, {"id": "c"}],
-            "edges": [{"source": "a", "target": "c"}],
-        },
-        # Hydrate call (depth=0): full node properties
-        _graph_nodes("a", "b", "c"),
-    ]
+    # Spread hop 1: ActivationEngine uses sync repo (unmigrated)
+    service.repo.get_subgraph.return_value = {
+        "nodes": [{"id": "a"}, {"id": "b"}, {"id": "c"}],
+        "edges": [{"source": "a", "target": "c"}],
+    }
+    # Hydrate call (depth=0): search channels use async_repo (migrated)
+    service.async_repo.get_subgraph.return_value = _graph_nodes("a", "b", "c")
 
     results = await service.search_associative(
         SearchAssociativeParams(query="test query", limit=10, max_hops=1)
@@ -124,7 +123,7 @@ async def test_happy_search_associative_full_pipeline(service: MemoryService) ->
 async def test_happy_search_associative_project_filter(service: MemoryService) -> None:
     """Project filter is passed through to vector search."""
     service.vector_store.search.return_value = _vector_results("a")
-    service.repo.get_subgraph.return_value = _graph_nodes("a")
+    service.async_repo.get_subgraph.return_value = _graph_nodes("a")
 
     await service.search_associative(SearchAssociativeParams(query="q", project_id="proj-x"))
 
@@ -136,7 +135,7 @@ async def test_happy_search_associative_project_filter(service: MemoryService) -
 async def test_happy_search_associative_per_query_weights(service: MemoryService) -> None:
     """Per-query weight overrides change ranking scores."""
     service.vector_store.search.return_value = _vector_results("a")
-    service.repo.get_subgraph.return_value = _graph_nodes("a")
+    service.async_repo.get_subgraph.return_value = _graph_nodes("a")
 
     # All weight on similarity
     results_sim = await service.search_associative(
@@ -144,7 +143,7 @@ async def test_happy_search_associative_per_query_weights(service: MemoryService
     )
 
     service.vector_store.search.return_value = _vector_results("a")
-    service.repo.get_subgraph.return_value = _graph_nodes("a")
+    service.async_repo.get_subgraph.return_value = _graph_nodes("a")
 
     # All weight on recency
     results_rec = await service.search_associative(

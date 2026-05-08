@@ -71,7 +71,7 @@ class SearchAdvancedMixin:
 
             # 3. Gather all candidate IDs (seeds + spread targets)
             all_ids = list(set(seed_ids) | set(activation_map.keys()))
-            graph_data = self.repo.get_subgraph(all_ids, depth=0)  # type: ignore[attr-defined]
+            graph_data = await self.async_repo.get_subgraph(all_ids, depth=0)  # type: ignore[attr-defined]
             nodes_map = {n["id"]: n for n in graph_data["nodes"]}
 
             # Fire-and-forget salience update for associative search too
@@ -140,7 +140,7 @@ class SearchAdvancedMixin:
         anchor_ids = [a.id for a in anchors]
 
         # 2. Expand Subgraph
-        hologram = self.repo.get_subgraph(anchor_ids, params.depth)  # type: ignore[attr-defined]
+        hologram = await self.async_repo.get_subgraph(anchor_ids, params.depth)  # type: ignore[attr-defined]
 
         # 3. Assemble and Optimize
         raw_nodes = hologram.get("nodes", [])
@@ -199,7 +199,7 @@ class SearchAdvancedMixin:
         max_dist_factor = float(os.getenv("RADAR_MAX_DISTANCE_FACTOR", "5.0"))
 
         # Fetch source entity
-        source_node = self.repo.get_node(entity_id)  # type: ignore[attr-defined]
+        source_node = await self.async_repo.get_node(entity_id)  # type: ignore[attr-defined]
         if not source_node:
             return {"error": f"Entity {entity_id} not found", "suggestions": []}
 
@@ -231,7 +231,7 @@ class SearchAdvancedMixin:
             cid = candidate["_id"]
             cosine_sim = candidate["_score"]
 
-            graph_dist = self.repo.shortest_path_length(entity_id, cid)  # type: ignore[attr-defined]
+            graph_dist = await self.async_repo.shortest_path_length(entity_id, cid)  # type: ignore[attr-defined]
 
             if graph_dist is not None and graph_dist <= 1:
                 already_connected += 1

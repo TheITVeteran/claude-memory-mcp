@@ -103,6 +103,7 @@ def service() -> MemoryService:
     # Replace repo, vector_store, lock_manager with mocks
     svc.repo = MagicMock()
     svc.async_repo = AsyncMock()
+    svc.async_repo = AsyncMock()
     svc.vector_store = AsyncMock()
     svc.lock_manager = MagicMock()
 
@@ -330,7 +331,7 @@ async def test_evil6_add_observation_entity_not_found(service: MemoryService) ->
 
 
 async def test_evil7_end_session_not_found(service: MemoryService) -> None:
-    service.repo.execute_cypher.return_value = _make_cypher_result([])
+    service.async_repo.execute_cypher.return_value = _make_cypher_result([])
 
     params = SessionEndParams(
         session_id=SESSION_ID, summary=SESSION_SUMMARY, outcomes=SESSION_OUTCOMES
@@ -385,7 +386,7 @@ async def test_happy_traverse_path_with_nodes(service: MemoryService) -> None:
     mock_path = MagicMock()
     mock_path.nodes = [mock_node_a, mock_node_b]
 
-    service.repo.execute_cypher.return_value = _make_cypher_result([[mock_path]])
+    service.async_repo.execute_cypher.return_value = _make_cypher_result([[mock_path]])
 
     result = await service.traverse_path(TraversePathParams(from_id=ENTITY_ID, to_id=ENTITY_ID_2))
     assert len(result) == 2
@@ -394,7 +395,7 @@ async def test_happy_traverse_path_with_nodes(service: MemoryService) -> None:
 
 
 async def test_sad4_traverse_path_no_path_found(service: MemoryService) -> None:
-    service.repo.execute_cypher.return_value = _make_cypher_result([])
+    service.async_repo.execute_cypher.return_value = _make_cypher_result([])
 
     result = await service.traverse_path(TraversePathParams(from_id=ENTITY_ID, to_id=ENTITY_ID_2))
     assert result == []
@@ -403,7 +404,7 @@ async def test_sad4_traverse_path_no_path_found(service: MemoryService) -> None:
 async def test_sad5_traverse_path_no_nodes_attr(service: MemoryService) -> None:
     """When path object doesn't have .nodes attribute."""
     mock_path = MagicMock(spec=[])  # No attributes
-    service.repo.execute_cypher.return_value = _make_cypher_result([[mock_path]])
+    service.async_repo.execute_cypher.return_value = _make_cypher_result([[mock_path]])
 
     result = await service.traverse_path(TraversePathParams(from_id=ENTITY_ID, to_id=ENTITY_ID_2))
     assert result == []
@@ -428,7 +429,7 @@ async def test_happy_search_with_results(service: MemoryService) -> None:
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
-    service.repo.get_subgraph.return_value = {
+    service.async_repo.get_subgraph.return_value = {
         "nodes": [
             {
                 "id": ENTITY_ID,
@@ -453,7 +454,7 @@ async def test_sad8_search_node_not_in_graph(service: MemoryService) -> None:
     service.vector_store.search.return_value = [
         {"_id": "orphan-id", "_score": PAGERANK_SCORE},
     ]
-    service.repo.get_subgraph.return_value = {"nodes": [], "edges": []}
+    service.async_repo.get_subgraph.return_value = {"nodes": [], "edges": []}
 
     result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
     assert result == []
@@ -467,7 +468,7 @@ async def test_happy_search_with_project_id_filter(service: MemoryService) -> No
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
-    service.repo.get_subgraph.return_value = {
+    service.async_repo.get_subgraph.return_value = {
         "nodes": [
             {
                 "id": ENTITY_ID,
@@ -506,7 +507,7 @@ async def test_happy_point_in_time_query_with_results(service: MemoryService) ->
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID},
     ]
-    service.repo.get_subgraph.return_value = {
+    service.async_repo.get_subgraph.return_value = {
         "nodes": [{"id": ENTITY_ID, "name": ENTITY_NAME}],
         "edges": [],
     }
@@ -526,7 +527,7 @@ async def test_happy_analyze_graph_pagerank_success(service: MemoryService) -> N
     mock_node.properties = {"name": ENTITY_NAME, "rank": PAGERANK_SCORE}
     mock_node.labels = [ENTITY_TYPE, "Entity"]
 
-    service.repo.execute_cypher.side_effect = [
+    service.async_repo.execute_cypher.side_effect = [
         _make_cypher_result([[mock_node]]),  # MATCH (n:Entity) RETURN n
         _make_cypher_result([]),  # MATCH edges
     ]
@@ -547,7 +548,7 @@ async def test_happy_analyze_graph_pagerank_only_entity_label(service: MemorySer
     mock_node.properties = {"name": ENTITY_NAME, "rank": PAGERANK_SCORE}
     mock_node.labels = ["Entity"]  # Only Entity label
 
-    service.repo.execute_cypher.side_effect = [
+    service.async_repo.execute_cypher.side_effect = [
         _make_cypher_result([[mock_node]]),
         _make_cypher_result([]),
     ]
@@ -561,7 +562,7 @@ async def test_happy_analyze_graph_pagerank_only_entity_label(service: MemorySer
 
 
 async def test_evil8_analyze_graph_pagerank_error(service: MemoryService) -> None:
-    service.repo.execute_cypher.side_effect = RuntimeError("algo not available")
+    service.async_repo.execute_cypher.side_effect = RuntimeError("algo not available")
 
     with pytest.raises(RuntimeError, match="algo not available"):
         await service.analyze_graph(AnalyzeGraphParams(algorithm="pagerank"))
@@ -572,7 +573,7 @@ async def test_happy_analyze_graph_louvain_success(service: MemoryService) -> No
     mock_node.properties = {"name": ENTITY_NAME}
     mock_node.labels = ["Entity"]
 
-    service.repo.execute_cypher.side_effect = [
+    service.async_repo.execute_cypher.side_effect = [
         _make_cypher_result([[mock_node]]),  # MATCH (n:Entity) RETURN n
         _make_cypher_result([]),  # MATCH edges
     ]
@@ -590,7 +591,7 @@ async def test_happy_analyze_graph_louvain_success(service: MemoryService) -> No
 
 
 async def test_evil9_analyze_graph_louvain_error(service: MemoryService) -> None:
-    service.repo.execute_cypher.side_effect = RuntimeError("algo not available")
+    service.async_repo.execute_cypher.side_effect = RuntimeError("algo not available")
 
     with pytest.raises(RuntimeError, match="algo not available"):
         await service.analyze_graph(AnalyzeGraphParams(algorithm="louvain"))
@@ -611,7 +612,7 @@ async def test_sad11_get_stale_entities(service: MemoryService) -> None:
     mock_node = MagicMock()
     mock_node.properties = {"id": ENTITY_ID, "name": ENTITY_NAME, "embedding": MOCK_EMBEDDING}
 
-    service.repo.execute_cypher.return_value = _make_cypher_result([[mock_node]])
+    service.async_repo.execute_cypher.return_value = _make_cypher_result([[mock_node]])
 
     result = await service.get_stale_entities(days=STALE_DAYS)
     assert len(result) == 1
@@ -705,7 +706,7 @@ async def test_happy_get_hologram_with_non_dict_nodes(service: MemoryService) ->
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
-    service.repo.get_subgraph.return_value = {
+    service.async_repo.get_subgraph.return_value = {
         "nodes": [
             {
                 "id": ENTITY_ID,
@@ -727,7 +728,7 @@ async def test_happy_get_hologram_with_non_dict_nodes(service: MemoryService) ->
     # Hologram's internal search call returns results
     with patch.object(service, "search", return_value=[mock_search_result]):
         # get_subgraph returns both dict and non-dict nodes
-        service.repo.get_subgraph.return_value = {
+        service.async_repo.get_subgraph.return_value = {
             "nodes": [
                 {"id": ENTITY_ID, "name": ENTITY_NAME, "embedding": MOCK_EMBEDDING},
                 MagicMock(),  # non-dict node → branch 733→732 False

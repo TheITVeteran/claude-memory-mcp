@@ -41,6 +41,7 @@ def service():
                 svc = MemoryService(embedding_service=mock_embedder)
 
     svc.repo = MagicMock()
+    svc.async_repo = AsyncMock()
     svc.activation_engine.repo = svc.repo
     svc.vector_store = AsyncMock()
     svc.router = MagicMock(spec=QueryRouter)
@@ -93,7 +94,7 @@ class TestHybridSearchPipeline:
         """strategy=None always calls vector_store.search."""
         service.vector_store.search.return_value = _vector_results("a")
         service.router.classify.return_value = QueryIntent.SEMANTIC
-        service.repo.get_subgraph.return_value = _graph_nodes("a")
+        service.async_repo.get_subgraph.return_value = _graph_nodes("a")
 
         await service.search(SearchMemoryParams(query="test query"))
 
@@ -106,11 +107,11 @@ class TestHybridSearchPipeline:
         """TEMPORAL intent triggers query_timeline alongside vector search."""
         service.vector_store.search.return_value = _vector_results("a")
         service.router.classify.return_value = QueryIntent.TEMPORAL
-        service.repo.get_subgraph.return_value = _graph_nodes("a")
+        service.async_repo.get_subgraph.return_value = _graph_nodes("a")
 
         with patch.object(service, "query_timeline", new_callable=AsyncMock) as mock_tl:
             mock_tl.return_value = [{"id": "t1", "name": "Temporal-1"}]
-            service.repo.get_subgraph.return_value = _graph_nodes("a", "t1")
+            service.async_repo.get_subgraph.return_value = _graph_nodes("a", "t1")
 
             _ = await service.search(SearchMemoryParams(query="what happened recently"))
 
@@ -124,14 +125,14 @@ class TestHybridSearchPipeline:
         """RELATIONAL intent with quoted entities triggers traverse_path."""
         service.vector_store.search.return_value = _vector_results("a")
         service.router.classify.return_value = QueryIntent.RELATIONAL
-        service.repo.get_subgraph.return_value = _graph_nodes("a")
+        service.async_repo.get_subgraph.return_value = _graph_nodes("a")
 
         with patch.object(service, "traverse_path", new_callable=AsyncMock) as mock_tp:
             mock_tp.return_value = [
                 {"id": "r1", "name": "Rel-1"},
                 {"id": "r2", "name": "Rel-2"},
             ]
-            service.repo.get_subgraph.return_value = _graph_nodes("a", "r1", "r2")
+            service.async_repo.get_subgraph.return_value = _graph_nodes("a", "r1", "r2")
 
             await service.search(SearchMemoryParams(query='path between "auth" and "database"'))
 
@@ -149,7 +150,7 @@ class TestHybridSearchPipeline:
         # Mock the activation engine methods
         service.activation_engine.activate = MagicMock(return_value={"a": 1.0, "b": 1.0})
         service.activation_engine.spread = MagicMock(return_value={"a": 1.0, "b": 0.6, "c": 0.3})
-        service.repo.get_subgraph.return_value = _graph_nodes("a", "b", "c")
+        service.async_repo.get_subgraph.return_value = _graph_nodes("a", "b", "c")
 
         results = await service.search(SearchMemoryParams(query="things related to auth"))
 
@@ -162,7 +163,7 @@ class TestHybridSearchPipeline:
         """SEMANTIC intent: vector channel gets full weight, graph channels get base weight."""
         service.vector_store.search.return_value = _vector_results("a")
         service.router.classify.return_value = QueryIntent.SEMANTIC
-        service.repo.get_subgraph.return_value = _graph_nodes("a")
+        service.async_repo.get_subgraph.return_value = _graph_nodes("a")
 
         results = await service.search(SearchMemoryParams(query="what is Python"))
 
@@ -175,7 +176,7 @@ class TestHybridSearchPipeline:
         """retrieval_strategy is never empty/missing on results."""
         service.vector_store.search.return_value = _vector_results("a")
         service.router.classify.return_value = QueryIntent.SEMANTIC
-        service.repo.get_subgraph.return_value = _graph_nodes("a")
+        service.async_repo.get_subgraph.return_value = _graph_nodes("a")
 
         results = await service.search(SearchMemoryParams(query="test query"))
 
@@ -195,7 +196,7 @@ class TestHybridSearchPipeline:
         """score > 0 when a vector match exists (the original bug)."""
         service.vector_store.search.return_value = _vector_results("a")
         service.router.classify.return_value = QueryIntent.TEMPORAL
-        service.repo.get_subgraph.return_value = _graph_nodes("a")
+        service.async_repo.get_subgraph.return_value = _graph_nodes("a")
 
         with patch.object(service, "query_timeline", new_callable=AsyncMock) as mock_tl:
             mock_tl.return_value = [{"id": "a", "name": "Node-a"}]
@@ -215,7 +216,7 @@ class TestHybridSearchPipeline:
         """strategy='auto' logs deprecation warning, runs hybrid path."""
         service.vector_store.search.return_value = _vector_results("a")
         service.router.classify.return_value = QueryIntent.SEMANTIC
-        service.repo.get_subgraph.return_value = _graph_nodes("a")
+        service.async_repo.get_subgraph.return_value = _graph_nodes("a")
 
         with caplog.at_level(logging.WARNING):
             results = await service.search(SearchMemoryParams(query="test", strategy="auto"))
@@ -229,7 +230,7 @@ class TestHybridSearchPipeline:
         """temporal_window_days=7 default is applied."""
         service.vector_store.search.return_value = _vector_results("a")
         service.router.classify.return_value = QueryIntent.TEMPORAL
-        service.repo.get_subgraph.return_value = _graph_nodes("a")
+        service.async_repo.get_subgraph.return_value = _graph_nodes("a")
 
         with patch.object(service, "query_timeline", new_callable=AsyncMock) as mock_tl:
             mock_tl.return_value = [{"id": "a", "name": "Node-a"}]
@@ -246,7 +247,7 @@ class TestHybridSearchPipeline:
         """temporal_exhausted is True when results < limit."""
         service.vector_store.search.return_value = _vector_results("a")
         service.router.classify.return_value = QueryIntent.TEMPORAL
-        service.repo.get_subgraph.return_value = _graph_nodes("a", "t1")
+        service.async_repo.get_subgraph.return_value = _graph_nodes("a", "t1")
 
         with patch.object(service, "query_timeline", new_callable=AsyncMock) as mock_tl:
             # Return 2 results, but limit is 5 (default) → exhausted

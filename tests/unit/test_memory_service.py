@@ -103,6 +103,7 @@ def service() -> MemoryService:
     # Replace repo, vector_store, lock_manager with mocks
     svc.repo = MagicMock()
     svc.async_repo = AsyncMock()
+    svc.async_repo = AsyncMock()
     svc.vector_store = AsyncMock()
     svc.lock_manager = MagicMock()
 
@@ -396,7 +397,7 @@ async def test_evil8_add_observation_vector_upsert_failure_raises(service: Memor
 
 
 async def test_evil9_end_session_not_found(service: MemoryService) -> None:
-    service.repo.execute_cypher.return_value = _make_cypher_result([])
+    service.async_repo.execute_cypher.return_value = _make_cypher_result([])
 
     params = SessionEndParams(
         session_id=SESSION_ID, summary=SESSION_SUMMARY, outcomes=SESSION_OUTCOMES
@@ -451,7 +452,7 @@ async def test_happy_traverse_path_with_nodes(service: MemoryService) -> None:
     mock_path = MagicMock()
     mock_path.nodes = [mock_node_a, mock_node_b]
 
-    service.repo.execute_cypher.return_value = _make_cypher_result([[mock_path]])
+    service.async_repo.execute_cypher.return_value = _make_cypher_result([[mock_path]])
 
     result = await service.traverse_path(TraversePathParams(from_id=ENTITY_ID, to_id=ENTITY_ID_2))
     assert len(result) == 2
@@ -460,7 +461,7 @@ async def test_happy_traverse_path_with_nodes(service: MemoryService) -> None:
 
 
 async def test_sad4_traverse_path_no_path_found(service: MemoryService) -> None:
-    service.repo.execute_cypher.return_value = _make_cypher_result([])
+    service.async_repo.execute_cypher.return_value = _make_cypher_result([])
 
     result = await service.traverse_path(TraversePathParams(from_id=ENTITY_ID, to_id=ENTITY_ID_2))
     assert result == []
@@ -469,7 +470,7 @@ async def test_sad4_traverse_path_no_path_found(service: MemoryService) -> None:
 async def test_sad5_traverse_path_no_nodes_attr(service: MemoryService) -> None:
     """When path object doesn't have .nodes attribute."""
     mock_path = MagicMock(spec=[])  # No attributes
-    service.repo.execute_cypher.return_value = _make_cypher_result([[mock_path]])
+    service.async_repo.execute_cypher.return_value = _make_cypher_result([[mock_path]])
 
     result = await service.traverse_path(TraversePathParams(from_id=ENTITY_ID, to_id=ENTITY_ID_2))
     assert result == []
@@ -494,7 +495,7 @@ async def test_happy_search_with_results(service: MemoryService) -> None:
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
-    service.repo.get_subgraph.return_value = {
+    service.async_repo.get_subgraph.return_value = {
         "nodes": [
             {
                 "id": ENTITY_ID,
@@ -519,7 +520,7 @@ async def test_sad8_search_node_not_in_graph(service: MemoryService) -> None:
     service.vector_store.search.return_value = [
         {"_id": "orphan-id", "_score": PAGERANK_SCORE},
     ]
-    service.repo.get_subgraph.return_value = {"nodes": [], "edges": []}
+    service.async_repo.get_subgraph.return_value = {"nodes": [], "edges": []}
 
     result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
     assert result == []
@@ -535,7 +536,7 @@ async def test_happy_search_deep_returns_observations(service: MemoryService) ->
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
-    service.repo.get_subgraph.return_value = {
+    service.async_repo.get_subgraph.return_value = {
         "nodes": [
             {
                 "id": ENTITY_ID,
@@ -550,7 +551,7 @@ async def test_happy_search_deep_returns_observations(service: MemoryService) ->
     # Mock observation lookup
     obs_result = MagicMock()
     obs_result.result_set = [["First observation"], ["Second observation"]]
-    service.repo.execute_cypher.return_value = obs_result
+    service.async_repo.execute_cypher.return_value = obs_result
 
     result = await service.search(
         SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT, deep=True)
@@ -566,7 +567,7 @@ async def test_happy_search_deep_returns_relationships(service: MemoryService) -
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
-    service.repo.get_subgraph.return_value = {
+    service.async_repo.get_subgraph.return_value = {
         "nodes": [
             {
                 "id": ENTITY_ID,
@@ -582,7 +583,7 @@ async def test_happy_search_deep_returns_relationships(service: MemoryService) -
     }
     obs_result = MagicMock()
     obs_result.result_set = []
-    service.repo.execute_cypher.return_value = obs_result
+    service.async_repo.execute_cypher.return_value = obs_result
 
     result = await service.search(
         SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT, deep=True)
@@ -596,7 +597,7 @@ async def test_sad9_search_shallow_backward_compat(service: MemoryService) -> No
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
-    service.repo.get_subgraph.return_value = {
+    service.async_repo.get_subgraph.return_value = {
         "nodes": [
             {
                 "id": ENTITY_ID,
@@ -623,7 +624,7 @@ async def test_happy_search_with_project_id_filter(service: MemoryService) -> No
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
-    service.repo.get_subgraph.return_value = {
+    service.async_repo.get_subgraph.return_value = {
         "nodes": [
             {
                 "id": ENTITY_ID,
@@ -651,7 +652,7 @@ async def test_happy_search_with_mmr_flag(service: MemoryService) -> None:
     service.vector_store.search_mmr.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
-    service.repo.get_subgraph.return_value = {
+    service.async_repo.get_subgraph.return_value = {
         "nodes": [
             {
                 "id": ENTITY_ID,
@@ -689,7 +690,7 @@ async def test_happy_point_in_time_query_with_results(service: MemoryService) ->
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID},
     ]
-    service.repo.get_subgraph.return_value = {
+    service.async_repo.get_subgraph.return_value = {
         "nodes": [{"id": ENTITY_ID, "name": ENTITY_NAME}],
         "edges": [],
     }
@@ -713,7 +714,7 @@ async def test_happy_analyze_graph_pagerank_success(service: MemoryService) -> N
     mock_node_b.properties = {"name": "NodeB"}
     mock_node_b.labels = ["Entity"]
 
-    service.repo.execute_cypher.side_effect = [
+    service.async_repo.execute_cypher.side_effect = [
         _make_cypher_result([[mock_node_a], [mock_node_b]]),  # nodes
         _make_cypher_result([["NodeB", ENTITY_NAME]]),  # edges: B->A
     ]
@@ -731,7 +732,7 @@ async def test_happy_analyze_graph_pagerank_only_entity_label(service: MemorySer
     mock_node.properties = {"name": ENTITY_NAME}
     mock_node.labels = ["Entity"]  # Only Entity label
 
-    service.repo.execute_cypher.side_effect = [
+    service.async_repo.execute_cypher.side_effect = [
         _make_cypher_result([[mock_node]]),  # nodes
         _make_cypher_result([]),  # no edges
     ]
@@ -742,7 +743,7 @@ async def test_happy_analyze_graph_pagerank_only_entity_label(service: MemorySer
 
 async def test_evil10_analyze_graph_pagerank_error(service: MemoryService) -> None:
     """Errors propagate loudly from PageRank (no silent swallowing)."""
-    service.repo.execute_cypher.side_effect = RuntimeError("algo not available")
+    service.async_repo.execute_cypher.side_effect = RuntimeError("algo not available")
 
     with pytest.raises(RuntimeError, match="algo not available"):
         await service.analyze_graph(AnalyzeGraphParams(algorithm="pagerank"))
@@ -757,7 +758,7 @@ async def test_happy_analyze_graph_louvain_success(service: MemoryService) -> No
         n.labels = ["Entity"]
         nodes.append(n)
 
-    service.repo.execute_cypher.side_effect = [
+    service.async_repo.execute_cypher.side_effect = [
         _make_cypher_result([[n] for n in nodes]),  # nodes
         _make_cypher_result([["A", "B"], ["B", "C"], ["A", "C"]]),  # edges
     ]
@@ -771,7 +772,7 @@ async def test_happy_analyze_graph_louvain_success(service: MemoryService) -> No
 
 async def test_evil11_analyze_graph_louvain_error(service: MemoryService) -> None:
     """Errors propagate loudly from Louvain (no silent swallowing)."""
-    service.repo.execute_cypher.side_effect = RuntimeError("algo not available")
+    service.async_repo.execute_cypher.side_effect = RuntimeError("algo not available")
 
     with pytest.raises(RuntimeError, match="algo not available"):
         await service.analyze_graph(AnalyzeGraphParams(algorithm="louvain"))
@@ -791,7 +792,7 @@ async def test_sad12_get_stale_entities(service: MemoryService) -> None:
     mock_node = MagicMock()
     mock_node.properties = {"id": ENTITY_ID, "name": ENTITY_NAME, "embedding": MOCK_EMBEDDING}
 
-    service.repo.execute_cypher.return_value = _make_cypher_result([[mock_node]])
+    service.async_repo.execute_cypher.return_value = _make_cypher_result([[mock_node]])
 
     result = await service.get_stale_entities(days=STALE_DAYS)
     assert len(result) == 1
@@ -878,7 +879,7 @@ async def test_happy_get_hologram_with_non_dict_nodes(service: MemoryService) ->
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
-    service.repo.get_subgraph.return_value = {
+    service.async_repo.get_subgraph.return_value = {
         "nodes": [
             {
                 "id": ENTITY_ID,
@@ -900,7 +901,7 @@ async def test_happy_get_hologram_with_non_dict_nodes(service: MemoryService) ->
     # Hologram's internal search call returns results
     with patch.object(service, "search", return_value=[mock_search_result]):
         # get_subgraph returns both dict and non-dict nodes
-        service.repo.get_subgraph.return_value = {
+        service.async_repo.get_subgraph.return_value = {
             "nodes": [
                 {"id": ENTITY_ID, "name": ENTITY_NAME, "embedding": MOCK_EMBEDDING},
                 MagicMock(),  # non-dict node → branch 733→732 False
@@ -966,7 +967,7 @@ async def test_happy_search_fires_salience_async(service: MemoryService) -> None
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
-    service.repo.get_subgraph.return_value = {
+    service.async_repo.get_subgraph.return_value = {
         "nodes": [
             {
                 "id": ENTITY_ID,
@@ -1008,7 +1009,7 @@ async def test_evil13_search_salience_background_error_silent(service: MemorySer
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
-    service.repo.get_subgraph.return_value = {
+    service.async_repo.get_subgraph.return_value = {
         "nodes": [
             {
                 "id": ENTITY_ID,
@@ -1040,7 +1041,7 @@ async def test_sad15_search_salience_fallback_default(service: MemoryService) ->
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
-    service.repo.get_subgraph.return_value = {
+    service.async_repo.get_subgraph.return_value = {
         "nodes": [
             {
                 "id": ENTITY_ID,
@@ -1457,7 +1458,7 @@ async def test_happy_get_bottles_with_content(service: MemoryService) -> None:
     obs_results_1.result_set = [["This is the bottle message body"]]
     obs_results_2 = MagicMock()
     obs_results_2.result_set = [["Second bottle body"], ["PS: extra note"]]
-    service.repo.execute_cypher.side_effect = [obs_results_1, obs_results_2]
+    service.async_repo.execute_cypher.side_effect = [obs_results_1, obs_results_2]
 
     params = BottleQueryParams(include_content=True)
     result = await service.get_bottles(params)
@@ -1489,7 +1490,7 @@ async def test_sad23_get_bottles_backward_compat(service: MemoryService) -> None
     # No observations key when include_content is False
     assert "observations" not in result[0]
     # execute_cypher should NOT have been called for observation lookup
-    service.repo.execute_cypher.assert_not_called()
+    service.async_repo.execute_cypher.assert_not_called()
 
 
 # ─── Phase 15A: Graph Health Metrics Tests ──────────────────────────
@@ -1631,7 +1632,7 @@ async def test_evil18_delete_entity_soft_vector_failure_always_raises(
     service: MemoryService,
 ) -> None:
     """When vector delete fails during soft delete, it always raises."""
-    service.repo.get_node.return_value = MOCK_NODE_PROPS.copy()
+    service.async_repo.get_node.return_value = MOCK_NODE_PROPS.copy()
     service.vector_store.delete.side_effect = RuntimeError("Qdrant unreachable")
 
     params = EntityDeleteParams(
@@ -1647,7 +1648,7 @@ async def test_evil19_delete_entity_hard_vector_failure_always_raises(
     service: MemoryService,
 ) -> None:
     """When vector delete fails during hard delete, it always raises."""
-    service.repo.get_node.return_value = MOCK_NODE_PROPS.copy()
+    service.async_repo.get_node.return_value = MOCK_NODE_PROPS.copy()
     service.vector_store.delete.side_effect = RuntimeError("Qdrant gone")
 
     params = EntityDeleteParams(
@@ -1765,7 +1766,7 @@ async def test_happy_system_diagnostics_returns_all_sections(service: MemoryServ
         "avg_degree": 4.0,
     }
     service.vector_store.count.return_value = 95
-    service.repo.get_all_node_ids.return_value = [f"id-{i}" for i in range(100)]
+    service.async_repo.get_all_node_ids.return_value = [f"id-{i}" for i in range(100)]
     service.vector_store.list_ids.return_value = [f"id-{i}" for i in range(95)]
 
     result = await service.system_diagnostics()
@@ -1788,7 +1789,7 @@ async def test_happy_system_diagnostics_detects_split_brain(service: MemoryServi
     }
     service.vector_store.count.return_value = 3
     # IDs in graph: 1..5; IDs in vector: 1..3 → missing: 4, 5
-    service.repo.get_all_node_ids.return_value = ["id-1", "id-2", "id-3", "id-4", "id-5"]
+    service.async_repo.get_all_node_ids.return_value = ["id-1", "id-2", "id-3", "id-4", "id-5"]
     service.vector_store.list_ids.return_value = ["id-1", "id-2", "id-3"]
 
     result = await service.system_diagnostics()
@@ -1807,7 +1808,7 @@ async def test_evil24_system_diagnostics_handles_backend_failure(service: Memory
         "avg_degree": 1.0,
     }
     service.vector_store.count.side_effect = ConnectionError("Qdrant down")
-    service.repo.get_all_node_ids.return_value = [f"id-{i}" for i in range(10)]
+    service.async_repo.get_all_node_ids.return_value = [f"id-{i}" for i in range(10)]
 
     result = await service.system_diagnostics()
 

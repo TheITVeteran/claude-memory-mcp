@@ -24,6 +24,7 @@ def _make_search_mixin() -> SearchMixin:
     """Create a SearchMixin with mocked dependencies."""
     svc = SearchMixin.__new__(SearchMixin)
     svc.repo = MagicMock()
+    svc.async_repo = AsyncMock()
     svc.vector_store = AsyncMock()
     svc.embedder = MagicMock()
     svc.embedder.encode.return_value = [0.1, 0.2, 0.3]
@@ -51,7 +52,7 @@ class TestRelationalEnrichment:
         alice_res.result_set = [["uuid-alice"]]
         bob_res = MagicMock()
         bob_res.result_set = [["uuid-bob"]]
-        svc.repo.execute_cypher.side_effect = [alice_res, bob_res]
+        svc.async_repo.execute_cypher.side_effect = [alice_res, bob_res]
 
         result = await svc._relational_enrichment('How does "Alice" relate to "Bob"?')
         assert len(result) == 2
@@ -84,7 +85,7 @@ class TestRelationalEnrichment:
         res1.result_set = [["uuid-e1"]]
         res2 = MagicMock()
         res2.result_set = [["uuid-e2"]]
-        svc.repo.execute_cypher.side_effect = [res1, res2]
+        svc.async_repo.execute_cypher.side_effect = [res1, res2]
 
         result = await svc._relational_enrichment('"Entity1" to "Entity2"')
         assert len(result) == 2  # non-dict filtered
@@ -100,7 +101,7 @@ class TestRelationalEnrichment:
         res1.result_set = [["uuid-alice"]]
         res2 = MagicMock()
         res2.result_set = [["uuid-bob"]]
-        svc.repo.execute_cypher.side_effect = [res1, res2]
+        svc.async_repo.execute_cypher.side_effect = [res1, res2]
 
         result = await svc._relational_enrichment('"Alice" to "Bob"')
         assert result == []
@@ -116,7 +117,7 @@ class TestRelationalEnrichment:
         res1.result_set = [["uuid-a"]]
         res2 = MagicMock()
         res2.result_set = [["uuid-b"]]
-        svc.repo.execute_cypher.side_effect = [res1, res2]
+        svc.async_repo.execute_cypher.side_effect = [res1, res2]
 
         _ = await svc._relational_enrichment('"A" then "B" then "C"')
         svc.traverse_path.assert_called_once_with("uuid-a", "uuid-b")
@@ -136,7 +137,7 @@ class TestAssociativeEnrichment:
         svc = _make_search_mixin()
         svc.activation_engine.activate.return_value = {"e1": 1.0}
         svc.activation_engine.spread.return_value = {"e1": 0.8, "e2": 0.5}
-        svc.repo.get_subgraph.return_value = {
+        svc.async_repo.get_subgraph.return_value = {
             "nodes": [{"id": "e1", "name": "A"}, {"id": "e2", "name": "B"}]
         }
 
@@ -162,7 +163,7 @@ class TestAssociativeEnrichment:
         svc = _make_search_mixin()
         svc.activation_engine.activate.return_value = {"e1": 1.0}
         svc.activation_engine.spread.return_value = {f"e{i}": 0.5 for i in range(20)}
-        svc.repo.get_subgraph.return_value = {
+        svc.async_repo.get_subgraph.return_value = {
             "nodes": [{"id": f"e{i}", "name": f"N{i}"} for i in range(20)]
         }
 
@@ -177,7 +178,7 @@ class TestAssociativeEnrichment:
         svc = _make_search_mixin()
         svc.activation_engine.activate.return_value = {"e1": 1.0}
         svc.activation_engine.spread.return_value = {}
-        svc.repo.get_subgraph.return_value = {
+        svc.async_repo.get_subgraph.return_value = {
             "nodes": [{"id": "e1", "name": "A"}, "not-a-dict", None]
         }
 
@@ -192,7 +193,7 @@ class TestAssociativeEnrichment:
         svc = _make_search_mixin()
         svc.activation_engine.activate.return_value = {"e1": 1.0}
         svc.activation_engine.spread.return_value = {}
-        svc.repo.get_subgraph.return_value = {
+        svc.async_repo.get_subgraph.return_value = {
             "nodes": [{"id": "e1", "name": "A"}, {"name": "No ID"}]
         }
 
