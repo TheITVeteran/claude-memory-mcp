@@ -1,4 +1,4 @@
-﻿# Byte-compiled / optimized / DLL files
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
@@ -107,6 +107,11 @@ scripts/eval_results.json
 delete_phantom.py
 diagnostic_check.py
 fix_split_brain.py
+fix_*.py
+test_mock_combo.py
+test_mock_thread.py
+test_asyncmock.py
+rename_script.py
 # Real MCP config (use mcp_config.example.json as template)
 mcp_config.json
 gold_stack_run.log
