@@ -410,7 +410,7 @@ async def test_evil9_end_session_not_found(service: MemoryService) -> None:
 
 
 async def test_happy_record_breakthrough_with_session(service: MemoryService) -> None:
-    service.repo.create_node.return_value = {"id": "b-001", "name": BREAKTHROUGH_NAME}
+    service.async_repo.create_node.return_value = {"id": "b-001", "name": BREAKTHROUGH_NAME}
 
     params = BreakthroughParams(
         name=BREAKTHROUGH_NAME,
@@ -422,12 +422,12 @@ async def test_happy_record_breakthrough_with_session(service: MemoryService) ->
     result = await service.record_breakthrough(params)
     assert result["name"] == BREAKTHROUGH_NAME
     # Verify edge was created linking session to breakthrough
-    service.repo.create_edge.assert_called_once()
+    service.async_repo.create_edge.assert_called_once()
 
 
 async def test_happy_record_breakthrough_without_session(service: MemoryService) -> None:
     """When session_id is empty, no edge should be created."""
-    service.repo.create_node.return_value = {"id": "b-001", "name": BREAKTHROUGH_NAME}
+    service.async_repo.create_node.return_value = {"id": "b-001", "name": BREAKTHROUGH_NAME}
 
     params = BreakthroughParams(
         name=BREAKTHROUGH_NAME,
@@ -436,7 +436,7 @@ async def test_happy_record_breakthrough_without_session(service: MemoryService)
     )
     result = await service.record_breakthrough(params)
     assert result["name"] == BREAKTHROUGH_NAME
-    service.repo.create_edge.assert_not_called()
+    service.async_repo.create_edge.assert_not_called()
 
 
 # ─── traverse_path Tests ──────────────────────────────────────────
@@ -714,7 +714,7 @@ async def test_happy_analyze_graph_pagerank_success(service: MemoryService) -> N
     mock_node_b.properties = {"name": "NodeB"}
     mock_node_b.labels = ["Entity"]
 
-    service.async_repo.execute_cypher.side_effect = [
+    service.repo.execute_cypher.side_effect = [
         _make_cypher_result([[mock_node_a], [mock_node_b]]),  # nodes
         _make_cypher_result([["NodeB", ENTITY_NAME]]),  # edges: B->A
     ]
@@ -732,7 +732,7 @@ async def test_happy_analyze_graph_pagerank_only_entity_label(service: MemorySer
     mock_node.properties = {"name": ENTITY_NAME}
     mock_node.labels = ["Entity"]  # Only Entity label
 
-    service.async_repo.execute_cypher.side_effect = [
+    service.repo.execute_cypher.side_effect = [
         _make_cypher_result([[mock_node]]),  # nodes
         _make_cypher_result([]),  # no edges
     ]
@@ -743,7 +743,7 @@ async def test_happy_analyze_graph_pagerank_only_entity_label(service: MemorySer
 
 async def test_evil10_analyze_graph_pagerank_error(service: MemoryService) -> None:
     """Errors propagate loudly from PageRank (no silent swallowing)."""
-    service.async_repo.execute_cypher.side_effect = RuntimeError("algo not available")
+    service.repo.execute_cypher.side_effect = RuntimeError("algo not available")
 
     with pytest.raises(RuntimeError, match="algo not available"):
         await service.analyze_graph(AnalyzeGraphParams(algorithm="pagerank"))
@@ -758,7 +758,7 @@ async def test_happy_analyze_graph_louvain_success(service: MemoryService) -> No
         n.labels = ["Entity"]
         nodes.append(n)
 
-    service.async_repo.execute_cypher.side_effect = [
+    service.repo.execute_cypher.side_effect = [
         _make_cypher_result([[n] for n in nodes]),  # nodes
         _make_cypher_result([["A", "B"], ["B", "C"], ["A", "C"]]),  # edges
     ]
@@ -772,7 +772,7 @@ async def test_happy_analyze_graph_louvain_success(service: MemoryService) -> No
 
 async def test_evil11_analyze_graph_louvain_error(service: MemoryService) -> None:
     """Errors propagate loudly from Louvain (no silent swallowing)."""
-    service.async_repo.execute_cypher.side_effect = RuntimeError("algo not available")
+    service.repo.execute_cypher.side_effect = RuntimeError("algo not available")
 
     with pytest.raises(RuntimeError, match="algo not available"):
         await service.analyze_graph(AnalyzeGraphParams(algorithm="louvain"))
@@ -792,7 +792,7 @@ async def test_sad12_get_stale_entities(service: MemoryService) -> None:
     mock_node = MagicMock()
     mock_node.properties = {"id": ENTITY_ID, "name": ENTITY_NAME, "embedding": MOCK_EMBEDDING}
 
-    service.async_repo.execute_cypher.return_value = _make_cypher_result([[mock_node]])
+    service.repo.execute_cypher.return_value = _make_cypher_result([[mock_node]])
 
     result = await service.get_stale_entities(days=STALE_DAYS)
     assert len(result) == 1
@@ -1117,7 +1117,8 @@ def test_happy_concurrent_with_edge_type() -> None:
     assert params.relationship_type == "CONCURRENT_WITH"
 
 
-def test_sad19_temporal_query_params_defaults() -> None:
+@pytest.mark.asyncio
+async def test_sad19_temporal_query_params_defaults() -> None:
     """TemporalQueryParams has correct defaults."""
     from datetime import UTC, datetime
 
@@ -1130,7 +1131,8 @@ def test_sad19_temporal_query_params_defaults() -> None:
     assert p.project_id is None
 
 
-def test_happy_temporal_query_params_with_project() -> None:
+@pytest.mark.asyncio
+async def test_happy_temporal_query_params_with_project() -> None:
     """TemporalQueryParams accepts project_id."""
     from datetime import UTC, datetime
 
@@ -1150,41 +1152,46 @@ def test_happy_temporal_query_params_with_project() -> None:
 # (select_graph.return_value.query.return_value) and only tested mock calls.
 
 
-def test_happy_query_timeline_with_project(service: MemoryService) -> None:
+@pytest.mark.asyncio
+async def test_happy_query_timeline_with_project(service: MemoryService) -> None:
     """query_timeline filters by project_id when provided."""
-    service.repo.query_timeline.return_value = [
+    service.async_repo.query_timeline.return_value = [
         {"id": ENTITY_ID, "name": ENTITY_NAME, "project_id": PROJECT_ID}
     ]
-    result = service.repo.query_timeline(
+    result = await service.async_repo.query_timeline(
         start="2026-01-01", end="2026-02-01", project_id=PROJECT_ID
     )
     assert len(result) == 1
     assert result[0]["project_id"] == PROJECT_ID
 
 
-def test_happy_get_temporal_neighbors_before(service: MemoryService) -> None:
+@pytest.mark.asyncio
+async def test_happy_get_temporal_neighbors_before(service: MemoryService) -> None:
     """get_temporal_neighbors returns predecessors."""
-    service.repo.get_temporal_neighbors.return_value = [{"id": "prev-1", "name": "Previous"}]
-    result = service.repo.get_temporal_neighbors(ENTITY_ID, direction="before")
+    service.async_repo.get_temporal_neighbors.return_value = [{"id": "prev-1", "name": "Previous"}]
+    result = await service.async_repo.get_temporal_neighbors(ENTITY_ID, direction="before")
     assert len(result) == 1
-    service.repo.get_temporal_neighbors.assert_called_once_with(ENTITY_ID, direction="before")
+    service.async_repo.get_temporal_neighbors.assert_called_once_with(ENTITY_ID, direction="before")
 
 
-def test_happy_get_temporal_neighbors_after(service: MemoryService) -> None:
+@pytest.mark.asyncio
+async def test_happy_get_temporal_neighbors_after(service: MemoryService) -> None:
     """get_temporal_neighbors returns successors."""
-    service.repo.get_temporal_neighbors.return_value = [{"id": "next-1", "name": "Next"}]
-    result = service.repo.get_temporal_neighbors(ENTITY_ID, direction="forward")
+    service.async_repo.get_temporal_neighbors.return_value = [{"id": "next-1", "name": "Next"}]
+    result = await service.async_repo.get_temporal_neighbors(ENTITY_ID, direction="forward")
     assert len(result) == 1
 
 
-def test_happy_get_temporal_neighbors_both(service: MemoryService) -> None:
+@pytest.mark.asyncio
+async def test_happy_get_temporal_neighbors_both(service: MemoryService) -> None:
     """get_temporal_neighbors default direction returns both."""
-    service.repo.get_temporal_neighbors.return_value = [{"id": "prev-1"}, {"id": "next-1"}]
-    result = service.repo.get_temporal_neighbors(ENTITY_ID)
+    service.async_repo.get_temporal_neighbors.return_value = [{"id": "prev-1"}, {"id": "next-1"}]
+    result = await service.async_repo.get_temporal_neighbors(ENTITY_ID)
     assert len(result) == 2
 
 
-def test_happy_create_temporal_edge_success(service: MemoryService) -> None:
+@pytest.mark.asyncio
+async def test_happy_create_temporal_edge_success(service: MemoryService) -> None:
     """create_temporal_edge returns relationship metadata."""
     service.repo.create_temporal_edge.return_value = {
         "rel_type": "PRECEDED_BY",
@@ -1195,7 +1202,8 @@ def test_happy_create_temporal_edge_success(service: MemoryService) -> None:
     assert result["rel_type"] == "PRECEDED_BY"
 
 
-def test_evil14_create_temporal_edge_not_found(service: MemoryService) -> None:
+@pytest.mark.asyncio
+async def test_evil14_create_temporal_edge_not_found(service: MemoryService) -> None:
     """create_temporal_edge returns error when entities not found."""
     service.repo.create_temporal_edge.return_value = {"error": "One or both entities not found"}
     result = service.repo.create_temporal_edge("missing-a", "missing-b")
@@ -1269,14 +1277,14 @@ async def test_happy_service_query_timeline(service: MemoryService) -> None:
 
     from claude_memory.schema import TemporalQueryParams
 
-    service.repo.query_timeline.return_value = [{"id": ENTITY_ID, "name": ENTITY_NAME}]
+    service.async_repo.query_timeline.return_value = [{"id": ENTITY_ID, "name": ENTITY_NAME}]
     params = TemporalQueryParams(
         start=datetime(2026, 1, 1, tzinfo=UTC),
         end=datetime(2026, 2, 1, tzinfo=UTC),
     )
     result = await service.query_timeline(params)
     assert len(result) == 1
-    service.repo.query_timeline.assert_called_once()
+    service.async_repo.query_timeline.assert_called_once()
 
 
 @pytest.mark.asyncio()
@@ -1288,14 +1296,14 @@ async def test_sad20_service_query_timeline_with_project(
 
     from claude_memory.schema import TemporalQueryParams
 
-    service.repo.query_timeline.return_value = []
+    service.async_repo.query_timeline.return_value = []
     params = TemporalQueryParams(
         start=datetime(2026, 1, 1, tzinfo=UTC),
         end=datetime(2026, 2, 1, tzinfo=UTC),
         project_id=PROJECT_ID,
     )
     await service.query_timeline(params)
-    call_kwargs = service.repo.query_timeline.call_args[1]
+    call_kwargs = service.async_repo.query_timeline.call_args[1]
     assert call_kwargs["project_id"] == PROJECT_ID
 
 
@@ -1306,11 +1314,11 @@ async def test_happy_service_get_temporal_neighbors(
     """MemoryService.get_temporal_neighbors delegates to repo."""
     from claude_memory.schema import GetTemporalNeighborsParams
 
-    service.repo.get_temporal_neighbors.return_value = [{"id": "neighbor-1"}]
+    service.async_repo.get_temporal_neighbors.return_value = [{"id": "neighbor-1"}]
     params = GetTemporalNeighborsParams(entity_id=ENTITY_ID, direction="forward", limit=5)  # type: ignore[arg-type]
     result = await service.get_temporal_neighbors(params)
     assert len(result) == 1
-    service.repo.get_temporal_neighbors.assert_called_once_with(
+    service.async_repo.get_temporal_neighbors.assert_called_once_with(
         entity_id=ENTITY_ID, direction="forward", limit=5
     )
 
@@ -1408,7 +1416,7 @@ async def test_happy_get_bottles_basic(service: MemoryService) -> None:
 
     from claude_memory.schema import BottleQueryParams
 
-    service.repo.get_bottles.return_value = [
+    service.async_repo.get_bottles.return_value = [
         {"id": "bottle-1", "name": "Remember this", "node_type": "Bottle"}
     ]
     params = BottleQueryParams(
@@ -1419,7 +1427,7 @@ async def test_happy_get_bottles_basic(service: MemoryService) -> None:
     result = await service.get_bottles(params)
     assert len(result) == 1
     assert result[0]["id"] == "bottle-1"
-    service.repo.get_bottles.assert_called_once_with(
+    service.async_repo.get_bottles.assert_called_once_with(
         limit=5,
         search_text="remember",
         before_date=None,
@@ -1432,7 +1440,7 @@ async def test_sad22_get_bottles_empty(service: MemoryService) -> None:
     """get_bottles returns empty list when no bottles found."""
     from claude_memory.schema import BottleQueryParams
 
-    service.repo.get_bottles.return_value = []
+    service.async_repo.get_bottles.return_value = []
     params = BottleQueryParams()
     result = await service.get_bottles(params)
     assert result == []
@@ -1448,7 +1456,7 @@ async def test_happy_get_bottles_with_content(service: MemoryService) -> None:
     from claude_memory.schema import BottleQueryParams
 
     # Repo returns bottles
-    service.repo.get_bottles.return_value = [
+    service.async_repo.get_bottles.return_value = [
         {"id": "bottle-1", "name": "Bottle: Remember this"},
         {"id": "bottle-2", "name": "Bottle: Future note"},
     ]
@@ -1478,7 +1486,7 @@ async def test_sad23_get_bottles_backward_compat(service: MemoryService) -> None
     """E-1: Default include_content=False returns bottles WITHOUT observations key."""
     from claude_memory.schema import BottleQueryParams
 
-    service.repo.get_bottles.return_value = [
+    service.async_repo.get_bottles.return_value = [
         {"id": "bottle-1", "name": "Bottle: Remember this"},
     ]
 
@@ -1596,7 +1604,7 @@ async def test_evil16_create_entity_vector_failure_always_raises(
     """When vector upsert fails during create, it always raises — no lenient path."""
     from claude_memory.schema import EntityCreateParams
 
-    service.repo.create_node.return_value = {"id": ENTITY_ID, "name": ENTITY_NAME}
+    service.async_repo.create_node.return_value = {"id": ENTITY_ID, "name": ENTITY_NAME}
     service.repo.get_most_recent_entity.return_value = None
     service.repo.get_total_node_count.return_value = 42
     service.ontology = MagicMock()
@@ -1789,7 +1797,7 @@ async def test_happy_system_diagnostics_detects_split_brain(service: MemoryServi
     }
     service.vector_store.count.return_value = 3
     # IDs in graph: 1..5; IDs in vector: 1..3 → missing: 4, 5
-    service.async_repo.get_all_node_ids.return_value = ["id-1", "id-2", "id-3", "id-4", "id-5"]
+    service.repo.get_all_node_ids.return_value = ["id-1", "id-2", "id-3", "id-4", "id-5"]
     service.vector_store.list_ids.return_value = ["id-1", "id-2", "id-3"]
 
     result = await service.system_diagnostics()

@@ -1,6 +1,6 @@
 from collections.abc import Generator
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -93,6 +93,7 @@ async def test_happy_archive_entity(memory_service: MemoryService) -> None:
 
     # AUDIT-B2: archive_entity now checks existence first
     memory_service.repo.get_node = MagicMock(return_value={"id": "e1", "name": "Test Entity"})
+    memory_service.async_repo.get_node = AsyncMock(return_value={"id": "e1", "name": "Test Entity"})
 
     mock_node = MagicMock()
     mock_node.properties = {"id": "e1", "status": "archived"}

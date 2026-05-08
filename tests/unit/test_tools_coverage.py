@@ -344,7 +344,7 @@ async def test_evil7_end_session_not_found(service: MemoryService) -> None:
 
 
 async def test_happy_record_breakthrough_with_session(service: MemoryService) -> None:
-    service.repo.create_node.return_value = {"id": "b-001", "name": BREAKTHROUGH_NAME}
+    service.async_repo.create_node.return_value = {"id": "b-001", "name": BREAKTHROUGH_NAME}
 
     params = BreakthroughParams(
         name=BREAKTHROUGH_NAME,
@@ -356,12 +356,12 @@ async def test_happy_record_breakthrough_with_session(service: MemoryService) ->
     result = await service.record_breakthrough(params)
     assert result["name"] == BREAKTHROUGH_NAME
     # Verify edge was created linking session to breakthrough
-    service.repo.create_edge.assert_called_once()
+    service.async_repo.create_edge.assert_called_once()
 
 
 async def test_happy_record_breakthrough_without_session(service: MemoryService) -> None:
     """When session_id is empty, no edge should be created."""
-    service.repo.create_node.return_value = {"id": "b-001", "name": BREAKTHROUGH_NAME}
+    service.async_repo.create_node.return_value = {"id": "b-001", "name": BREAKTHROUGH_NAME}
 
     params = BreakthroughParams(
         name=BREAKTHROUGH_NAME,
@@ -370,7 +370,7 @@ async def test_happy_record_breakthrough_without_session(service: MemoryService)
     )
     result = await service.record_breakthrough(params)
     assert result["name"] == BREAKTHROUGH_NAME
-    service.repo.create_edge.assert_not_called()
+    service.async_repo.create_edge.assert_not_called()
 
 
 # ─── traverse_path Tests ──────────────────────────────────────────
@@ -562,7 +562,7 @@ async def test_happy_analyze_graph_pagerank_only_entity_label(service: MemorySer
 
 
 async def test_evil8_analyze_graph_pagerank_error(service: MemoryService) -> None:
-    service.async_repo.execute_cypher.side_effect = RuntimeError("algo not available")
+    service.repo.execute_cypher.side_effect = RuntimeError("algo not available")
 
     with pytest.raises(RuntimeError, match="algo not available"):
         await service.analyze_graph(AnalyzeGraphParams(algorithm="pagerank"))
@@ -591,7 +591,7 @@ async def test_happy_analyze_graph_louvain_success(service: MemoryService) -> No
 
 
 async def test_evil9_analyze_graph_louvain_error(service: MemoryService) -> None:
-    service.async_repo.execute_cypher.side_effect = RuntimeError("algo not available")
+    service.repo.execute_cypher.side_effect = RuntimeError("algo not available")
 
     with pytest.raises(RuntimeError, match="algo not available"):
         await service.analyze_graph(AnalyzeGraphParams(algorithm="louvain"))
@@ -612,7 +612,7 @@ async def test_sad11_get_stale_entities(service: MemoryService) -> None:
     mock_node = MagicMock()
     mock_node.properties = {"id": ENTITY_ID, "name": ENTITY_NAME, "embedding": MOCK_EMBEDDING}
 
-    service.async_repo.execute_cypher.return_value = _make_cypher_result([[mock_node]])
+    service.repo.execute_cypher.return_value = _make_cypher_result([[mock_node]])
 
     result = await service.get_stale_entities(days=STALE_DAYS)
     assert len(result) == 1

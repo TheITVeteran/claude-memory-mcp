@@ -141,7 +141,7 @@ class TestGetBottles:
         await service.get_bottles(params)
         mock_repo.get_bottles.assert_called_once()
         call_kwargs = mock_repo.get_bottles.call_args
-        assert call_kwargs[1]["limit"] == 10 or call_kwargs[0][0] == 10
+        assert call_kwargs[1].get("limit") == 10 or call_kwargs[0][0] == 10
 
     async def test_happy_bottles_evil_include_content_false(self) -> None:
         """Evil: include_content=False should NOT fetch observations."""

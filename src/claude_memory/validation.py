@@ -25,7 +25,7 @@ def requires_entity(
             if not entity_id:
                 return await func(self, params, *args, **kwargs)
 
-            existing = self.repo.get_node(entity_id)
+            existing = await self.async_repo.get_node(entity_id)
             if not existing:
                 if empty_on_missing:
                     return []
@@ -57,7 +57,7 @@ def requires_session(
 
             # A session is just an entity in the graph with label Session,
             # or we can just check if it exists as a node
-            existing = self.repo.get_node(session_id)
+            existing = await self.async_repo.get_node(session_id)
             if not existing:
                 if empty_on_missing:
                     return []
