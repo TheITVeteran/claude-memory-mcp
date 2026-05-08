@@ -31,10 +31,11 @@ class TestDeleteRelationshipLocking:
 
             svc = MemoryService(embedding_service=MagicMock(), vector_store=AsyncMock())
             svc.repo = MagicMock()
+            svc.async_repo = AsyncMock()
             # delete_edge needs to find the relationship's source node
             # to get project_id — return a mock node with project_id
-            svc.repo.execute_cypher.return_value = MagicMock(result_set=[["test-project"]])
-            svc.repo.delete_edge.return_value = True
+            svc.async_repo.execute_cypher.return_value = MagicMock(result_set=[["test-project"]])
+            svc.async_repo.delete_edge.return_value = True
 
             lock_ctx = AsyncMock()
             svc.lock_manager = MagicMock()
@@ -56,9 +57,10 @@ class TestDeleteRelationshipLocking:
 
             svc = MemoryService(embedding_service=MagicMock(), vector_store=AsyncMock())
             svc.repo = MagicMock()
+            svc.async_repo = AsyncMock()
             # No project found for this edge
-            svc.repo.execute_cypher.return_value = MagicMock(result_set=[])
-            svc.repo.delete_edge.return_value = True
+            svc.async_repo.execute_cypher.return_value = MagicMock(result_set=[])
+            svc.async_repo.delete_edge.return_value = True
 
             svc.lock_manager = MagicMock()
 
@@ -66,7 +68,7 @@ class TestDeleteRelationshipLocking:
             result = await svc.delete_relationship(params)
 
             # Should still delete even without project scope
-            svc.repo.delete_edge.assert_called_once_with("orphan-rel")
+            svc.async_repo.delete_edge.assert_called_once_with("orphan-rel")
             assert result["status"] == "deleted"
 
     @pytest.mark.asyncio
@@ -77,8 +79,9 @@ class TestDeleteRelationshipLocking:
 
             svc = MemoryService(embedding_service=MagicMock(), vector_store=AsyncMock())
             svc.repo = MagicMock()
-            svc.repo.execute_cypher.return_value = MagicMock(result_set=[["project-alpha"]])
-            svc.repo.delete_edge.return_value = True
+            svc.async_repo = AsyncMock()
+            svc.async_repo.execute_cypher.return_value = MagicMock(result_set=[["project-alpha"]])
+            svc.async_repo.delete_edge.return_value = True
 
             lock_ctx = AsyncMock()
             svc.lock_manager = MagicMock()
@@ -98,8 +101,9 @@ class TestDeleteRelationshipLocking:
 
             svc = MemoryService(embedding_service=MagicMock(), vector_store=AsyncMock())
             svc.repo = MagicMock()
-            svc.repo.execute_cypher.return_value = MagicMock(result_set=[])
-            svc.repo.delete_edge.return_value = True
+            svc.async_repo = AsyncMock()
+            svc.async_repo.execute_cypher.return_value = MagicMock(result_set=[])
+            svc.async_repo.delete_edge.return_value = True
             svc.lock_manager = MagicMock()
 
             params = RelationshipDeleteParams(relationship_id="rel-789", reason="obsolete")
@@ -115,8 +119,9 @@ class TestDeleteRelationshipLocking:
 
             svc = MemoryService(embedding_service=MagicMock(), vector_store=AsyncMock())
             svc.repo = MagicMock()
-            svc.repo.execute_cypher.return_value = MagicMock(result_set=[["proj-1"]])
-            svc.repo.delete_edge.return_value = True
+            svc.async_repo = AsyncMock()
+            svc.async_repo.execute_cypher.return_value = MagicMock(result_set=[["proj-1"]])
+            svc.async_repo.delete_edge.return_value = True
             lock_ctx = AsyncMock()
             svc.lock_manager = MagicMock()
             svc.lock_manager.lock.return_value = lock_ctx
@@ -125,7 +130,7 @@ class TestDeleteRelationshipLocking:
             result = await svc.delete_relationship(params)
 
             assert result["status"] == "deleted"
-            svc.repo.delete_edge.assert_called_once_with("rel-abc")
+            svc.async_repo.delete_edge.assert_called_once_with("rel-abc")
 
 
 # ═══════════════════════════════════════════════════════════
@@ -149,11 +154,12 @@ class TestAddObservationLocking:
 
             svc = MemoryService(embedding_service=MagicMock(), vector_store=AsyncMock())
             svc.repo = MagicMock()
+            svc.async_repo = AsyncMock()
 
             # execute_cypher returns: first call = obs creation, second = obs fetch
             obs_node = MagicMock()
             obs_node.properties = {"id": "obs-1", "project_id": "proj-x", "content": "test"}
-            svc.repo.execute_cypher.side_effect = [
+            svc.async_repo.execute_cypher.side_effect = [
                 # First: get project_id for locking
                 MagicMock(result_set=[["proj-x"]]),
                 # Second: CREATE observation
@@ -161,7 +167,7 @@ class TestAddObservationLocking:
                 # Third: fetch all observations for re-embedding
                 MagicMock(result_set=[["obs content"]]),
             ]
-            svc.repo.get_node.return_value = {
+            svc.async_repo.get_node.return_value = {
                 "name": "TestEntity",
                 "node_type": "Entity",
                 "description": "",
@@ -193,8 +199,9 @@ class TestAddObservationLocking:
 
             svc = MemoryService(embedding_service=MagicMock(), vector_store=AsyncMock())
             svc.repo = MagicMock()
+            svc.async_repo = AsyncMock()
             # Entity lookup returns empty (no entity)
-            svc.repo.execute_cypher.return_value = MagicMock(result_set=[])
+            svc.async_repo.execute_cypher.return_value = MagicMock(result_set=[])
             svc.lock_manager = MagicMock()
 
             params = ObservationParams(entity_id="nonexistent", content="data")
@@ -212,15 +219,16 @@ class TestAddObservationLocking:
 
             svc = MemoryService(embedding_service=MagicMock(), vector_store=AsyncMock())
             svc.repo = MagicMock()
+            svc.async_repo = AsyncMock()
 
             obs_node = MagicMock()
             obs_node.properties = {"id": "obs-2", "project_id": "my-project", "content": "x"}
-            svc.repo.execute_cypher.side_effect = [
+            svc.async_repo.execute_cypher.side_effect = [
                 MagicMock(result_set=[["my-project"]]),
                 MagicMock(result_set=[[obs_node]]),
                 MagicMock(result_set=[]),
             ]
-            svc.repo.get_node.return_value = {
+            svc.async_repo.get_node.return_value = {
                 "name": "E",
                 "node_type": "Entity",
                 "description": "",
@@ -249,7 +257,8 @@ class TestAddObservationLocking:
 
             svc = MemoryService(embedding_service=MagicMock(), vector_store=AsyncMock())
             svc.repo = MagicMock()
-            svc.repo.execute_cypher.return_value = MagicMock(result_set=[])
+            svc.async_repo = AsyncMock()
+            svc.async_repo.execute_cypher.return_value = MagicMock(result_set=[])
             svc.lock_manager = MagicMock()
 
             params = ObservationParams(entity_id="ghost", content="data")
@@ -265,15 +274,16 @@ class TestAddObservationLocking:
 
             svc = MemoryService(embedding_service=MagicMock(), vector_store=AsyncMock())
             svc.repo = MagicMock()
+            svc.async_repo = AsyncMock()
 
             obs_node = MagicMock()
             obs_node.properties = {"id": "obs-ok", "project_id": "p", "content": "good"}
-            svc.repo.execute_cypher.side_effect = [
+            svc.async_repo.execute_cypher.side_effect = [
                 MagicMock(result_set=[["p"]]),
                 MagicMock(result_set=[[obs_node]]),
                 MagicMock(result_set=[["existing obs"]]),
             ]
-            svc.repo.get_node.return_value = {
+            svc.async_repo.get_node.return_value = {
                 "name": "N",
                 "node_type": "Entity",
                 "description": "",

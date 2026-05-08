@@ -102,6 +102,7 @@ def service() -> MemoryService:
 
     # Replace repo, vector_store, lock_manager with mocks
     svc.repo = MagicMock()
+    svc.async_repo = AsyncMock()
     svc.vector_store = AsyncMock()
     svc.lock_manager = MagicMock()
 
@@ -112,6 +113,9 @@ def service() -> MemoryService:
     mock_lock.__aenter__ = AsyncMock(return_value=mock_lock)
     mock_lock.__aexit__ = AsyncMock(return_value=False)
     svc.lock_manager.lock.return_value = mock_lock
+
+    # Default async_repo returns for _compute_entity_embedding_text
+    svc.async_repo.get_observations_for_entity.return_value = []
 
     return svc
 
@@ -128,8 +132,8 @@ def _make_cypher_result(rows: list[list[Any]]) -> MagicMock:
 
 async def test_happy_create_relationship_with_project_lock(service: MemoryService) -> None:
     """When source node has project_id, use project lock."""
-    service.repo.get_node.return_value = {"id": ENTITY_ID, "project_id": PROJECT_ID}
-    service.repo.create_edge.return_value = {"id": RELATIONSHIP_ID}
+    service.async_repo.get_node.return_value = {"id": ENTITY_ID, "project_id": PROJECT_ID}
+    service.async_repo.create_edge.return_value = {"id": RELATIONSHIP_ID}
 
     params = RelationshipCreateParams(
         from_entity=ENTITY_ID,
@@ -143,8 +147,8 @@ async def test_happy_create_relationship_with_project_lock(service: MemoryServic
 
 async def test_happy_create_relationship_without_project(service: MemoryService) -> None:
     """When source node has no project_id, proceed without lock."""
-    service.repo.get_node.return_value = {"id": ENTITY_ID}
-    service.repo.create_edge.return_value = {"id": RELATIONSHIP_ID}
+    service.async_repo.get_node.return_value = {"id": ENTITY_ID}
+    service.async_repo.create_edge.return_value = {"id": RELATIONSHIP_ID}
 
     params = RelationshipCreateParams(
         from_entity=ENTITY_ID,
@@ -157,8 +161,8 @@ async def test_happy_create_relationship_without_project(service: MemoryService)
 
 async def test_sad1_create_relationship_source_not_found(service: MemoryService) -> None:
     """When source node doesn't exist."""
-    service.repo.get_node.return_value = None
-    service.repo.create_edge.return_value = {"id": RELATIONSHIP_ID}
+    service.async_repo.get_node.return_value = None
+    service.async_repo.create_edge.return_value = {"id": RELATIONSHIP_ID}
 
     params = RelationshipCreateParams(
         from_entity=ENTITY_ID,
@@ -171,9 +175,9 @@ async def test_sad1_create_relationship_source_not_found(service: MemoryService)
 
 async def test_sad2_create_relationship_with_existing_id_in_props(service: MemoryService) -> None:
     """Branch 157→16: 'id' already in properties, UUID generation skipped."""
-    service.repo.get_node.return_value = None
+    service.async_repo.get_node.return_value = None
     pre_set_id = "custom-rel-id-999"
-    service.repo.create_edge.return_value = {"id": pre_set_id}
+    service.async_repo.create_edge.return_value = {"id": pre_set_id}
 
     params = RelationshipCreateParams(
         from_entity=ENTITY_ID,
@@ -184,14 +188,14 @@ async def test_sad2_create_relationship_with_existing_id_in_props(service: Memor
     result = await service.create_relationship(params)
     assert result["id"] == pre_set_id
     # Verify the id we passed was preserved (not overwritten by uuid)
-    call_args = service.repo.create_edge.call_args
+    call_args = service.async_repo.create_edge.call_args
     assert call_args[0][3]["id"] == pre_set_id
 
 
 async def test_evil1_create_relationship_edge_creation_fails(service: MemoryService) -> None:
     """When edge creation returns empty result."""
-    service.repo.get_node.return_value = None
-    service.repo.create_edge.return_value = {}
+    service.async_repo.get_node.return_value = None
+    service.async_repo.create_edge.return_value = {}
 
     params = RelationshipCreateParams(
         from_entity=ENTITY_ID,
@@ -206,8 +210,8 @@ async def test_evil1_create_relationship_edge_creation_fails(service: MemoryServ
 
 
 async def test_happy_update_entity_with_project_lock(service: MemoryService) -> None:
-    service.repo.get_node.return_value = MOCK_NODE_PROPS
-    service.repo.update_node.return_value = {**MOCK_NODE_PROPS, "version": "2.0"}
+    service.async_repo.get_node.return_value = MOCK_NODE_PROPS
+    service.async_repo.update_node.return_value = {**MOCK_NODE_PROPS, "version": "2.0"}
 
     params = EntityUpdateParams(entity_id=ENTITY_ID, properties={"version": "2.0"}, reason="update")
     result = await service.update_entity(params)
@@ -216,7 +220,7 @@ async def test_happy_update_entity_with_project_lock(service: MemoryService) -> 
 
 
 async def test_evil2_update_entity_not_found(service: MemoryService) -> None:
-    service.repo.get_node.return_value = None
+    service.async_repo.get_node.return_value = None
 
     params = EntityUpdateParams(entity_id=ENTITY_ID, properties={"version": "2.0"}, reason="update")
     result = await service.update_entity(params)
@@ -227,18 +231,18 @@ async def test_evil2_update_entity_not_found(service: MemoryService) -> None:
 
 
 async def test_happy_delete_entity_soft(service: MemoryService) -> None:
-    service.repo.get_node.return_value = MOCK_NODE_PROPS
+    service.async_repo.get_node.return_value = MOCK_NODE_PROPS
 
     params = EntityDeleteParams(entity_id=ENTITY_ID, reason=DELETE_REASON, soft_delete=True)
     result = await service.delete_entity(params)
     assert result["status"] == "archived"
-    service.repo.update_node.assert_called_once()
+    service.async_repo.update_node.assert_called_once()
     service.vector_store.delete.assert_awaited_once_with(ENTITY_ID)
 
 
 async def test_evil3_delete_entity_soft_vector_delete_fails(service: MemoryService) -> None:
     """Soft delete now re-raises vector failures to prevent split-brain."""
-    service.repo.get_node.return_value = MOCK_NODE_PROPS
+    service.async_repo.get_node.return_value = MOCK_NODE_PROPS
     service.vector_store.delete.side_effect = ConnectionError("qdrant down")
 
     params = EntityDeleteParams(entity_id=ENTITY_ID, reason=DELETE_REASON, soft_delete=True)
@@ -247,17 +251,17 @@ async def test_evil3_delete_entity_soft_vector_delete_fails(service: MemoryServi
 
 
 async def test_happy_delete_entity_hard(service: MemoryService) -> None:
-    service.repo.get_node.return_value = MOCK_NODE_PROPS
+    service.async_repo.get_node.return_value = MOCK_NODE_PROPS
 
     params = EntityDeleteParams(entity_id=ENTITY_ID, reason=DELETE_REASON, soft_delete=False)
     result = await service.delete_entity(params)
     assert result["status"] == "deleted"
-    service.repo.delete_node.assert_called_once_with(ENTITY_ID)
+    service.async_repo.delete_node.assert_called_once_with(ENTITY_ID)
 
 
 async def test_evil4_delete_entity_hard_vector_delete_fails(service: MemoryService) -> None:
     """Hard delete now re-raises vector failures to prevent split-brain."""
-    service.repo.get_node.return_value = MOCK_NODE_PROPS
+    service.async_repo.get_node.return_value = MOCK_NODE_PROPS
     service.vector_store.delete.side_effect = ConnectionError("qdrant down")
 
     params = EntityDeleteParams(entity_id=ENTITY_ID, reason=DELETE_REASON, soft_delete=False)
@@ -266,7 +270,7 @@ async def test_evil4_delete_entity_hard_vector_delete_fails(service: MemoryServi
 
 
 async def test_evil5_delete_entity_not_found(service: MemoryService) -> None:
-    service.repo.get_node.return_value = None
+    service.async_repo.get_node.return_value = None
 
     params = EntityDeleteParams(entity_id=ENTITY_ID, reason=DELETE_REASON, soft_delete=True)
     result = await service.delete_entity(params)
@@ -275,7 +279,7 @@ async def test_evil5_delete_entity_not_found(service: MemoryService) -> None:
 
 async def test_sad3_delete_entity_no_project(service: MemoryService) -> None:
     """Entity without project_id should still delete without lock."""
-    service.repo.get_node.return_value = {"id": ENTITY_ID, "name": ENTITY_NAME}
+    service.async_repo.get_node.return_value = {"id": ENTITY_ID, "name": ENTITY_NAME}
 
     params = EntityDeleteParams(entity_id=ENTITY_ID, reason=DELETE_REASON, soft_delete=True)
     result = await service.delete_entity(params)
@@ -289,7 +293,7 @@ async def test_happy_delete_relationship(service: MemoryService) -> None:
     params = RelationshipDeleteParams(relationship_id=RELATIONSHIP_ID, reason=DELETE_REASON)
     result = await service.delete_relationship(params)
     assert result == {"status": "deleted", "id": RELATIONSHIP_ID}
-    service.repo.delete_edge.assert_called_once_with(RELATIONSHIP_ID)
+    service.async_repo.delete_edge.assert_called_once_with(RELATIONSHIP_ID)
 
 
 # ─── add_observation Tests ─────────────────────────────────────────
@@ -298,7 +302,7 @@ async def test_happy_delete_relationship(service: MemoryService) -> None:
 async def test_happy_add_observation_success(service: MemoryService) -> None:
     mock_obs_node = MagicMock()
     mock_obs_node.properties = {"id": "obs-001", "content": OBSERVATION_CONTENT}
-    service.repo.execute_cypher.return_value = _make_cypher_result([[mock_obs_node]])
+    service.async_repo.execute_cypher.return_value = _make_cypher_result([[mock_obs_node]])
 
     params = ObservationParams(
         entity_id=ENTITY_ID,
@@ -311,7 +315,7 @@ async def test_happy_add_observation_success(service: MemoryService) -> None:
 
 
 async def test_evil6_add_observation_entity_not_found(service: MemoryService) -> None:
-    service.repo.execute_cypher.return_value = _make_cypher_result([])
+    service.async_repo.execute_cypher.return_value = _make_cypher_result([])
 
     params = ObservationParams(
         entity_id=ENTITY_ID,

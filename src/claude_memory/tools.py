@@ -24,6 +24,7 @@ from claude_memory.temporal import TemporalMixin
 from .lock_manager import LockManager
 from .ontology import OntologyManager
 from .repository import MemoryRepository
+from .repository_async import AsyncMemoryRepository
 
 # Re-export schema items for backward compatibility
 from .schema import (  # noqa: F401
@@ -79,6 +80,7 @@ class MemoryService(
     ) -> None:
         """Wire up repository, embedder, vector store, ontology, and lock manager."""
         self.repo = MemoryRepository(host, port, password)
+        self.async_repo = AsyncMemoryRepository(self.repo)
         self.embedder = embedding_service
         self.vector_store = vector_store or QdrantVectorStore()
 

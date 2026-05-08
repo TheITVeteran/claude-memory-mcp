@@ -16,6 +16,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from .interfaces import Embedder, VectorStore
     from .lock_manager import LockManager
     from .repository import MemoryRepository
+    from .repository_async import AsyncMemoryRepository
     from .schema import ObservationParams
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ class CrudMaintenanceMixin:
 
     # Inherited attributes (set by MemoryService.__init__)
     repo: "MemoryRepository"
+    async_repo: "AsyncMemoryRepository"
     embedder: "Embedder"
     vector_store: "VectorStore"
     lock_manager: "LockManager"
@@ -37,7 +39,7 @@ class CrudMaintenanceMixin:
         async def _do_update() -> None:
             """Execute the salience increment in the background."""
             try:
-                self.repo.increment_salience(ids)
+                await self.async_repo.increment_salience(ids)
             except (ConnectionError, TimeoutError, OSError) as exc:
                 logger.error("Background salience update failed: %s", exc)
 
@@ -63,7 +65,7 @@ class CrudMaintenanceMixin:
         # Look up project_id for locking
         project_id: str | None = None
         try:
-            res = self.repo.execute_cypher(
+            res = await self.async_repo.execute_cypher(
                 "MATCH (e) WHERE e.id = $eid RETURN e.project_id",
                 {"eid": params.entity_id},
             )
@@ -113,7 +115,7 @@ class CrudMaintenanceMixin:
             "evidence": params.evidence,
             "timestamp": timestamp,
         }
-        res = self.repo.execute_cypher(query, params_dict)
+        res = await self.async_repo.execute_cypher(query, params_dict)
         if not res.result_set:
             return {"error": "Entity not found"}
 
@@ -140,10 +142,10 @@ class CrudMaintenanceMixin:
 
         # Re-embed the parent entity with the new observation included
         try:
-            entity = self.repo.get_node(params.entity_id)
+            entity = await self.async_repo.get_node(params.entity_id)
             if entity:
-                entity_text = _compute_entity_embedding_text(
-                    self.repo,
+                entity_text = await _compute_entity_embedding_text(
+                    self.async_repo,
                     entity_id=params.entity_id,
                     name=entity.get("name", ""),
                     node_type=entity.get("node_type", "Entity"),
@@ -172,14 +174,20 @@ class CrudMaintenanceMixin:
         # Re-index FTS with updated content (Tier 2.4 fix)
         if hasattr(self, "fts_store"):
             try:
-                entity = entity if "entity" in dir() else self.repo.get_node(params.entity_id)
+                entity = (
+                    entity
+                    if "entity" in dir()
+                    else await self.async_repo.get_node(params.entity_id)
+                )
                 if entity:
                     # Fetch all observations for this entity
                     obs_query = (
                         "MATCH (e:Entity {id: $eid})-[:HAS_OBSERVATION]->(o) "
                         "RETURN o.content ORDER BY o.created_at ASC"
                     )
-                    obs_res = self.repo.execute_cypher(obs_query, {"eid": params.entity_id})
+                    obs_res = await self.async_repo.execute_cypher(
+                        obs_query, {"eid": params.entity_id}
+                    )
                     obs_texts = [row[0] for row in obs_res.result_set if row[0]]
 
                     self.fts_store.index_entity(
