@@ -2,7 +2,7 @@
 
 [English](README.md) | [中文](README.zh-CN.md) | [日本語](README.ja.md) | [Español](README.es.md) | [Русский](README.ru.md) | [한국어](README.ko.md) | [Português](README.pt-BR.md) | [Deutsch](README.de.md) | [Français](README.fr.md)
 
-**Persistent memory infrastructure for AI agents.**
+**Memory infrastructure for AI agents — that fails loud, by design.**
 
 [![LongMemEval](https://img.shields.io/badge/LongMemEval_R%405-100%25-gold?style=for-the-badge)](benchmarks/longmemeval/RESULTS.md)
 
@@ -12,15 +12,18 @@
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](docker-compose.yml)
 [![MCP Tools](https://img.shields.io/badge/MCP%20tools-34-green.svg)]()
 [![Tests](https://img.shields.io/badge/tests-1%2C337%20passing-brightgreen)]()
+[![Contracts](https://img.shields.io/badge/contracts-CI%20gated-blue)]()
 [![Gauntlet](https://img.shields.io/badge/gauntlet-A%E2%88%92%20(95%2F100)-blue)]()
 [![GPU](https://img.shields.io/badge/GPU-CUDA%20supported-orange.svg)]()
 [![GitHub stars](https://img.shields.io/github/stars/iikarus/Dragon-Brain)](https://github.com/iikarus/Dragon-Brain/stargazers)
 
-> **100% LongMemEval R@5** · **1,599 memories** · **34 MCP tools** · **Graph + Vector hybrid** · **sub-200ms search** · **No LLM required**
+> **100% LongMemEval R@5** · **34 MCP tools** · **sub-200ms hybrid search** · **CI-gated fail-loud contracts** · **No LLM required**
 
 An open-source MCP server that gives any LLM long-term memory using a knowledge graph + vector search hybrid. Store entities, observations, and relationships — then recall them semantically across sessions. Works with any MCP client: Claude Code, Claude Desktop, Cursor, Windsurf, Cline, Gemini CLI, VS Code Copilot, or any LLM that speaks [Model Context Protocol](https://modelcontextprotocol.io/).
 
 Unlike flat chat history or simple RAG, Dragon Brain understands *relationships* between memories — not just similarity. An autonomous agent ("The Librarian") periodically clusters and synthesizes memories into higher-order concepts.
+
+**And it tells you when it can't remember — instead of pretending the memory was never there.** ([why this matters →](#forged-in-audit))
 
 ![Dragon Brain Dashboard — 1,599 nodes, 3,120 relationships, graph visualization and health metrics](docs/dashboard.png)
 
@@ -127,6 +130,7 @@ AI:  "You're building Atlas in Rust with a functional approach..." [recalled fro
 | **Autonomous Clustering** | ✓ (DBSCAN) | — | — | — | — | — |
 | **Relationship Discovery** | ✓ (Semantic Radar) | — | — | — | — | — |
 | **Time Travel Queries** | ✓ | — | — | — | — | — |
+| **Fail-Loud Infrastructure** | ✓ (`SearchError` contract, CI-gated) | — | — | — | — | — |
 | **GPU Acceleration** | CUDA (BGE-M3) | — | — | — | — | — |
 | **Typed Relationships** | Weighted edges | — | — | Edges | — | — |
 | **Session Tracking** | ✓ | — | — | — | ✓ | — |
@@ -311,7 +315,8 @@ Dragon-Brain/
 │   └── dashboard/              # Streamlit monitoring dashboard
 ├── tests/
 │   ├── unit/                   # 1,027 unit tests (3-evil/1-sad/1-happy per function)
-│   └── gauntlet/               # 139 mutation, fuzz, property-based, concurrency tests
+│   ├── gauntlet/               # 139 mutation, fuzz, property-based, concurrency tests
+│   └── integration/            # Live-container kill tests via testcontainers
 ├── docs/                       # Architecture, user manual, runbook, ADRs
 │   └── adr/                    # 7 Architecture Decision Records
 ├── scripts/                    # Docker, backup, health check, e2e tests
@@ -337,9 +342,51 @@ Dragon-Brain/
 
 All 34 tools are documented in [docs/MCP_TOOL_REFERENCE.md](docs/MCP_TOOL_REFERENCE.md).
 
-## Quality
+## Forged in Audit
 
-This isn't a weekend hack. It's tested like production software:
+Most open-source memory systems polish the happy path. Here's the bug Dragon Brain shipped to production for two months — and the infrastructure that now exists so it can't come back.
+
+### The lie
+
+Before April 2026, the `search()` pipeline looked roughly like this:
+
+```python
+try:
+    # ... 6-channel retrieval pipeline ...
+except Exception:
+    return []
+```
+
+The MCP `search_memory` tool then transformed `[]` into the string `"No results found."` Claude received that string and treated it as authoritative — *"the user genuinely has no memories about this topic"* — when in reality the embedding service had crashed, FalkorDB was unreachable, or Qdrant timed out.
+
+**Every degraded query was the AI operating on missing context without knowing it.** A confident lie indistinguishable from genuine emptiness, baked into the system at its most-called function.
+
+### The fix
+
+A 4-phase adversarial audit found **83 contract violations across 37 source files**. Ten batches of remediation shipped between April and May 2026:
+
+- **`SearchError`** is now raised on infrastructure failure — empty list means "no results found", *only*.
+- **MCP `search_memory`** returns structured `{"error": "MEMORY_LAYER_DEGRADED", "retry_safe": true}` — surfaced to the AI as a degradation signal, never a confident lie.
+- **Cross-store compensation** in entity create/update/delete — Qdrant write failure rolls back FalkorDB to prevent split-brain orphans.
+- **Edge writes use `MERGE`, not `CREATE`** — retried `create_relationship` calls don't duplicate edges.
+- **FTS write failures propagate** to caller receipts — silent index staleness eliminated.
+- **Lock manager raises `TimeoutError`** on contention — never silently proceeds without the lock.
+- **MCP tools have semantic validation** — bad UUIDs return `{"error": "ENTITY_NOT_FOUND"}`, not silent empty results.
+
+### The discipline that keeps it fixed
+
+- **`tox -e contracts`** — CI gate baseline-locked at **13 violations** (down from 64). New violations fail the build before merge. Quarterly reviews ratchet the baseline toward zero.
+- **Behavioral integration tests** — `testcontainers-python` spins up real `falkordb/falkordb:v4.14.11` and `qdrant/qdrant:v1.16.3`, then `container.kill()` mid-operation to assert the fail-loud contract holds end-to-end.
+- **Async-native repository** — `AsyncMemoryRepository` isolates synchronous DB drivers in thread pools across ~75 call sites.
+- **Trust-boundary documentation** — every cross-process boundary has an explicit contract recorded in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+### Why it matters
+
+If your memory layer can lie about its failure modes, every downstream reasoning step is corrupt. AI agents trust their tools. Tools that confidently fabricate empty results poison entire reasoning chains.
+
+Dragon Brain is the first open-source memory system we know of with a CI-enforced contract that infrastructure failure cannot be silenced. If it ever happens again, the build breaks before merge.
+
+### Receipts
 
 - **1,337 tests** across 106 test files, 0 failures, 0 skipped
 - **Mutation testing** — 2,270 mutants, 1,184 killed across 27 source files (3-evil/1-sad/1-happy per function)
@@ -348,9 +395,9 @@ This isn't a weekend hack. It's tested like production software:
 - **Static analysis** — mypy strict mode (0 errors), ruff (0 errors)
 - **Security audit** — Cypher injection audit, credential scanning
 - **Dead code detection** — Vulture (0 findings)
-- **Dragon Brain Gauntlet** — 20-round automated quality audit, **A- (95/100)**
+- **Dragon Brain Gauntlet** — 20-round automated quality audit, **A− (95/100)**
 
-Full gauntlet results: [GAUNTLET_RESULTS.md](docs/GAUNTLET_RESULTS.md)
+Full gauntlet results: [docs/GAUNTLET_RESULTS.md](docs/GAUNTLET_RESULTS.md) · Trust boundaries: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · Integration tests: [tests/integration/test_db_kill_scenarios.py](tests/integration/test_db_kill_scenarios.py)
 
 ## Why I Built This
 
@@ -362,7 +409,7 @@ Claude is brilliant but forgets everything between conversations. Every new chat
 |-----|-------------|
 | [User Manual](docs/USER_MANUAL.md) | How to use each tool with examples |
 | [MCP Tool Reference](docs/MCP_TOOL_REFERENCE.md) | API reference: all 34 tools, params, return shapes |
-| [Architecture](docs/ARCHITECTURE.md) | System design, data model, component diagram |
+| [Architecture](docs/ARCHITECTURE.md) | System design, data model, component diagram, trust boundaries |
 | [Maintenance Manual](docs/MAINTENANCE_MANUAL.md) | Backups, monitoring, troubleshooting |
 | [Runbook](docs/RUNBOOK.md) | 10 incident response recipes |
 | [Code Inventory](docs/CODE_INVENTORY.md) | File-by-file manifest |
@@ -463,6 +510,19 @@ docker exec claude-memory-mcp-graphdb-1 redis-cli GRAPH.QUERY claude_memory \
 ```
 </details>
 
+<details>
+<summary><b>Got <code>MEMORY_LAYER_DEGRADED</code> instead of results</b></summary>
+
+This is the fail-loud contract working as designed — the memory layer detected an infrastructure failure (FalkorDB unreachable, Qdrant timeout, embedding API down) and refused to fabricate empty results.
+
+Diagnose:
+1. `docker ps --filter "name=claude-memory"` — all 4 containers should be healthy
+2. `curl http://localhost:8001/health` — embedding API
+3. `docker logs claude-memory-mcp-graphdb-1` — FalkorDB
+
+Once infrastructure is healthy, retry the query. The error includes `"retry_safe": true`.
+</details>
+
 More: [docs/GOTCHAS.md](docs/GOTCHAS.md) · [docs/RUNBOOK.md](docs/RUNBOOK.md)
 
 ## Roadmap
@@ -471,10 +531,11 @@ Dragon Brain is under active development. See the [CHANGELOG](docs/CHANGELOG.md)
 recent updates.
 
 Current focus areas:
-- Semantic Radar — relationship discovery via vector-graph gap analysis
+- Native async via `falkordb.asyncio.FalkorDB` — current `asyncio.to_thread` wrapper is a correct intermediate state
 - Drift detection and quality monitoring for long-lived graphs
 - Search result ranking improvements
 - Performance optimization for large graphs (10K+ nodes)
+- Contract baseline ratchet — quarterly reduction toward zero
 
 Have an idea? [Open an issue](https://github.com/iikarus/Dragon-Brain/issues).
 
