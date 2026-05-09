@@ -2,7 +2,7 @@
 
 [English](README.md) | [中文](README.zh-CN.md) | [日本語](README.ja.md) | [Español](README.es.md) | [Русский](README.ru.md) | [한국어](README.ko.md) | [Português](README.pt-BR.md) | [Deutsch](README.de.md) | [Français](README.fr.md)
 
-**Infraestructura de memoria persistente para agentes de IA.**
+**Infraestructura de memoria para agentes de IA — que falla en voz alta, por diseño.**
 
 [![LongMemEval](https://img.shields.io/badge/LongMemEval_R%405-100%25-gold?style=for-the-badge)](benchmarks/longmemeval/RESULTS.md)
 
@@ -15,11 +15,13 @@
 [![GPU](https://img.shields.io/badge/GPU-CUDA%20supported-orange.svg)]()
 [![GitHub stars](https://img.shields.io/github/stars/iikarus/Dragon-Brain)](https://github.com/iikarus/Dragon-Brain/stargazers)
 
-> **LongMemEval R@5 100%** · **1,599 memorias** · **34 herramientas MCP** · **Grafo + Vector híbrido** · **búsqueda <200ms** · **Sin LLM requerido**
+> **LongMemEval R@5 100%** · **34 herramientas MCP** · **Búsqueda híbrida sub-200ms** · **Contratos *fail-loud* obligatorios en CI** · **No requiere LLM**
 
 Un servidor MCP de código abierto que proporciona memoria a largo plazo a cualquier LLM mediante un grafo de conocimiento + búsqueda vectorial híbrida. Almacena entidades, observaciones y relaciones — luego las recupera semánticamente entre sesiones. Compatible con cualquier cliente MCP: Claude Code, Claude Desktop, Cursor, Windsurf, Cline, Gemini CLI.
 
 A diferencia del historial de chat plano o RAG simple, Dragon Brain entiende las *relaciones* entre memorias — no solo la similitud. Un agente autónomo ("El Bibliotecario") agrupa y sintetiza periódicamente las memorias en conceptos de orden superior.
+
+**Y te dice cuando no puede recordar, en lugar de fingir que la memoria nunca estuvo ahí.**
 
 ## Inicio Rápido
 
@@ -110,6 +112,7 @@ IA:  "Estás construyendo Atlas en Rust con un enfoque funcional..." [recuperado
 | Auto-clustering | No | No | **Sí (Bibliotecario)** |
 | Descubrimiento de relaciones | No | No | **Sí (Radar Semántico)** |
 | Funciona con cualquier cliente MCP | N/A | Varía | **Sí** |
+| **Infraestructura Fail-Loud** | No | No | **Sí (Contrato `SearchError`, CI-gated)** |
 
 ## Capacidades
 
@@ -174,11 +177,62 @@ Las 34 herramientas están documentadas en [docs/MCP_TOOL_REFERENCE.md](docs/MCP
 
 Claude es brillante pero olvida todo entre conversaciones. Cada nuevo chat comienza desde cero — sin contexto, sin continuidad, sin comprensión acumulada. Quería que Claude me *recordara*: mis proyectos, preferencias, avances, y las conexiones entre ellos. No un volcado plano del historial de chat, sino un grafo de conocimiento vivo que se enriquece con el tiempo.
 
-## Calidad
+## Forjado en la Auditoría (Forged in Audit)
 
-Testing de grado productivo: **1,281 tests** · testing de mutaciones (3-evil/1-sad/1-happy) · testing basado en propiedades (38 propiedades Hypothesis) · fuzz testing (30K+ entradas, 0 crashes) · análisis estático (mypy modo estricto, ruff) · auditoría de seguridad · **Puntuación Gauntlet: A- (95/100)**.
+La mayoría de los sistemas de memoria de código abierto pulen el "camino feliz" (happy path). Aquí está el error que Dragon Brain envió a producción durante dos meses, y la infraestructura que ahora existe para que no pueda volver a ocurrir.
 
-Resultados completos: [GAUNTLET_RESULTS.md](docs/GAUNTLET_RESULTS.md)
+### La mentira
+
+Antes de abril de 2026, la canalización (pipeline) `search()` se veía más o menos así:
+
+```python
+try:
+    # ... pipeline de recuperación de 6 canales ...
+except Exception:
+    return []
+```
+
+La herramienta `search_memory` de MCP luego transformaba `[]` en la cadena `"No results found."`. Claude recibía esa cadena y la trataba como definitiva — *"el usuario realmente no tiene memorias sobre este tema"* — cuando en realidad el servicio de embeddings se había caído, FalkorDB era inalcanzable, o Qdrant había agotado su tiempo de espera.
+
+**Cada consulta degradada era la IA operando con contexto faltante sin saberlo.** Una mentira confiada, indistinguible de la vaciedad genuina, incrustada en la función más llamada del sistema.
+
+### La solución
+
+Una auditoría adversaria de 4 fases encontró **83 violaciones de contrato en 37 archivos fuente**. Diez lotes de correcciones se enviaron entre abril y mayo de 2026:
+
+- La falla de la infraestructura ahora lanza un **`SearchError`** — la lista vacía significa "no se encontraron resultados", y *solo* eso.
+- **MCP `search_memory`** devuelve el error estructurado `{"error": "MEMORY_LAYER_DEGRADED", "retry_safe": true}` — señalando explícitamente la degradación a la IA, y nunca una mentira confiada.
+- **Compensación entre bases de datos** en crear/actualizar/eliminar entidades — si la escritura en Qdrant falla, se revierte FalkorDB para prevenir datos huérfanos.
+- **La escritura de relaciones usa `MERGE`, no `CREATE`** — reintentar las llamadas a `create_relationship` no duplica los bordes.
+- **Las fallas de escritura de FTS se propagan** al que llama — eliminando la obsolescencia silenciosa de los índices.
+- **El administrador de bloqueos lanza `TimeoutError`** en caso de contención — nunca procede en silencio sin haber obtenido el bloqueo.
+- **Las herramientas MCP tienen validación semántica** — los UUIDs incorrectos devuelven `{"error": "ENTITY_NOT_FOUND"}`, y no un resultado vacío silencioso.
+
+### La disciplina que lo mantiene arreglado
+
+- **`tox -e contracts`** — el bloqueo en CI (CI gate) está fijado en **13 violaciones** (bajó de 64). Las nuevas violaciones hacen fallar el build antes del merge. Las revisiones trimestrales seguirán bajando esta base hacia cero.
+- **Pruebas de integración de comportamiento** — `testcontainers-python` levanta instancias reales de `falkordb/falkordb:v4.14.11` y `qdrant/qdrant:v1.16.3`, luego hace `container.kill()` a mitad de una operación para asegurar que el contrato *fail-loud* (fallar en voz alta) se mantiene de principio a fin.
+- **Repositorio nativo asíncrono** — `AsyncMemoryRepository` aísla a los controladores de base de datos síncronos en grupos de hilos (thread pools) en ~75 puntos de llamada.
+- **Documentación de límites de confianza** — cada límite entre procesos tiene un contrato explícito registrado en [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+### Por qué importa
+
+Si tu capa de memoria puede mentir sobre sus modos de fallo, cada paso de razonamiento derivado está corrupto. Los agentes de IA confían en sus herramientas. Las herramientas que fabrican resultados vacíos con confianza envenenan cadenas de razonamiento enteras.
+
+Por lo que sabemos, Dragon Brain es el primer sistema de memoria de código abierto con un contrato obligatorio por CI para asegurar que los fallos de infraestructura no se silencien. Si alguna vez vuelve a suceder, la construcción fallará antes de fusionarse.
+
+### Resultados (Receipts)
+
+- **1,337 pruebas** distribuidas en 106 archivos de prueba, 0 fallos, 0 saltos
+- **Pruebas de mutación** — 2,270 mutantes, 1,184 destruidos a lo largo de 27 archivos fuente (3-evil/1-sad/1-happy por función)
+- **Pruebas basadas en propiedades** — 38 propiedades de Hypothesis
+- **Fuzz testing** — Más de 30K inputs, 0 caídas (crashes)
+- **Análisis estático** — mypy en modo estricto (0 errores), ruff (0 errores)
+- **Auditoría de seguridad** — Auditoría de inyección Cypher, escaneo de credenciales
+- **Detección de código muerto** — Vulture (0 hallazgos)
+- **Dragon Brain Gauntlet** — 20 rondas de auditoría automatizada de calidad, **A− (95/100)**
+
+Resultados completos del Gauntlet: [docs/GAUNTLET_RESULTS.md](docs/GAUNTLET_RESULTS.md) · Límites de confianza: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · Pruebas de integración: [tests/integration/test_db_kill_scenarios.py](tests/integration/test_db_kill_scenarios.py)
 
 ## Casos de Uso
 
