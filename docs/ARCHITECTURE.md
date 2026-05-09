@@ -35,7 +35,7 @@ graph TD
 
     %% Persistence Layer (Untrusted / Failure Prone)
     subgraph PersistenceLayer [Persistence Layer: Infra Boundaries]
-        Repo[FalkorDB / GraphRepository]
+        Repo[FalkorDB / AsyncMemoryRepository]
         Qdrant[Qdrant / VectorStore]
         FTS[SQLite / FTSStore]
     end
@@ -57,7 +57,7 @@ graph TD
 ### 2. The Domain-to-Persistence Boundary
 - **Protocol:** `MemoryService` coordinates persistence, but treats infrastructure as inherently unstable.
 - **Error Propagation:** The persistence layer must be strictly fail-loud. Infrastructure failures (`redis.exceptions.ConnectionError`, `httpx.ConnectError`, `sqlite3.Error`) must propagate upward to `MemoryService`, which then translates them into standardized domain exceptions like `SearchError`.
-- **Sync/Async:** `MemoryService` is largely async, while underlying repositories use a mix of async (`Qdrant`, `httpx`) and sync (`FalkorDB`, `SQLite`) IO. Batch 10 targets full async-native operation.
+- **Sync/Async:** The architecture is now **fully async-native**. `MemoryService` is fully async, and the underlying synchronous repositories (`FalkorDB`, `SQLite`) are wrapped in thread-pool executors via `AsyncMemoryRepository` and `FTSStore` to prevent event-loop blocking.
 
 ## Audit Artifacts
 For the full context on how these boundaries were established and enforced, refer to the **Dragon Brain Audit Artifacts** located in the Exocortex:

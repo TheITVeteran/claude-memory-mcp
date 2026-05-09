@@ -6,9 +6,17 @@ Drop this file into your project root or reference it from your Claude Code conf
 
 **Assertive pushback is non-negotiable. See global `~/.claude/CLAUDE.md` § The Harness — 6 guardrails against yes-man behavior. Do NOT hedge-then-agree. Say NO first, make Tabish argue his case. Devil's advocate on every decision. Name the opportunity cost.**
 
-## Audit Remediation (April-May 2026)
+## Audit Remediation (April–May 2026, Complete 2026-05-09)
 
-4-phase adversarial audit found **83 contract violations across 37 source files**. Fixes shipped in 10 batches: B1-B8 landed, B9 (CI gate + docs) shipping now, **B10 (async-native repository migration) deferred to Phase 19+** as a separate ~50-80hr epic with launch gate "B1-B9 merged + 14-day production soak."
+4-phase adversarial audit found **83 contract violations across 37 source files**. Fixes shipped in 10 batches B1–B10, all landed. Final state: **violations 64 → 13 (~80% eliminated)**, remainder are documented legitimate fallback paths under quarterly review.
+
+**B10 — Async-Native Repository Migration** (completed in 8 sub-batches B10.A through B10.epic-finalize):
+- AsyncMemoryRepository wrapper (`asyncio.to_thread` over FalkorDB sync client; ~75 call sites migrated across CrudMixin, SearchChannels, TemporalMixin, ValidationMixin, AnalysisMixin)
+- Cross-store compensation in `crud.py` for create/update/delete entity — Qdrant upsert failure rolls back FalkorDB write to prevent split-brain orphans
+- Integration test harness via `testcontainers-python` at `tests/integration/test_db_kill_scenarios.py` — 5 tests using real `container.kill()` to assert SearchError on infra outage
+- 1230 unit tests pass under `-W error`, zero RuntimeWarning leakage
+- B10.5 (native async via `falkordb.asyncio.FalkorDB`) deferred as future epic — current `asyncio.to_thread` wrapper is a correct intermediate state; FalkorDB v1.4.0 ships native async support, future epic will swap the wrapper out
+- B10.F entity-level lock granularity deliberately deferred to a future epic — project-level locks remain in place, appropriate for current scale
 
 ### The lie this audit closed
 
@@ -32,9 +40,13 @@ If you hit `MEMORY_LAYER_DEGRADED`, the memory layer is broken — don't assume 
 
 ### CI gate
 
-`tox -e contracts` runs `scripts/trace_contracts_dragon.py`. Baseline reflects current violation count post-B8 (~46 sites, almost all from B10's sync-in-async territory). Quarterly baseline reduction reviews ratchet toward zero.
+`tox -e contracts` runs `scripts/trace_contracts_dragon.py`. **Baseline = 13** (down from 64 at audit start). Quarterly baseline reduction reviews ratchet toward zero.
 
 **If your commit produces NEW violations, the build fails before merge.** This is the regression guardrail; respect it.
+
+### Behavioral integration test harness
+
+`tox -e integration` (set `RUN_INTEGRATION=1`) runs `tests/integration/test_db_kill_scenarios.py` against real `falkordb/falkordb:v4.14.11` and `qdrant/qdrant:v1.16.3` containers via testcontainers. Tests use native `container.kill()` to simulate crashes mid-operation and assert the fail-loud contract holds end-to-end. Local-only by default; CI opt-in.
 
 ### Where to dig deeper
 
@@ -44,7 +56,7 @@ If you hit `MEMORY_LAYER_DEGRADED`, the memory layer is broken — don't assume 
 
 ## What This Is
 
-A persistent memory system for AI agents. Knowledge graph (FalkorDB) + vector search (Qdrant) + MCP server. Any MCP-compatible client can store entities, observations, and relationships — then recall them semantically across sessions. Published on PyPI as `dragon-brain`. **v1.1.0 — 100% recall@5 on LongMemEval (ICLR 2025), no LLM required.**
+A persistent memory system for AI agents. Knowledge graph (FalkorDB) + vector search (Qdrant) + MCP server. Any MCP-compatible client can store entities, observations, and relationships — then recall them semantically across sessions. Published on PyPI as `dragon-brain`. **v1.2.0 — 100% recall@5 on LongMemEval (ICLR 2025), no LLM required.**
 
 ## Current Architecture
 

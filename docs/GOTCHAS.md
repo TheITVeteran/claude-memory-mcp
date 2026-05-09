@@ -179,3 +179,9 @@
 - **Gotcha**: `test_dashboard.py` and `test_dashboard_app.py` both import `dashboard.app` with different mocks. If `test_dashboard.py` runs first (alphabetical), it caches `dashboard.*` modules in `sys.modules` with its own `mock_st`.
 - **Risk**: `test_dashboard_app.py` only deleted `dashboard.app` from `sys.modules`, leaving `dashboard` and `dashboard.radar_viz` cached. The reimported module's `st` reference bound to the wrong mock, causing `assert_called()` failures.
 - **Fix**: `_import_dashboard()` now purges **all** `dashboard.*` modules from `sys.modules` before reimport. (Fixed in commit `a8ebabb`.)
+
+## 31. Docker Desktop Host-Side Port Wedge (Port 6333)
+
+- **Gotcha**: Qdrant might appear healthy (docker ps), but localhost:6333 times out.
+- **Risk**: The host-side Docker Desktop proxy (TCP listener) can get wedged, completing the TCP handshake but dropping the payload (Empty reply from server).
+- **Fix**: Restart the container (docker restart claude-memory-mcp-qdrant-1) to force Docker Desktop to rebind the host proxy. Do not assume the issue is inside the Qdrant container itself.

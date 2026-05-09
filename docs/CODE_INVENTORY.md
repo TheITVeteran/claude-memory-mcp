@@ -1,6 +1,6 @@
 # Code Inventory
 
-A manifest of the project structure. Last updated: April 10, 2026.
+A manifest of the project structure. Last updated: May 9, 2026.
 
 ## Core Logic (`src/claude_memory/`)
 
@@ -8,6 +8,8 @@ A manifest of the project structure. Last updated: April 10, 2026.
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | **Data Access**           |                                                                                                                           |
 | `repository.py`           | **Data Access Layer**. FalkorDB connections, Cypher queries, Graph Algorithms, Temporal queries.                          |
+| `repository_async.py`     | **Async Data Access Layer**. Asynchronous thread-pool wrapper over the synchronous FalkorDB GraphRepository.              |
+| `fts_store.py`            | **Full Text Search Layer**. SQLite-based FTS5 index for lexical search backup.                                            |
 | `vector_store.py`         | **Vector Access Layer**. Qdrant client, collection management, similarity search, MMR. Re-raises init errors.             |
 | `schema.py`               | **Data Models**. Pydantic definitions for all inputs and outputs (30+ models).                                            |
 | **Services**              |                                                                                                                           |
@@ -16,6 +18,8 @@ A manifest of the project structure. Last updated: April 10, 2026.
 | `crud.py`                 | **CrudMixin**. Entity/relationship create, update, delete logic.                                                          |
 | `crud_maintenance.py`     | **CrudMaintenanceMixin**. Observation CRUD, background salience updates (fire-and-forget).                                |
 | `search.py`               | **SearchMixin**. Vector search, hologram retrieval, hybrid pipeline (ADR-007), salience updates.                          |
+| `search_channels.py`      | **Retrieval Channels**. Definitions for the 6 parallel retrieval channels (Semantic, Lexical, Temporal, Associative, Entity, Relational). |
+| `search_radar.py`         | **Semantic Radar**. Vector-graph gap analysis logic separated from advanced search.                                       |
 | `search_advanced.py`      | **Advanced Search**. Semantic radar (vector-graph gap analysis), hologram subgraph expansion, spreading activation.       |
 | `merge.py`                | **RRF Merge**. Reciprocal Rank Fusion merge for hybrid search results (ADR-007).                                          |
 | `temporal.py`             | **TemporalMixin**. Sessions, breakthroughs, timeline queries, temporal neighbors.                                         |
@@ -25,6 +29,8 @@ A manifest of the project structure. Last updated: April 10, 2026.
 | `embedding_server.py`     | **Embedding Microservice**. Standalone HTTP server for GPU-accelerated embedding generation.                              |
 | `clustering.py`           | **ML Layer**. `scikit-learn` DBSCAN clustering + structural gap detection (`detect_gaps`).                                |
 | `activation.py`           | **ML Layer**. `ActivationEngine` — spreading activation through graph edges for associative retrieval.                    |
+| `date_parser.py`          | **NLP Layer**. Temporal parsing logic for converting relative dates into absolute timestamps.                             |
+| `entity_extraction.py`    | **NLP Layer**. Lightweight entity extraction via spaCy for query processing.                                              |           | **ML Layer**. `ActivationEngine` — spreading activation through graph edges for associative retrieval.                    |
 | `librarian.py`            | **Autonomous Agent**. Orchestrates maintenance loops (Fetch → Cluster → Consolidate → Gap Detect).                        |
 | `router.py`               | **Query Routing**. `QueryRouter` — rule-based intent classification (semantic/associative/temporal/relational).           |
 | `context_manager.py`      | **Session Management**. Context tracking for active sessions.                                                             |
@@ -98,13 +104,14 @@ A manifest of the project structure. Last updated: April 10, 2026.
 | `unit/test_radar_viz.py`          | Radar visualization rendering and edge cases.                   |
 | `unit/test_vector_store_radar.py` | Vector store radar query and similarity methods.                |
 
-### E2E / UAT (`tests/`)
+### E2E / UAT / Integration (`tests/`)
 
 | File                | Coverage                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `integration/test_db_kill_scenarios.py` | **Behavioral Contracts**. Spin up FalkorDB/Qdrant in `testcontainers`, kill them mid-flight, verify fail-loud propagation and cross-store rollback consistency (Split-Brain resilience). |
 | `e2e_functional.py` | **Exhaustive UAT**. 31-phase, 74-check lifecycle against the live Docker stack (CRUD, search, relationships, observations, temporal, sessions, graph health, strict consistency, associative, hologram, consolidation, ontology, archive/prune, knowledge gaps, cleanup, split-brain, reconnect, router strategies, deep search, bottles, concurrent creates, PRECEDED_BY chain, error recovery, algorithm semantics, point-in-time). |
 
-**Total: 1,166 tests (1,027 unit + 139 gauntlet) across 76 files, ~98% coverage.**
+**Total: 1,337 tests (106 files), ~98% coverage.**
 
 ## Benchmarks (`benchmarks/`)
 

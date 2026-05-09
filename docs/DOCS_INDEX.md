@@ -1,6 +1,6 @@
 # Documentation Index
 
-> **Last updated**: April 10, 2026 — Post entity embedding fix + Diff Mode + Semantic Radar dashboard
+> **Last updated**: May 9, 2026 — Post B10 Async Migration Epic
 
 This is the master table of contents for all Claude Memory MCP documentation. Use this to find the right doc, and to know **when each doc needs updating**.
 
@@ -8,16 +8,16 @@ This is the master table of contents for all Claude Memory MCP documentation. Us
 
 | Metric                                | Value                              | As Of  |
 | ------------------------------------- | ---------------------------------- | ------ |
-| Source modules (`src/claude_memory/`) | 31                                 | Apr 10 |
-| Scripts (`scripts/`)                  | 60                                 | Apr 10 |
-| Total tests (unit + gauntlet)         | 1,166                              | Apr 10 |
-| Test files                            | 76                                 | Apr 10 |
+| Source modules (`src/claude_memory/`) | 40                                 | May 09 |
+| Scripts (`scripts/`)                  | 77                                 | May 09 |
+| Total tests                           | 1,337                              | May 09 |
+| Test files                            | 106                                | May 09 |
 | Coverage                              | 97.86%                             | Feb 14 |
 | MCP tools                             | 34                                 | Apr 10 |
 | FalkorDB nodes (live brain)           | 1,592                              | Mar 27 |
 | FalkorDB edges (live brain)           | 3,114                              | Mar 27 |
 | Qdrant vectors (post-P0 brain)        | 464                                | Feb 14 |
-| Gold Stack tiers                      | 5 (pulse/gate/hammer/polish/reaper)| Mar 27 |
+| Gold Stack tiers                      | 7 (pulse/gate/forge/hammer/polish/contracts/integration)| May 09 |
 
 > **Update rule**: When any of these numbers change, update this table first, then propagate to the docs that reference them (mainly README.md, ARCHITECTURE.md, REHYDRATION_DOCUMENT.md).
 

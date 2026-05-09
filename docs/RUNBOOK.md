@@ -181,3 +181,20 @@ python tests/e2e_functional.py --phase 5 --verbose
 # Run full suite
 python tests/e2e_functional.py --strict
 ```
+
+---
+
+## 11. Docker Desktop Host-Side Port Wedge
+
+**Symptoms:** Container is healthy in docker ps, but curl http://localhost:6333 returns Empty reply from server or times out. The TCP handshake completes but data is dropped.
+
+`ash
+# Verify the wedge using verbose curl
+curl -v http://localhost:6333/healthz
+# Look for Empty reply from server after Connected to localhost.
+
+# Restart the container to force Docker Desktop to rebind the port proxy
+docker restart claude-memory-mcp-qdrant-1
+`
+
+**Root cause:** Docker Desktop's backend proxy (vpnkit/com.docker.backend) gets out of sync with the internal container bridge network.

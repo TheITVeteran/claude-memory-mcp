@@ -11,7 +11,7 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](docker-compose.yml)
 [![MCP Tools](https://img.shields.io/badge/MCP%20tools-34-green.svg)]()
-[![Tests](https://img.shields.io/badge/tests-1%2C281%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-1%2C337%20passing-brightgreen)]()
 [![Gauntlet](https://img.shields.io/badge/gauntlet-A%E2%88%92%20(95%2F100)-blue)]()
 [![GPU](https://img.shields.io/badge/GPU-CUDA%20supported-orange.svg)]()
 [![GitHub stars](https://img.shields.io/github/stars/iikarus/Dragon-Brain)](https://github.com/iikarus/Dragon-Brain/stargazers)
@@ -131,7 +131,7 @@ AI:  "You're building Atlas in Rust with a functional approach..." [recalled fro
 | **Typed Relationships** | Weighted edges | — | — | Edges | — | — |
 | **Session Tracking** | ✓ | — | — | — | ✓ | — |
 | **Model Agnostic** | Any MCP client | ✓ | ✓ | ✓ | ✓ | ✓ |
-| **Test Suite** | 1,281 tests | — | — | — | — | — |
+| **Test Suite** | 1,337 tests | — | — | — | — | — |
 | **Mutation Testing** | ✓ | — | — | — | — | — |
 | **Dashboard** | Streamlit | — | — | — | — | ✓ |
 | **MCP Tools** | 34 | — | — | — | — | — |
@@ -144,7 +144,7 @@ Dragon Brain scores **100% recall@5** on [LongMemEval](https://arxiv.org/abs/241
 
 | System | Score | Metric | LLM Required | Local |
 |--------|:-----:|--------|:---:|:---:|
-| **Dragon Brain v1.1.0** | **100%** | **R@5** | **No** | **Yes** |
+| **Dragon Brain v1.2.0** | **100%** | **R@5** | **No** | **Yes** |
 | MemPalace (Haiku rerank) | 100% | R@5 | Yes | Yes |
 | MemPalace (raw) | 96.6% | R@5 | No | Yes |
 | OMEGA | 95.4% | QA accuracy | No | Yes |
@@ -287,7 +287,7 @@ graph TB
     Dashboard --> Qdrant
 ```
 
-- **Graph Layer**: FalkorDB stores entities, relationships, and observations as a Cypher-queryable knowledge graph
+- **Graph Layer**: FalkorDB stores entities, relationships, and observations as a Cypher-queryable knowledge graph. The system is **fully async-native**, isolating synchronous database drivers in thread pools via `AsyncMemoryRepository`.
 - **Vector Layer**: Qdrant stores 1024d embeddings for semantic similarity search
 - **Hybrid Search**: Queries hit both layers, merged via Reciprocal Rank Fusion (RRF) with spreading activation enrichment
 - **Semantic Radar**: Discovers missing relationships by comparing vector similarity against graph distance
@@ -341,7 +341,7 @@ All 34 tools are documented in [docs/MCP_TOOL_REFERENCE.md](docs/MCP_TOOL_REFERE
 
 This isn't a weekend hack. It's tested like production software:
 
-- **1,281 tests** across 76 test files, 0 failures, 0 skipped
+- **1,337 tests** across 106 test files, 0 failures, 0 skipped
 - **Mutation testing** — 2,270 mutants, 1,184 killed across 27 source files (3-evil/1-sad/1-happy per function)
 - **Property-based testing** — 38 Hypothesis properties
 - **Fuzz testing** — 30K+ inputs, 0 crashes
