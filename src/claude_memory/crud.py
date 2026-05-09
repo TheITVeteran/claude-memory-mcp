@@ -8,6 +8,8 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from claude_memory.exceptions import SearchError
+
 if TYPE_CHECKING:  # pragma: no cover
     from .interfaces import Embedder, VectorStore
     from .lock_manager import LockManager
@@ -140,11 +142,23 @@ class CrudMixin:
             }
             try:
                 await self.vector_store.upsert(id=node_id, vector=embedding, payload=payload)
-            except Exception:
+            except Exception as e:
                 logger.error(
-                    "vector_upsert_failed for %s — raising to prevent split-brain", node_id
+                    "vector_upsert_failed for %s — compensating FalkorDB write to prevent "
+                    "split-brain",
+                    node_id,
                 )
-                raise
+                try:
+                    await self.repo.delete_node(node_id)
+                except Exception as comp_e:
+                    logger.error(
+                        "Compensating FalkorDB delete failed for %s. Orphan node left in graph! "
+                        "Error: %s",
+                        node_id,
+                        comp_e,
+                        exc_info=True,
+                    )
+                raise SearchError(f"Vector store unavailable during create: {e!s}") from e
 
             # 3. Index in FTS5 (lexical search channel)
             if hasattr(self, "fts_store"):
@@ -250,7 +264,6 @@ class CrudMixin:
             timestamp = datetime.now(UTC).isoformat()
             props["updated_at"] = timestamp
 
-            embedding = None
             merged_props = existing_node.copy()
             merged_props.update(props)
 
@@ -282,11 +295,23 @@ class CrudMixin:
                     vector=embedding,
                     payload=payload,
                 )
-            except Exception:
+            except Exception as e:
                 logger.error(
-                    "vector_upsert_failed for %s — raising to prevent split-brain", params.entity_id
+                    "vector_upsert_failed for %s — compensating FalkorDB update to prevent "
+                    "split-brain",
+                    params.entity_id,
                 )
-                raise
+                try:
+                    await self.repo.update_node(params.entity_id, existing_node)
+                except Exception as comp_e:
+                    logger.error(
+                        "Compensating FalkorDB update failed for %s. Graph node is stale! "
+                        "Error: %s",
+                        params.entity_id,
+                        comp_e,
+                        exc_info=True,
+                    )
+                raise SearchError(f"Vector store unavailable during update: {e!s}") from e
 
             return updated_node  # type: ignore[no-any-return]
 
@@ -300,9 +325,9 @@ class CrudMixin:
         """Delete vector — raises on failure to prevent split-brain."""
         try:
             await self.vector_store.delete(entity_id)
-        except Exception:
+        except Exception as e:
             logger.error("vector_delete_failed for %s — raising to prevent split-brain", entity_id)
-            raise
+            raise SearchError(f"Vector store unavailable during delete: {e!s}") from e
 
     def _safe_fts_delete(self, entity_id: str) -> None:
         """Remove entity from FTS index — non-fatal on failure."""
@@ -334,8 +359,41 @@ class CrudMixin:
                 self._safe_fts_delete(params.entity_id)
                 return {"status": "archived", "id": params.entity_id}
             else:
-                await self.repo.delete_node(params.entity_id)
                 await self._safe_vector_delete(params.entity_id)
+                try:
+                    await self.repo.delete_node(params.entity_id)
+                except Exception as graph_e:
+                    logger.error(
+                        "Graph delete failed for %s — compensating Qdrant delete",
+                        params.entity_id,
+                    )
+                    try:
+                        desc = existing_node.get("description", "")
+                        name = existing_node.get("name", "")
+                        node_type = existing_node.get("node_type", "Entity")
+                        text_to_embed = await _compute_entity_embedding_text(
+                            self.repo, params.entity_id, name, node_type, desc
+                        )
+                        embedding = self.embedder.encode(text_to_embed)
+                        payload = {
+                            "name": name,
+                            "node_type": node_type,
+                            "project_id": project_id,
+                        }
+                        await self.vector_store.upsert(
+                            id=params.entity_id, vector=embedding, payload=payload
+                        )
+                    except Exception as comp_e:
+                        logger.error(
+                            "Compensating Qdrant upsert failed for %s. Orphan vector! Error: %s",
+                            params.entity_id,
+                            comp_e,
+                            exc_info=True,
+                        )
+                    raise SearchError(
+                        f"Graph store unavailable during delete: {graph_e!s}"
+                    ) from graph_e
+
                 self._safe_fts_delete(params.entity_id)
                 return {"status": "deleted", "id": params.entity_id}
 

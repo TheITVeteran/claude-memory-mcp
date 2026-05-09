@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from claude_memory.crud import CrudMixin
+from claude_memory.exceptions import SearchError
 from claude_memory.schema import EntityCreateParams
 
 
@@ -53,7 +54,7 @@ async def test_evil1_create_entity_qdrant_down_always_raises() -> None:
     mixin.vector_store.upsert.side_effect = ConnectionError("Qdrant down")
     params = _make_params()
 
-    with pytest.raises(ConnectionError, match="Qdrant down"):
+    with pytest.raises(SearchError, match="Qdrant down"):
         await mixin.create_entity(params)
 
 
@@ -84,7 +85,7 @@ async def test_evil2_strict_consistency_env_var_has_no_effect() -> None:
     old_val = os.environ.get("EXOCORTEX_STRICT_CONSISTENCY")
     try:
         os.environ["EXOCORTEX_STRICT_CONSISTENCY"] = "false"
-        with pytest.raises(ConnectionError, match="Qdrant down"):
+        with pytest.raises(SearchError, match="Qdrant down"):
             await mixin.create_entity(params)
     finally:
         if old_val is None:

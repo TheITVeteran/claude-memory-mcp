@@ -22,13 +22,11 @@ from claude_memory.tools import MemoryService
 def mock_service():
     """Build a MemoryService with all deps mocked."""
     mock_embedder = MagicMock()
-    mock_repo = MagicMock()
     mock_vector = AsyncMock()
 
-    service = MemoryService(embedding_service=mock_embedder, vector_store=mock_vector)
-    service.repo = mock_repo
+    with patch("claude_memory.tools.MemoryRepository"):
+        service = MemoryService(embedding_service=mock_embedder, vector_store=mock_vector)
     service.repo = AsyncMock()
-
     return service
 
 
@@ -45,6 +43,7 @@ async def test_happy_create_entity_strips_embedding_from_receipt(mock_service):
         "embedding": [0.1] * 1024,  # THE LEAK
     }
     mock_service.repo.get_total_node_count.return_value = 1
+    mock_service.repo.get_most_recent_entity.return_value = None
     mock_service.embedder.encode.return_value = [0.1] * 1024
 
     # Mock vector upsert (async)
@@ -66,7 +65,10 @@ async def test_sad1_create_entity_receipt_missing_embedding_key_evil():
     """Evil: what if repo returns NO embedding key? Should still work."""
     mock_embedder = MagicMock()
     mock_vector = AsyncMock()
-    service = MemoryService(embedding_service=mock_embedder, vector_store=mock_vector)
+    from unittest.mock import patch
+
+    with patch("claude_memory.tools.MemoryRepository"):
+        service = MemoryService(embedding_service=mock_embedder, vector_store=mock_vector)
     service.repo = AsyncMock()
     service.repo.create_node.return_value = {
         "id": "456",
@@ -74,6 +76,7 @@ async def test_sad1_create_entity_receipt_missing_embedding_key_evil():
         "node_type": "Entity",
     }
     service.repo.get_total_node_count.return_value = 1
+    service.repo.get_most_recent_entity.return_value = None
     service.embedder.encode.return_value = [0.1] * 1024
     service.vector_store.upsert = AsyncMock()
 

@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from claude_memory.exceptions import SearchError
 from claude_memory.schema import (
     AnalyzeGraphParams,
     CreateMemoryTypeParams,
@@ -245,7 +246,7 @@ async def test_evil3_delete_entity_soft_vector_delete_raises(service: MemoryServ
     service.vector_store.delete.side_effect = ConnectionError("qdrant down")
 
     params = EntityDeleteParams(entity_id=ENTITY_ID, reason=DELETE_REASON, soft_delete=True)
-    with pytest.raises(ConnectionError, match="qdrant down"):
+    with pytest.raises(SearchError, match="qdrant down"):
         await service.delete_entity(params)
 
 
@@ -264,7 +265,7 @@ async def test_evil4_delete_entity_hard_vector_delete_raises(service: MemoryServ
     service.vector_store.delete.side_effect = ConnectionError("qdrant down")
 
     params = EntityDeleteParams(entity_id=ENTITY_ID, reason=DELETE_REASON, soft_delete=False)
-    with pytest.raises(ConnectionError, match="qdrant down"):
+    with pytest.raises(SearchError, match="qdrant down"):
         await service.delete_entity(params)
 
 
@@ -302,6 +303,12 @@ async def test_happy_add_observation_success(service: MemoryService) -> None:
     mock_obs_node = MagicMock()
     mock_obs_node.properties = {"id": "obs-001", "content": OBSERVATION_CONTENT}
     service.repo.execute_cypher.return_value = _make_cypher_result([[mock_obs_node]])
+    service.repo.get_node.return_value = {
+        "name": "Test",
+        "node_type": "Entity",
+        "project_id": "test",
+    }
+    service.repo.get_observations_for_entity.return_value = []
 
     params = ObservationParams(
         entity_id=ENTITY_ID,
@@ -337,6 +344,12 @@ async def test_happy_add_observation_creates_vector(service: MemoryService) -> N
         "project_id": "proj-1",
     }
     service.repo.execute_cypher.return_value = _make_cypher_result([[mock_obs_node]])
+    service.repo.get_node.return_value = {
+        "name": "Test",
+        "node_type": "Entity",
+        "project_id": "proj-1",
+    }
+    service.repo.get_observations_for_entity.return_value = []
     service.embedder.encode.return_value = [0.1] * 1024
 
     params = ObservationParams(
@@ -347,11 +360,11 @@ async def test_happy_add_observation_creates_vector(service: MemoryService) -> N
     result = await service.add_observation(params)
     assert result["id"] == "obs-002"
 
-    # Verify embedding was computed
-    service.embedder.encode.assert_called_once()
+    # Verify embedding was computed for both observation and entity re-embedding
+    assert service.embedder.encode.call_count == 2
     # Verify vector was upserted with observation metadata
-    service.vector_store.upsert.assert_called_once()
-    call_kwargs = service.vector_store.upsert.call_args
+    assert service.vector_store.upsert.call_count == 2
+    call_kwargs = service.vector_store.upsert.call_args_list[0]
     assert call_kwargs.kwargs["id"] == "obs-002"
     assert call_kwargs.kwargs["payload"]["node_type"] == "Observation"
     assert call_kwargs.kwargs["payload"]["entity_id"] == ENTITY_ID
@@ -944,6 +957,7 @@ async def test_happy_create_entity_initializes_salience(service: MemoryService) 
         "retrieval_count": RETRIEVAL_COUNT_DEFAULT,
     }
     service.repo.get_total_node_count.return_value = 1
+    service.repo.get_most_recent_entity.return_value = None
     service.ontology = MagicMock()
     service.ontology.is_valid_type.return_value = True
 
@@ -1229,6 +1243,7 @@ async def test_happy_create_entity_initializes_occurred_at(
     service.embedder.encode.return_value = [0.1] * 384
     service.vector_store.upsert = AsyncMock()
     service.repo.get_total_node_count.return_value = 1
+    service.repo.get_most_recent_entity.return_value = None
 
     await service.create_entity(
         EntityCreateParams(
@@ -1256,6 +1271,7 @@ async def test_happy_create_entity_respects_user_occurred_at(
     service.embedder.encode.return_value = [0.1] * 384
     service.vector_store.upsert = AsyncMock()
     service.repo.get_total_node_count.return_value = 1
+    service.repo.get_most_recent_entity.return_value = None
 
     custom_ts = "2026-01-15T12:00:00+00:00"
     await service.create_entity(
@@ -1605,8 +1621,8 @@ async def test_evil16_create_entity_vector_failure_always_raises(
     from claude_memory.schema import EntityCreateParams
 
     service.repo.create_node.return_value = {"id": ENTITY_ID, "name": ENTITY_NAME}
-    service.repo.get_most_recent_entity.return_value = None
     service.repo.get_total_node_count.return_value = 42
+    service.repo.get_most_recent_entity.return_value = None
     service.ontology = MagicMock()
     service.ontology.is_valid_type.return_value = True
     service.vector_store.upsert.side_effect = RuntimeError("Qdrant down")
@@ -1616,7 +1632,7 @@ async def test_evil16_create_entity_vector_failure_always_raises(
         node_type=ENTITY_TYPE,
         project_id=PROJECT_ID,
     )
-    with pytest.raises(RuntimeError, match="Qdrant down"):
+    with pytest.raises(SearchError, match="Qdrant down"):
         await service.create_entity(params)
 
 
@@ -1632,7 +1648,7 @@ async def test_evil17_update_entity_vector_failure_always_raises(
         entity_id=ENTITY_ID,
         properties={"description": "updated"},
     )
-    with pytest.raises(RuntimeError, match="Qdrant timeout"):
+    with pytest.raises(SearchError, match="Qdrant timeout"):
         await service.update_entity(params)
 
 
@@ -1648,7 +1664,7 @@ async def test_evil18_delete_entity_soft_vector_failure_always_raises(
         reason="test",
         soft_delete=True,
     )
-    with pytest.raises(RuntimeError, match="Qdrant unreachable"):
+    with pytest.raises(SearchError, match="Qdrant unreachable"):
         await service.delete_entity(params)
 
 
@@ -1664,7 +1680,7 @@ async def test_evil19_delete_entity_hard_vector_failure_always_raises(
         reason="test",
         soft_delete=False,
     )
-    with pytest.raises(RuntimeError, match="Qdrant gone"):
+    with pytest.raises(SearchError, match="Qdrant gone"):
         await service.delete_entity(params)
 
 
@@ -1754,6 +1770,7 @@ async def test_happy_search_normal_operation_returns_results(service: MemoryServ
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID, "_score": 0.95, "payload": {"name": ENTITY_NAME}},
     ]
+    service.repo.get_subgraph.return_value = {"nodes": [], "edges": []}
 
     # search() returns results, does not raise
     result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))

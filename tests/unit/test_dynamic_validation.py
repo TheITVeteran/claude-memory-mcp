@@ -53,7 +53,8 @@ def service_with_ontology() -> Generator[Any, None, None]:
     real_ontology._ontology = {"Entity": {}, "Concept": {}}
 
     with patch("claude_memory.ontology.OntologyManager", return_value=real_ontology):
-        service = MemoryService(embedding_service=embedder_mock, vector_store=vector_mock)
+        with patch("claude_memory.tools.MemoryRepository"):
+            service = MemoryService(embedding_service=embedder_mock, vector_store=vector_mock)
         service.repo = repo_mock
         service.repo = async_repo_mock
     yield service

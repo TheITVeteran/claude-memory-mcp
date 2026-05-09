@@ -125,7 +125,8 @@ class LockManager:
     # File Impl
     def _acquire_file(self, project_id: str, timeout: int) -> bool:
         """Spin-acquire a file-based lock with stale detection."""
-        lock_path = os.path.join(self.lock_dir, f"{project_id}.lock")
+        safe_id = "".join(c for c in str(project_id) if c.isalnum() or c in "-_")
+        lock_path = os.path.join(self.lock_dir, f"{safe_id}.lock")
         end_time = time.time() + timeout
         while time.time() < end_time:
             try:
@@ -150,7 +151,8 @@ class LockManager:
 
     def _release_file(self, project_id: str) -> None:
         """Remove the lock file."""
-        lock_path = os.path.join(self.lock_dir, f"{project_id}.lock")
+        safe_id = "".join(c for c in str(project_id) if c.isalnum() or c in "-_")
+        lock_path = os.path.join(self.lock_dir, f"{safe_id}.lock")
         try:
             os.remove(lock_path)
         except FileNotFoundError:
@@ -180,7 +182,8 @@ class LockManager:
 
     async def _async_acquire_file(self, project_id: str, timeout: int) -> bool:
         """Async spin-acquire a file-based lock with stale detection."""
-        lock_path = os.path.join(self.lock_dir, f"{project_id}.lock")
+        safe_id = "".join(c for c in str(project_id) if c.isalnum() or c in "-_")
+        lock_path = os.path.join(self.lock_dir, f"{safe_id}.lock")
         end_time = time.time() + timeout
         while time.time() < end_time:
             try:

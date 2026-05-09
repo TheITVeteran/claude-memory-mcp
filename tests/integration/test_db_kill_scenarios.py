@@ -6,6 +6,7 @@ import pytest
 from testcontainers.qdrant import QdrantContainer
 from testcontainers.redis import RedisContainer
 
+from claude_memory.exceptions import SearchError
 from claude_memory.schema import EntityCreateParams, SearchMemoryParams
 from claude_memory.tools import MemoryService
 from claude_memory.vector_store import QdrantVectorStore
@@ -55,7 +56,7 @@ async def memory_service(
     q_host = qdrant_container.get_container_host_ip()
     q_port = int(qdrant_container.get_exposed_port(6333))
 
-    vector_store = QdrantVectorStore(host=q_host, port=q_port)
+    vector_store = QdrantVectorStore(host=q_host, port=q_port, vector_size=1536)
 
     from unittest.mock import MagicMock
 
@@ -99,27 +100,26 @@ async def test_kill_qdrant_mid_create_leaves_orphan(memory_service, qdrant_conta
         name="test_orphan", node_type="Concept", project_id="test", properties={}
     )
 
-    # In B10.G, this raises an exception
-    with pytest.raises(Exception):  # noqa: B017
+    # In B10.H, this raises SearchError and rolls back the FalkorDB node
+    with pytest.raises(SearchError):
         await memory_service.create_entity(params)
 
-    # Assert split brain is present: node exists in falkordb
+    # Assert split brain is NOT present: node was compensated
     nodes = await memory_service.repo.get_all_nodes()
-    assert len(nodes) == 1
-    assert nodes[0]["name"] == "test_orphan"
+    # Check that test_orphan is not there
+    assert not any(n.get("name") == "test_orphan" for n in nodes)
 
 
 @pytest.mark.asyncio
-async def test_kill_falkordb_mid_search_raises_search_error(memory_service, falkordb_container):
+async def test_kill_falkordb_mid_search_degrades_gracefully(memory_service, falkordb_container):
     """
-    Scenario 3: Kill FalkorDB mid-search() -> assert SearchError.
+    Scenario 3: Kill FalkorDB mid-search() -> assert graceful degradation to vector search.
     """
     falkordb_container.get_wrapped_container().kill()
     params = SearchMemoryParams(query="hello", project_id="test")
-    # Actually wait, search_channels wraps exceptions into SearchError. So this MIGHT pass as SearchError.
-    # Let's catch Exception to be safe for baseline, then tighten in B10.H.
-    with pytest.raises(Exception):  # noqa: B017
-        await memory_service.search(params)
+    # Search should catch FalkorDB connection errors during graph traversal and fall back to Qdrant.
+    results = await memory_service.search(params)
+    assert isinstance(results, list)
 
 
 @pytest.mark.asyncio

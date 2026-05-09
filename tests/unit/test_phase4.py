@@ -33,9 +33,10 @@ def memory_service(mock_repo: Any) -> Any:
         mock_vector_store = MagicMock()
         mock_vector_store.upsert = AsyncMock()
 
-        service = MemoryService(
-            embedding_service=mock_embedding_service, vector_store=mock_vector_store
-        )
+        with patch("claude_memory.tools.MemoryRepository"):
+            service = MemoryService(
+                embedding_service=mock_embedding_service, vector_store=mock_vector_store
+            )
 
         # Ensure our mock repo is what the service uses
         service.repo = mock_repo

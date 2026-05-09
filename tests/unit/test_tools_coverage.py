@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from claude_memory.exceptions import SearchError
 from claude_memory.schema import (
     AnalyzeGraphParams,
     CreateMemoryTypeParams,
@@ -247,7 +248,7 @@ async def test_evil3_delete_entity_soft_vector_delete_fails(service: MemoryServi
     service.vector_store.delete.side_effect = ConnectionError("qdrant down")
 
     params = EntityDeleteParams(entity_id=ENTITY_ID, reason=DELETE_REASON, soft_delete=True)
-    with pytest.raises(ConnectionError, match="qdrant down"):
+    with pytest.raises(SearchError, match="qdrant down"):
         await service.delete_entity(params)
 
 
@@ -266,7 +267,7 @@ async def test_evil4_delete_entity_hard_vector_delete_fails(service: MemoryServi
     service.vector_store.delete.side_effect = ConnectionError("qdrant down")
 
     params = EntityDeleteParams(entity_id=ENTITY_ID, reason=DELETE_REASON, soft_delete=False)
-    with pytest.raises(ConnectionError, match="qdrant down"):
+    with pytest.raises(SearchError, match="qdrant down"):
         await service.delete_entity(params)
 
 
@@ -304,6 +305,12 @@ async def test_happy_add_observation_success(service: MemoryService) -> None:
     mock_obs_node = MagicMock()
     mock_obs_node.properties = {"id": "obs-001", "content": OBSERVATION_CONTENT}
     service.repo.execute_cypher.return_value = _make_cypher_result([[mock_obs_node]])
+    service.repo.get_node.return_value = {
+        "name": "Test",
+        "node_type": "Entity",
+        "project_id": "test",
+    }
+    service.repo.get_observations_for_entity.return_value = []
 
     params = ObservationParams(
         entity_id=ENTITY_ID,
