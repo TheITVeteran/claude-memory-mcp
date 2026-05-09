@@ -1,12 +1,11 @@
-from __future__ import annotations
-
-import pytest
-
 """Tests for the ActivationEngine — spreading activation retrieval."""
 
+from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
+
+import pytest
 
 from claude_memory.activation import ActivationEngine
 

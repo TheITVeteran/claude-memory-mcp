@@ -16,7 +16,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from .context_manager import ContextManager
     from .interfaces import Embedder, VectorStore
     from .merge import MergedResult
-    from .repository import MemoryRepository
+    from .repository_async import AsyncMemoryRepository
     from .router import QueryRouter
     from .schema import SearchResult
 
@@ -30,7 +30,7 @@ class SearchChannelsMixin:
     helper called by :meth:`SearchMixin.search`.
     """
 
-    repo: "MemoryRepository"
+    repo: "AsyncMemoryRepository"
     embedder: "Embedder"
     vector_store: "VectorStore"
     router: "QueryRouter"

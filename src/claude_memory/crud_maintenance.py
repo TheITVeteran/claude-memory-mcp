@@ -15,7 +15,6 @@ from claude_memory.crud import _compute_entity_embedding_text
 if TYPE_CHECKING:  # pragma: no cover
     from .interfaces import Embedder, VectorStore
     from .lock_manager import LockManager
-    from .repository import MemoryRepository
     from .repository_async import AsyncMemoryRepository
     from .schema import ObservationParams
 
@@ -26,8 +25,7 @@ class CrudMaintenanceMixin:
     """Background tasks and observation CRUD — mixed into MemoryService."""
 
     # Inherited attributes (set by MemoryService.__init__)
-    repo: "MemoryRepository"
-    async_repo: "AsyncMemoryRepository"
+    repo: "AsyncMemoryRepository"
     embedder: "Embedder"
     vector_store: "VectorStore"
     lock_manager: "LockManager"
@@ -174,20 +172,14 @@ class CrudMaintenanceMixin:
         # Re-index FTS with updated content (Tier 2.4 fix)
         if hasattr(self, "fts_store"):
             try:
-                entity = (
-                    entity
-                    if "entity" in dir()
-                    else await self.repo.get_node(params.entity_id)
-                )
+                entity = entity if "entity" in dir() else await self.repo.get_node(params.entity_id)
                 if entity:
                     # Fetch all observations for this entity
                     obs_query = (
                         "MATCH (e:Entity {id: $eid})-[:HAS_OBSERVATION]->(o) "
                         "RETURN o.content ORDER BY o.created_at ASC"
                     )
-                    obs_res = await self.repo.execute_cypher(
-                        obs_query, {"eid": params.entity_id}
-                    )
+                    obs_res = await self.repo.execute_cypher(obs_query, {"eid": params.entity_id})
                     obs_texts = [row[0] for row in obs_res.result_set if row[0]]
 
                     self.fts_store.index_entity(

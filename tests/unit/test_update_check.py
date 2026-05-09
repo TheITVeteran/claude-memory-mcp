@@ -1,7 +1,6 @@
-from __future__ import annotations
-
 """Tests for update_check.py — 3 evil / 1 sad / 1 happy."""
 
+from __future__ import annotations
 
 import logging
 from unittest.mock import AsyncMock, MagicMock, patch

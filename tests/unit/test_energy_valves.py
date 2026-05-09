@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Gold Stack tests for SUPERSEDES energy valves (Tier 2.3).
 
 TDD Red phase — tests written BEFORE implementation.
@@ -9,6 +7,7 @@ different edge types. SUPERSEDES/REJECTED_FOR edges should dampen
 energy flow, while SUPPORTS/RELATES_TO propagate normally.
 """
 
+from __future__ import annotations
 
 from typing import Any
 from unittest.mock import AsyncMock

@@ -14,7 +14,6 @@ if TYPE_CHECKING:  # pragma: no cover
     from .interfaces import Embedder, VectorStore
     from .lock_manager import LockManager
     from .ontology import OntologyManager
-    from .repository import MemoryRepository
     from .repository_async import AsyncMemoryRepository
     from .schema import (
         EntityCommitReceipt,
@@ -76,8 +75,7 @@ class CrudMixin:
     """Entity/Relationship/Observation CRUD — mixed into MemoryService."""
 
     # Inherited attributes (set by MemoryService.__init__)
-    repo: "MemoryRepository"
-    async_repo: "AsyncMemoryRepository"
+    repo: "AsyncMemoryRepository"
     embedder: "Embedder"
     vector_store: "VectorStore"
     ontology: "OntologyManager"
@@ -313,7 +311,7 @@ class CrudMixin:
                     )
                 raise SearchError(f"Vector store unavailable during update: {e!s}") from e
 
-            return updated_node  # type: ignore[no-any-return]
+            return updated_node
 
         if project_id:
             async with self.lock_manager.lock(project_id):

@@ -1,11 +1,10 @@
-from __future__ import annotations
-
 """Mutation-killing tests for config defaults, env var chains, and retry backoff math.
 
 Targets Pattern P3 (~55 kills): constructor defaults, env var fallback chains,
 and exponential backoff delay calculation.
 """
 
+from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 

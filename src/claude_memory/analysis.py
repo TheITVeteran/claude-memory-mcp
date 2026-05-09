@@ -17,7 +17,7 @@ from .schema import ListOrphansParams
 if TYPE_CHECKING:  # pragma: no cover
     from .interfaces import Embedder, VectorStore
     from .ontology import OntologyManager
-    from .repository import MemoryRepository
+    from .repository_async import AsyncMemoryRepository
     from .schema import (
         AnalyzeGraphParams,
         ArchiveEntityParams,
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 class AnalysisMixin:
     """Graph health / gaps / stale / consolidation — mixed into MemoryService."""
 
-    repo: "MemoryRepository"
+    repo: "AsyncMemoryRepository"
     embedder: "Embedder"
     vector_store: "VectorStore"
     ontology: "OntologyManager"
@@ -59,7 +59,7 @@ class AnalysisMixin:
                 logger.warning("Clustering failed during health check — community_count=0")
 
         health["community_count"] = community_count
-        return health  # type: ignore[no-any-return]
+        return health
 
     async def list_orphans(self, params: ListOrphansParams) -> list[dict[str, Any]]:
         """List graph nodes with zero relationships (orphans).
@@ -68,7 +68,7 @@ class AnalysisMixin:
         node_type, project_id, focus, labels, and created_at.
         """
         limit = params.limit
-        return list(self.repo.list_orphans(limit=limit))
+        return list(await self.repo.list_orphans(limit=limit))
 
     async def system_diagnostics(self) -> dict[str, Any]:
         """E-5: Unified system diagnostics — graph, vector, and split-brain."""
@@ -204,7 +204,7 @@ class AnalysisMixin:
             return {"error": f"Entity {params.entity_id} is already archived"}
 
         await self.vector_store.delete(params.entity_id)
-        return await self.repo.update_node(params.entity_id, {"status": "archived"})  # type: ignore[no-any-return]
+        return await self.repo.update_node(params.entity_id, {"status": "archived"})
 
     async def prune_stale(self, params: "PruneStaleParams") -> dict[str, Any]:
         """Hard delete archived entities older than N days.

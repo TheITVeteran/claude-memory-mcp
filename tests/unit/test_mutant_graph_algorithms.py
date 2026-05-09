@@ -1,11 +1,10 @@
-from __future__ import annotations
-
 """Mutation-killing tests for graph_algorithms.py — PageRank and Louvain.
 
 Targets ~20-25 kills: damping factor math, 1.0/n initialization,
 share division, result slicing [:10]/[:5], seed=42, Entity label stripping.
 """
 
+from __future__ import annotations
 
 from unittest.mock import MagicMock
 

@@ -1,11 +1,10 @@
-from __future__ import annotations
-
 """Mutation-killing tests for temporal.py — session/breakthrough property assertions.
 
 Targets ~15 kills: end_session status, get_bottles include_content flag,
 temporal neighbor direction param, query construction.
 """
 
+from __future__ import annotations
 
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch

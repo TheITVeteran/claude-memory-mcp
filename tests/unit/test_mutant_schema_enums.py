@@ -1,10 +1,9 @@
-from __future__ import annotations
-
 """Mutation-killing tests for schema.py — EdgeType and CertaintyLevel enums.
 
 Split from test_mutant_schema_integrity.py per 300-line module cap.
 """
 
+from __future__ import annotations
 
 from typing import get_args
 

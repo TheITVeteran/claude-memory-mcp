@@ -1,10 +1,9 @@
-from __future__ import annotations
-
 """Gold Stack tests for FTSStore (Tier 1.2).
 
 Tests follow the 3-evil/1-sad/1-happy naming convention.
 """
 
+from __future__ import annotations
 
 import pytest
 

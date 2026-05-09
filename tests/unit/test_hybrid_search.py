@@ -1,10 +1,9 @@
-from __future__ import annotations
-
 """Tests for the hybrid search pipeline — ADR-007 §10.2.
 
 3-evil/1-sad/1-happy per function + spec §10.2 checklist coverage.
 """
 
+from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime

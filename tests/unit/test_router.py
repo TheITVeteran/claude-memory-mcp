@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Tests for QueryRouter — intent classification and dispatch.
 
 Covers:
@@ -9,6 +7,7 @@ Covers:
 - Edge cases: empty query, relational with/without quoted entities
 """
 
+from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 

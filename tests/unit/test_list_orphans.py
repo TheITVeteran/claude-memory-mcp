@@ -1,10 +1,9 @@
-from __future__ import annotations
-
 """Tests for list_orphans tool — 3-evil / 1-sad / 1-happy + 1 scenario.
 
 Covers the full count→list→act triad inspection layer.
 """
 
+from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 

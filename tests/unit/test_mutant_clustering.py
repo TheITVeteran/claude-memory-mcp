@@ -1,11 +1,10 @@
-from __future__ import annotations
-
 """Mutation-killing tests for clustering.py — DBSCAN edge cases and cosine sim.
 
 Targets ~15 kills: empty input, single node, noise exclusion,
 zero vector cosine sim, cross-edge counting, gap detection guards.
 """
 
+from __future__ import annotations
 
 from typing import Any
 

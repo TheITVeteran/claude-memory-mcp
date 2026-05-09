@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Tests for repository_traversal.py — coverage gap remediation.
 
 Covers uncovered lines 158-193:
@@ -7,6 +5,7 @@ Covers uncovered lines 158-193:
   - get_most_recent_entity (happy, sad/no result, evil/no properties)
 """
 
+from __future__ import annotations
 
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch

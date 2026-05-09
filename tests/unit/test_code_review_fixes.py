@@ -1,11 +1,10 @@
-from __future__ import annotations
-
 """Gold Stack tests for code review bugfixes (Issues #1-#7).
 
 TDD Red phase — tests for all 7 issues from the code review.
 Each class targets one issue. 3-evil/1-sad/1-happy per class.
 """
 
+from __future__ import annotations
 
 import re
 from typing import Any

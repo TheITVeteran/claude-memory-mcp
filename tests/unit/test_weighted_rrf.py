@@ -1,10 +1,9 @@
-from __future__ import annotations
-
 """Gold Stack tests for weighted_rrf_merge (Tier 1.4) + channel weights (Tier 1.5).
 
 Tests follow the 3-evil/1-sad/1-happy naming convention.
 """
 
+from __future__ import annotations
 
 from typing import Any
 

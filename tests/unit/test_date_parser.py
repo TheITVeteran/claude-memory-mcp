@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Gold Stack tests for temporal date extraction (Tier 2.4).
 
 TDD Red phase — tests written BEFORE implementation.
@@ -11,6 +9,7 @@ The date_parser module should:
 - Handle ambiguous/missing dates gracefully
 """
 
+from __future__ import annotations
 
 from datetime import datetime
 

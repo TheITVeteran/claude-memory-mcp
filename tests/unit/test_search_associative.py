@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Tests for search_associative() and configurable score weights.
 
 Covers:
@@ -11,6 +9,7 @@ Covers:
 - MCP tool wrapper (search_associative in server.py)
 """
 
+from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any

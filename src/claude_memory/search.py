@@ -28,7 +28,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from .activation import ActivationEngine
     from .context_manager import ContextManager
     from .interfaces import Embedder, VectorStore
-    from .repository import MemoryRepository
+    from .repository_async import AsyncMemoryRepository
     from .router import QueryRouter
     from .schema import (
         CrossDomainPatternsParams,
@@ -73,7 +73,7 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
     Inherits retrieval channel methods from SearchChannelsMixin.
     """
 
-    repo: "MemoryRepository"
+    repo: "AsyncMemoryRepository"
     embedder: "Embedder"
     vector_store: "VectorStore"
     router: "QueryRouter"

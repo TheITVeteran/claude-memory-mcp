@@ -1,11 +1,10 @@
-from __future__ import annotations
-
 """Gold Stack tests for _entity_extraction_enrichment channel (Tier 2.2).
 
 TDD Red phase — tests written BEFORE the channel implementation.
 Tests the pipeline integration: query → NER → entity lookup → channel results.
 """
 
+from __future__ import annotations
 
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch

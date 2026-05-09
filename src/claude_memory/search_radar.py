@@ -18,7 +18,7 @@ from .schema import FindSemanticOpportunitiesParams
 
 if TYPE_CHECKING:  # pragma: no cover
     from .interfaces import Embedder, VectorStore
-    from .repository import MemoryRepository
+    from .repository_async import AsyncMemoryRepository
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class SearchRadarMixin:
     Provides ``find_semantic_opportunities`` for batch gap detection.
     """
 
-    repo: "MemoryRepository"
+    repo: "AsyncMemoryRepository"
     embedder: "Embedder"
     vector_store: "VectorStore"
 

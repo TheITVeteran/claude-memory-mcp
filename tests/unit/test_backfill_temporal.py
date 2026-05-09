@@ -1,7 +1,6 @@
-from __future__ import annotations
-
 """Tests for scripts/backfill_temporal.py migration functions."""
 
+from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 

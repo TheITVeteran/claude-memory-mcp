@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Tests for vector_store.py — coverage gap remediation.
 
 Covers uncovered async methods:
@@ -12,6 +10,7 @@ Covers uncovered async methods:
   - _cosine_similarity
 """
 
+from __future__ import annotations
 
 from types import SimpleNamespace
 from unittest.mock import AsyncMock

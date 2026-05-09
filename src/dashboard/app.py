@@ -53,7 +53,8 @@ def get_stats() -> tuple[int, int]:
     """Return total node and edge counts from the graph."""
     service = get_service()
     nodes = asyncio.run(service.repo.execute_cypher("MATCH (n) RETURN count(n)")).result_set[0][0]
-    edges = asyncio.run(service.repo.execute_cypher("MATCH ()-[r]->() RETURN count(r)")).result_set[0][0]
+    edges_query = "MATCH ()-[r]->() RETURN count(r)"
+    edges = asyncio.run(service.repo.execute_cypher(edges_query)).result_set[0][0]
     return nodes, edges
 
 

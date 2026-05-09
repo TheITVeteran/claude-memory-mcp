@@ -1,11 +1,10 @@
-from __future__ import annotations
-
 """Gold Stack tests for ablation study infrastructure (Step 8).
 
 TDD Red→Green — tests the weight override and table formatting
 without needing a live service.
 """
 
+from __future__ import annotations
 
 from benchmarks.longmemeval.ablation import (
     ABLATION_CONFIGS,

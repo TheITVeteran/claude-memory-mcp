@@ -1,10 +1,9 @@
-from __future__ import annotations
-
 """Mutation-killing tests for ontology.py — DEFAULT_ONTOLOGY structure.
 
 Split from test_mutant_schema_integrity.py per 300-line module cap.
 """
 
+from __future__ import annotations
 
 from claude_memory.ontology import DEFAULT_ONTOLOGY
 

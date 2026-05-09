@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Gold Stack tests for entity_extraction module (Tier 2.1).
 
 3-evil/1-sad/1-happy — tests written BEFORE implementation (TDD Red phase).
@@ -12,6 +10,7 @@ The entity_extraction module should:
 - Deduplicate extracted entities
 """
 
+from __future__ import annotations
 
 import pytest
 

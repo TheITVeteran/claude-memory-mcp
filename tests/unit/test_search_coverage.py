@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Tests for search.py uncovered lines — coverage gap remediation.
 
 Covers:
@@ -10,6 +8,7 @@ Covers:
   - _execute_vector_search (lines 519-538 approx)
 """
 
+from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock

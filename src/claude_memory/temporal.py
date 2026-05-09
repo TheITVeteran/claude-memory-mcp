@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, cast
 from claude_memory.validation import requires_entity, requires_session
 
 if TYPE_CHECKING:  # pragma: no cover
-    from .repository import MemoryRepository
+    from .repository_async import AsyncMemoryRepository
     from .schema import (
         BottleQueryParams,
         BreakthroughParams,
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class TemporalMixin:
     """Session/Breakthrough/Timeline methods — mixed into MemoryService."""
 
-    repo: "MemoryRepository"
+    repo: "AsyncMemoryRepository"
 
     async def start_session(self, params: "SessionStartParams") -> dict[str, Any]:
         """Create a new session node in the graph.
@@ -118,14 +118,14 @@ class TemporalMixin:
                 {"confidence": 1.0},
             )
 
-        return res  # type: ignore[no-any-return]
+        return res
 
     async def query_timeline(
         self,
         params: "TemporalQueryParams",
     ) -> list[dict[str, Any]]:
         """Fetch entities within a time window, ordered by occurred_at."""
-        return await self.repo.query_timeline(  # type: ignore[no-any-return]
+        return await self.repo.query_timeline(
             start=params.start.isoformat(),
             end=params.end.isoformat(),
             limit=params.limit,
@@ -138,7 +138,7 @@ class TemporalMixin:
         params: "GetTemporalNeighborsParams",
     ) -> list[dict[str, Any]]:
         """Find entities connected by temporal edges."""
-        return await self.repo.get_temporal_neighbors(  # type: ignore[no-any-return]
+        return await self.repo.get_temporal_neighbors(
             entity_id=params.entity_id,
             direction=params.direction,
             limit=params.limit,
