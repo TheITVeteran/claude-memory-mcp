@@ -23,6 +23,7 @@ backups/
 # Documentation
 docs/
 *.md
+!README.md
 LICENSE
 
 # Scripts not needed in container (except backup_restore)

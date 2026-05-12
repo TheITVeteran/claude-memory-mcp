@@ -49,8 +49,9 @@ app = FastAPI(title="Embedding Service", lifespan=lifespan)
 
 
 @app.post("/embed", response_model=EmbedResponse)  # type: ignore[misc, unused-ignore]
-async def embed_texts(request: EmbedRequest) -> dict[str, Any]:
+async def embed_texts(request: EmbedRequest, client_id: str = "unknown") -> dict[str, Any]:
     """Encode input texts and return their embedding vectors."""
+    logger.info("embed: client_id=%s texts=%d", client_id, len(request.texts))
     if not request.texts:
         return {"embeddings": []}
 
@@ -107,8 +108,9 @@ def _get_reranker() -> Any:
 
 
 @app.post("/rerank", response_model=RerankResponse)  # type: ignore[misc, unused-ignore]
-async def rerank(request: RerankRequest) -> dict[str, Any]:
+async def rerank(request: RerankRequest, client_id: str = "unknown") -> dict[str, Any]:
     """Rerank documents by cross-encoder relevance to the query."""
+    logger.info("rerank: client_id=%s docs=%d", client_id, len(request.documents))
     if not request.documents:
         return {"scores": [], "indices": []}
 

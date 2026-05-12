@@ -56,11 +56,16 @@ class EmbeddingService:
     def _call_api(self, texts: list[str]) -> list[list[float]]:  # pragma: no cover
         """Helper to call remote embedding API."""
         url = os.getenv("EMBEDDING_API_URL")
+        client_id = os.getenv("EMBEDDING_CLIENT_ID", "unknown")
         try:
             # We use a synchronous helper for compatibility with existing sync methods
             # ideally this class should be async but that requires refactoring MemoryService
             with httpx.Client(timeout=30.0) as client:
-                resp = client.post(f"{url}/embed", json={"texts": texts})
+                resp = client.post(
+                    f"{url}/embed",
+                    json={"texts": texts},
+                    params={"client_id": client_id},
+                )
                 resp.raise_for_status()
                 return cast(list[list[float]], resp.json()["embeddings"])
         except Exception as e:
