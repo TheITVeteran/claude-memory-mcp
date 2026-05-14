@@ -29,7 +29,7 @@ COLLECTION = os.getenv("QDRANT_COLLECTION", "memory_embeddings")
 
 FALKORDB_HOST = os.getenv("FALKORDB_HOST", "localhost")
 FALKORDB_PORT = int(os.getenv("FALKORDB_PORT", "6379"))
-GRAPH_NAME = os.getenv("FALKORDB_GRAPH", "memory")
+GRAPH_NAME = os.getenv("FALKORDB_GRAPH", "claude_memory")
 
 SCROLL_BATCH = 100
 
@@ -68,19 +68,25 @@ async def backfill() -> None:
                 skipped += 1
                 continue
 
-            # Look up created_at from FalkorDB by point ID
+            # Look up created_at from FalkorDB by point ID.
+            # Try Entity label first (indexed), then Observation.
             point_id = str(point.id)
             try:
-                res = graph.query(
-                    "MATCH (n) WHERE n.id = $id RETURN n.created_at",
-                    {"id": point_id},
-                )
-                if not res.result_set or not res.result_set[0][0]:
+                created_at_str = None
+                for label in ("Entity", "Observation"):
+                    res = graph.query(
+                        f"MATCH (n:{label}) WHERE n.id = $id RETURN n.created_at",
+                        {"id": point_id},
+                    )
+                    if res.result_set and res.result_set[0][0]:
+                        created_at_str = res.result_set[0][0]
+                        break
+
+                if not created_at_str:
                     missing_in_graph += 1
                     logger.warning("No created_at in graph for point %s", point_id)
                     continue
 
-                created_at_str = res.result_set[0][0]
                 created_at_ts = _dt.fromisoformat(created_at_str).timestamp()
 
                 await client.set_payload(
