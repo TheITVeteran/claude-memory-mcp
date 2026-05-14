@@ -174,7 +174,9 @@ def test_happy_call_api_success() -> None:
             result = service._call_api(BATCH_TEXTS)
             assert result == MOCK_BATCH_VECTORS
             mock_client.post.assert_called_once_with(
-                f"{MOCK_API_URL}/embed", json={"texts": BATCH_TEXTS}
+                f"{MOCK_API_URL}/embed",
+                json={"texts": BATCH_TEXTS},
+                params={"client_id": "unknown"},
             )
 
 
