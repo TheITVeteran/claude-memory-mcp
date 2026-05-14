@@ -100,7 +100,12 @@ class QdrantVectorStore:
         must_conditions = []
         for k, v in filter.items():
             if k == "created_at_lt":
-                # Qdrant Range requires numeric values; convert ISO strings to timestamps
+                # Qdrant Range requires numeric (int/float) or datetime values.
+                # String payloads silently return empty on Range filters.
+                # We convert ISO-8601 strings → float (Unix epoch) both here
+                # (query side) and in crud.py/crud_maintenance.py (write side)
+                # so the numeric comparison is type-consistent.
+                # See: https://qdrant.tech/documentation/concepts/filtering/#range
                 range_val = v
                 if isinstance(v, str):
                     try:
