@@ -74,26 +74,30 @@ class RepositoryQueryMixin:
 
         Args:
             entity_id: The anchor entity ID.
-            direction: 'before', 'after', or 'both'.
+            direction: Temporal direction filter.
+                ``before`` / ``backward`` — incoming temporal edges (the past).
+                ``after`` / ``forward``   — outgoing temporal edges (the future).
+                ``both`` (default)        — union of both directions.
+                ``backward``/``forward`` are permanent aliases, not deprecated.
             limit: Max results.
         """
         graph = self.select_graph()  # type: ignore[attr-defined]
         temporal_types = "PRECEDED_BY|EVOLVED_FROM|SUPERSEDES|CONCURRENT_WITH"
-        if direction == "before":
+        if direction in ("before", "backward"):
             query = f"""
             MATCH (n:Entity {{id: $entity_id}})<-[r:{temporal_types}]-(m:Entity)
             RETURN m
             ORDER BY COALESCE(m.occurred_at, m.created_at) DESC
             LIMIT $limit
             """
-        elif direction == "after":
+        elif direction in ("after", "forward"):
             query = f"""
             MATCH (n:Entity {{id: $entity_id}})-[r:{temporal_types}]->(m:Entity)
             RETURN m
             ORDER BY COALESCE(m.occurred_at, m.created_at) ASC
             LIMIT $limit
             """
-        else:
+        else:  # "both" or unrecognized
             query = f"""
             MATCH (n:Entity {{id: $entity_id}})-[r:{temporal_types}]-(m:Entity)
             RETURN DISTINCT m

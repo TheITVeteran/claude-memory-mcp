@@ -138,6 +138,42 @@ class TestGetTemporalNeighbors:
         result = m.get_temporal_neighbors("isolated")
         assert result == []
 
+    def test_evil1_backward_alias_same_as_before(self) -> None:
+        """Evil: 'backward' produces same incoming-edge Cypher as 'before'."""
+        m = _make_mixin()
+        n1 = _entity_node(id="n1", name="Predecessor")
+        m.select_graph().query.return_value = _mock_result([[n1]])
+
+        result = m.get_temporal_neighbors("e1", direction="backward")
+        assert len(result) == 1
+        query_str = m.select_graph().query.call_args[0][0]
+        assert "<-[r:" in query_str
+
+    def test_evil2_forward_alias_same_as_after(self) -> None:
+        """Evil: 'forward' produces same outgoing-edge Cypher as 'after'."""
+        m = _make_mixin()
+        n1 = _entity_node(id="n1", name="Successor")
+        m.select_graph().query.return_value = _mock_result([[n1]])
+
+        result = m.get_temporal_neighbors("e1", direction="forward")
+        assert len(result) == 1
+        query_str = m.select_graph().query.call_args[0][0]
+        assert "->" in query_str
+
+    def test_evil3_forward_not_both(self) -> None:
+        """Evil: 'forward' must NOT fall through to 'both' (the pre-PR bug)."""
+        m = _make_mixin()
+        n1 = _entity_node(id="n1", name="Successor")
+        m.select_graph().query.return_value = _mock_result([[n1]])
+
+        m.get_temporal_neighbors("e1", direction="forward")
+        query_str = m.select_graph().query.call_args[0][0]
+        # 'both' branch uses undirected pattern (no arrow), while 'forward'
+        # must use directed outgoing pattern (->)
+        assert "DISTINCT" not in query_str, (
+            "'forward' should not use DISTINCT (that's the 'both' branch)"
+        )
+
 
 # ═══════════════════════════════════════════════════════════════
 #  create_temporal_edge
