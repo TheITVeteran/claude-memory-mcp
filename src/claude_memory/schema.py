@@ -336,7 +336,7 @@ class PruneStaleParams(BaseModel):
 
 class GetTemporalNeighborsParams(BaseModel):
     entity_id: str
-    direction: Literal["forward", "backward", "both"] = "both"
+    direction: Literal["before", "after", "both", "forward", "backward"] = "both"
     limit: int = 10
 
 
