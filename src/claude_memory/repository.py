@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 import time
 from typing import Any
 
@@ -76,6 +77,10 @@ class MemoryRepository(RepositoryQueryMixin, RepositoryTraversalMixin):
     @retry_on_transient()
     def create_node(self, label: str, properties: dict[str, Any]) -> dict[str, Any]:
         """Creates a node (embedding logic moved to VectorStore)."""
+        assert re.fullmatch(r"[A-Z][A-Za-z0-9_]{0,63}", label), (  # noqa: S101
+            f"Invalid Cypher label: {label!r} — must pass through CreateMemoryTypeParams validator"
+        )
+
         graph = self.select_graph()
         props = properties.copy()
 

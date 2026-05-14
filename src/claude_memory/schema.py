@@ -1,9 +1,10 @@
 """Pydantic schemas for memory entities, relationships, sessions, and search results."""
 
+import re
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # === ENUMS ===
 
@@ -395,3 +396,20 @@ class CreateMemoryTypeParams(BaseModel):
     name: str
     description: str
     required_properties: list[str] | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _name_must_be_valid_label(cls, v: str) -> str:
+        """Validate that name is a safe Cypher label identifier.
+
+        Must start with an uppercase letter and contain only
+        alphanumeric + underscore (max 64 chars).  This prevents
+        graph schema corruption from typos or malformed input
+        when the name is interpolated into Cypher MERGE queries.
+        """
+        if not re.fullmatch(r"[A-Z][A-Za-z0-9_]{0,63}", v):
+            raise ValueError(
+                "Memory type name must start with an uppercase letter and contain "
+                f"only alphanumeric + underscore (max 64 chars). Got: {v!r}"
+            )
+        return v
