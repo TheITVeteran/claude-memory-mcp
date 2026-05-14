@@ -10,7 +10,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
-from claude_memory.crud import _compute_entity_embedding_text
+from claude_memory.crud import _compute_entity_embedding_text, _safe_created_at_timestamp
 
 if TYPE_CHECKING:  # pragma: no cover
     from .interfaces import Embedder, VectorStore
@@ -127,6 +127,8 @@ class CrudMaintenanceMixin:
                 "node_type": "Observation",
                 "entity_id": params.entity_id,
                 "project_id": obs_props.get("project_id"),
+                # PIT-query contract: stored as float (Unix timestamp)
+                "created_at": _safe_created_at_timestamp(obs_props.get("created_at")),
             }
             await self.vector_store.upsert(
                 id=str(obs_props["id"]), vector=embedding, payload=payload
@@ -154,6 +156,8 @@ class CrudMaintenanceMixin:
                     "name": entity.get("name", ""),
                     "node_type": entity.get("node_type", "Entity"),
                     "project_id": entity.get("project_id"),
+                    # PIT-query contract: preserve created_at through re-embed
+                    "created_at": _safe_created_at_timestamp(entity.get("created_at")),
                 }
                 await self.vector_store.upsert(
                     id=params.entity_id,

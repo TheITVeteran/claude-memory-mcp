@@ -27,6 +27,20 @@ if TYPE_CHECKING:  # pragma: no cover
 logger = logging.getLogger(__name__)
 
 
+def _safe_created_at_timestamp(iso_str: str | None) -> float:
+    """Convert ISO-8601 created_at to float timestamp for Qdrant payload.
+
+    Falls back to current time if the value is missing or malformed
+    (e.g., pre-backfill points, unit test mocks without created_at).
+    """
+    if iso_str:
+        try:
+            return datetime.fromisoformat(iso_str).timestamp()
+        except (ValueError, TypeError):
+            logger.warning("Malformed created_at %r — falling back to now()", iso_str)
+    return datetime.now(UTC).timestamp()
+
+
 async def _compute_entity_embedding_text(
     async_repo: "AsyncMemoryRepository",
     entity_id: str | None,
@@ -137,6 +151,9 @@ class CrudMixin:
                 "name": params.name,
                 "node_type": params.node_type,
                 "project_id": params.project_id,
+                # PIT-query contract: stored as float (Unix timestamp) so Qdrant
+                # Range(lt=...) in _build_filter works with numeric comparison.
+                "created_at": _safe_created_at_timestamp(props.get("created_at")),
             }
             try:
                 await self.vector_store.upsert(id=node_id, vector=embedding, payload=payload)
@@ -286,6 +303,10 @@ class CrudMixin:
                 "name": name,
                 "node_type": node_type,
                 "project_id": project_id,
+                # PIT-query contract: preserve created_at through updates
+                "created_at": _safe_created_at_timestamp(
+                    merged_props.get("created_at") or existing_node.get("created_at")
+                ),
             }
             try:
                 await self.vector_store.upsert(
@@ -377,6 +398,10 @@ class CrudMixin:
                             "name": name,
                             "node_type": node_type,
                             "project_id": project_id,
+                            # PIT-query contract: preserve through compensation
+                            "created_at": _safe_created_at_timestamp(
+                                existing_node.get("created_at")
+                            ),
                         }
                         await self.vector_store.upsert(
                             id=params.entity_id, vector=embedding, payload=payload
