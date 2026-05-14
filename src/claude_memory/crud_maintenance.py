@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
 from claude_memory.crud import _compute_entity_embedding_text, _safe_created_at_timestamp
+from claude_memory.exceptions import SearchError
 
 if TYPE_CHECKING:  # pragma: no cover
     from .interfaces import Embedder, VectorStore
@@ -133,12 +134,26 @@ class CrudMaintenanceMixin:
             await self.vector_store.upsert(
                 id=str(obs_props["id"]), vector=embedding, payload=payload
             )
-        except Exception:
+        except Exception as e:
             logger.error(
-                "observation_vector_upsert_failed for %s — graph write succeeded",
+                "observation_vector_upsert_failed for %s — compensating "
+                "FalkorDB write to prevent split-brain",
                 obs_props.get("id"),
             )
-            raise
+            try:
+                await self.repo.execute_cypher(  # noqa: contract — properly awaited; scanner Pattern 10 is await-blind, fixed in PR-6
+                    "MATCH (o) WHERE o.id = $id DETACH DELETE o",
+                    {"id": obs_props["id"]},
+                )
+            except Exception as comp_e:
+                logger.error(
+                    "Compensating FalkorDB delete failed for observation %s. "
+                    "Orphan observation left in graph! Error: %s",
+                    obs_props.get("id"),
+                    comp_e,
+                    exc_info=True,
+                )
+            raise SearchError(f"Vector store unavailable during observation add: {e!s}") from e
 
         # Re-embed the parent entity with the new observation included
         try:

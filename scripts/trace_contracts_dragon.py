@@ -307,6 +307,8 @@ def analyze_file(filepath):  # noqa: C901, PLR0912
                 # Check if it's called on self.repo or similar
                 if isinstance(node.func.value, ast.Attribute):
                     if node.func.value.attr == "repo":
+                        if is_allowlisted(node):
+                            continue
                         func_name = get_parent_function(node)
                         violations.append(
                             (
