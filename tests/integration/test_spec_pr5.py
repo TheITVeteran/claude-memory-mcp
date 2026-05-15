@@ -27,7 +27,7 @@ def falkordb_container():
     try:
         container.stop()
     except Exception:
-        pass
+        pass  # noqa: S110
 
 
 @pytest.fixture
@@ -38,7 +38,7 @@ def qdrant_container():
     try:
         container.stop()
     except Exception:
-        pass
+        pass  # noqa: S110
 
 
 @pytest.fixture
@@ -64,17 +64,29 @@ async def memory_service(
 
 
 @pytest.mark.asyncio
-async def test_evil_kill_falkordb_mid_search(memory_service, falkordb_container):
-    falkordb_container.get_wrapped_container().kill()
-    result = await memory_service.search(SearchMemoryParams(query="test"))
-    assert result["metadata"]["channels"]["temporal"] == "degraded"
+async def test_evil_kill_fts_mid_search(memory_service, falkordb_container):
+    from claude_memory import server
+    from claude_memory.server import search_memory
+
+    server.service = memory_service
+
+    from unittest.mock import MagicMock
+
+    memory_service.fts_store.search = MagicMock(side_effect=Exception("FTS killed"))
+
+    result = await search_memory(query="test", include_meta=True)
+    assert result["meta"]["channels"]["fts"] == "failed"
 
 
 @pytest.mark.asyncio
 async def test_evil_kill_qdrant_mid_search(memory_service, qdrant_container):
+    from claude_memory import server
+    from claude_memory.server import search_memory
+
+    server.service = memory_service
     qdrant_container.get_wrapped_container().kill()
-    result = await memory_service.search(SearchMemoryParams(query="test"))
-    assert result["metadata"]["channels"]["vector"] == "failed"
+    result = await search_memory(query="test", include_meta=True)
+    assert result["meta"]["channels"]["vector"] == "failed"
 
 
 @pytest.mark.asyncio

@@ -267,7 +267,9 @@ The asymmetry: `create_entity` has compensation. `add_observation` does not. Res
    - `tests/unit/test_server.py`
    - `tests/unit/test_channel_degradation.py` (any references already there)
 
-5. Fix the mypy `[no-any-return]` errors at `router.py:199` and `router.py:243` introduced in the previous PR-5 attempt. Add explicit type annotation or cast.
+5. Fix the mypy `[no-any-return]` errors at `router.py:199` and `router.py:243` introduced in the previous PR-5 attempt. Add explicit type annotation or cast. **Run `python -m mypy --strict src/claude_memory` and confirm 40 files, 0 errors before declaring done.**
+
+6. **Remove the "No results found." string shortcut at `server.py:310`.** Currently `server.search_memory()` returns the string when results are empty, BEFORE checking `include_meta`. This hides metadata when degradation produces empty results — the exact failure mode this PR is supposed to surface. Replace with: always return the full result (list or dict per `include_meta`), even when empty. Callers handle empty-list display formatting themselves; the MCP layer doesn't synthesize messages. Verify by running `test_kill_embedding_mid_search` — it should propagate the infrastructure error correctly post-fix.
 
 **Files:** `src/claude_memory/search.py`, `src/claude_memory/server.py`, `src/claude_memory/router.py`, multiple test files (per step 4 inventory).
 **LoC:** ~60 production + ~30 test updates.
@@ -368,6 +370,22 @@ Sequential build. Each PR independently auditable, independently mergeable. Afte
 **Handoff doc diff hygiene:** The "diff summary" section MUST list every file appearing in `git diff --name-only master..HEAD` — not just the files you intentionally changed. If `git add .` swept up an unrelated file (working-tree noise, spec docs, etc.), it shows up in the diff and must appear in the handoff. Codex independently runs the diff and flags omissions as Discoveries; missed listings are auditor friction, not silent — but cleaner to handle upstream.
 
 **Handoff doc commit hash hygiene:** The commit hash recorded in the handoff doc MUST match `git rev-parse HEAD` on the branch at the time of audit invocation. If you amend the commit (`git commit --amend`) or rebase after writing the handoff, **regenerate the handoff** with the new hash. Codex compares the doc's stated hash against `git log` and flags drift as a Discovery — not blocking, but indicates handoff was prepared against a stale state.
+
+**Pre-handoff sanity checklist (MANDATORY, run before writing `PR_N_HANDOFF.md`):**
+
+Before declaring done, AG runs each of these in order and pastes evidence in a "Pre-handoff checklist" section at the top of the handoff doc. **If you can't paste evidence for any item, the PR isn't done — fix the gap before writing the handoff.** Codex independently verifies this section exists and is complete.
+
+1. **Commit hash:** Run `git rev-parse HEAD` — record the hash. Use this exact hash in the handoff. If you amend AFTER writing the handoff, regenerate the handoff with the new hash. Do not edit the handoff to "patch in" the new hash; regenerate from scratch.
+2. **Diff inventory:** Run `git diff --name-only master..HEAD` — paste output. Every file in the diff MUST also appear in the handoff's "Diff summary" section. No surprise files.
+3. **mypy --strict:** Run `python -m mypy --strict src/claude_memory` — paste output. MUST show "Success: no issues found in 40 source files." Zero errors. If errors appear, fix them; do not declare done with mypy failures.
+4. **Contract scanner:** Run `tox -e contracts` — paste output. Confirm violation count delta = 0 vs pre-PR baseline (PRs 1-5) OR absolute baseline 13 (PR-6 only).
+5. **Ruff:** Run `python -m ruff check src/claude_memory` — paste output. Note any new warnings (existing invalid-noqa for `# noqa: contract` markers tolerated).
+6. **Bandit:** Run `python -m bandit -r src/claude_memory -ll` — paste output. Should show only the accepted `embedding_server.py:148` bind-all.
+7. **Caller sweep (if API contract changed):** For any return type or signature change in this PR, run `rg "<old_pattern>" --type py` to find remaining old-shape callers. Paste the rg command run AND the result. Production code count must be 0; all test files must be updated to new shape. If your PR changed `MemoryService.search()` return type, the rg pattern is `memory_service\.search\(|service\.search\(`.
+8. **Test-first evidence (PR-5+):** Count the rows in the spec's Tests table marked "TEST FAILS" pre-PR. The handoff's "Test-first evidence" section MUST contain captured failure output for that exact count of tests, organized per failing test. Mismatch = incomplete.
+9. **Per-criterion evidence:** Read this PR's "The bar" section. For each bullet, write the evidence (file:line / command output / test output) in the handoff's "Evidence per audit criterion" section. Walk the bullets one by one — do not declare done if any bullet lacks evidence.
+
+This checklist is your last line of defense before audit. Skipping it doesn't save time — it just shifts the work to a failed audit cycle, which costs more.
 
 **Test-first evidence requirement (applies to PR-5 onwards):** Each PR's Tests section is a 5-row table: 3 evil / 1 sad / 1 neutral. Each test row marks expected pre-PR and post-PR behavior. For any test marked **"TEST FAILS"** on pre-PR (i.e., genuine TDD targets), AG MUST:
 1. Check out the pre-PR base in a separate worktree (`git worktree add ../pre-pr-base <pre-pr-commit-hash>`)

@@ -9,7 +9,7 @@ import logging
 import re
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from claude_memory.schema import (
     SearchAssociativeParams,
@@ -196,7 +196,7 @@ class QueryRouter:
         # Default: SEMANTIC — search() returns {"results": [...], "metadata": {...}}
         params = SearchMemoryParams(query=query, limit=limit, project_id=project_id)
         response = await service.search(params)
-        return response.get("results", []) if isinstance(response, dict) else response
+        return cast(list[Any], response["results"])
 
     # ── Private dispatch helpers ─────────────────────────────────────
 
@@ -240,7 +240,7 @@ class QueryRouter:
 
         # Fallback: semantic search (we can't reliably extract entities)
         response = await service.search(SearchMemoryParams(query=query, limit=10))
-        return response.get("results", []) if isinstance(response, dict) else response
+        return cast(list[Any], response["results"])
 
     @staticmethod
     async def _route_associative(

@@ -118,7 +118,8 @@ async def test_kill_falkordb_mid_search_degrades_gracefully(memory_service, falk
     falkordb_container.get_wrapped_container().kill()
     params = SearchMemoryParams(query="hello", project_id="test")
     # Search should catch FalkorDB connection errors during graph traversal and fall back to Qdrant.
-    results = await memory_service.search(params)
+    result = await memory_service.search(params)
+    results = result["results"]
     assert isinstance(results, list)
 
 
@@ -133,9 +134,13 @@ async def test_kill_embedding_mid_search(memory_service):
     memory_service.embedder = MagicMock()
     memory_service.embedder.encode.side_effect = Exception("Embedding API down")
 
-    params = SearchMemoryParams(query="hello", project_id="test")
-    with pytest.raises(Exception):  # noqa: B017
-        await memory_service.search(params)
+    from claude_memory import server
+    from claude_memory.server import search_memory
+
+    server.service = memory_service
+
+    result = await search_memory(query="hello", project_id="test", include_meta=True)
+    assert result["meta"]["channels"]["vector"] == "failed"
 
 
 @pytest.mark.asyncio

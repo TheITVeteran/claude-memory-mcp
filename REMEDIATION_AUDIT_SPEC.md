@@ -71,14 +71,16 @@ Before any LLM reasoning, run the deterministic tools:
 
 7. **Cross-check against this spec's per-PR section.** Every listed criterion must be satisfied. Missing any = audit fail = back to AG.
 
-8. **Test-first evidence verification (PR-5 onwards only).** For PRs that include a Tests-as-table section in the build spec (PR-5 and PR-6 of this batch), each test row marks expected pre-PR behavior. For any test marked **"TEST FAILS"** on pre-PR:
+8. **Pre-handoff checklist verification.** Confirm `PR_N_HANDOFF.md` includes a "Pre-handoff checklist" section near the top with all 9 items present and evidence pasted (commit hash, diff inventory, mypy, contracts, ruff, bandit, caller sweep, test-first evidence count, per-criterion walkthrough). If the section is missing OR any item lacks evidence OR an item shows a failure that wasn't resolved before handoff was written, mark as PARTIAL PASS with a Discovery: "Pre-handoff checklist incomplete — AG declared done without running the sanity gate. Specific gaps: [list each missing/incomplete item]." This is additive signal, not a primary blocking criterion (the per-PR criteria below take precedence) — but a clean audit with a missing checklist signals AG drift and should be flagged for the next round.
+
+9. **Test-first evidence verification (PR-5 onwards only).** For PRs that include a Tests-as-table section in the build spec (PR-5 and PR-6 of this batch), each test row marks expected pre-PR behavior. For any test marked **"TEST FAILS"** on pre-PR:
    - The handoff doc MUST include verbatim first-run failure output for that test, captured against the pre-PR base commit
    - You MUST independently verify the failure by checking out the pre-PR commit in a worktree (`git worktree add ../audit-base <pre-pr-commit>`), copying the new test file in, and running it. The actual failure output must match the handoff's claim.
    - If the test passes on pre-PR base when the spec says it should fail: the test isn't testing what the spec wants. Mark as PARTIAL PASS with a Discovery: "tests-enforcing-bugs anti-pattern — test design did not lead implementation; rewrite tests with adversarial framing."
    - Tests marked **"TEST PASSES"** on pre-PR are regression-prevention and exempt — do not require failure capture for those.
    - PRs without the Tests-as-table format (PR-1 through PR-4) skip this step.
 
-9. **Discoveries section.** For each finding you identify as a new bug outside this spec's scope — flag in a separate "Discoveries" section in your audit response. These don't block the current round but feed the next remediation cycle.
+10. **Discoveries section.** For each finding you identify as a new bug outside this spec's scope — flag in a separate "Discoveries" section in your audit response. These don't block the current round but feed the next remediation cycle.
 
 ---
 

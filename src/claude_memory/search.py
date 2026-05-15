@@ -426,8 +426,6 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
         Returns:
             Dict with ``results`` (list[SearchResult]) and ``metadata`` (dict)
             containing per-call temporal exhaustion info and per-channel health.
-            PR-5: replaces the old ``self._last_*`` instance attributes to
-            eliminate TOCTOU risk under concurrent requests.
         """
         query = params.query
         limit = params.limit
@@ -487,9 +485,7 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
                 )
             except Exception as exc:
                 fts_results = []
-                channel_status.append(
-                    ChannelStatus(channel="fts", status="failed", error=str(exc))
-                )
+                channel_status.append(ChannelStatus(channel="fts", status="failed", error=str(exc)))
                 logger.warning("FTS enrichment failed", exc_info=True)
 
             # Step 3: Intent classification → soft channel weights

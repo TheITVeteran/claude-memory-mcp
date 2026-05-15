@@ -307,9 +307,6 @@ async def search_memory(  # noqa: PLR0913
     results = search_response.get("results", [])
     metadata = search_response.get("metadata", {})
 
-    if not results:
-        return "No results found."
-
     result_dicts = [res.model_dump() for res in results]
 
     # Return full metadata envelope when opted-in (PR-5: channel health + temporal)
