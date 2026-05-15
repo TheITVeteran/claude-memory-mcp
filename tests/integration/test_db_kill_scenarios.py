@@ -7,7 +7,7 @@ from testcontainers.qdrant import QdrantContainer
 from testcontainers.redis import RedisContainer
 
 from claude_memory.exceptions import SearchError
-from claude_memory.schema import EntityCreateParams, SearchMemoryParams
+from claude_memory.schema import EntityCreateParams, ObservationParams, SearchMemoryParams
 from claude_memory.tools import MemoryService
 from claude_memory.vector_store import QdrantVectorStore
 
@@ -164,3 +164,49 @@ async def test_concurrent_ops_with_kill_mid_flight(memory_service, falkordb_cont
     # We just ensure it doesn't crash the event loop with unhandled promises
     # Some might be None (caught exception), some might have succeeded before stop.
     assert len(results) == 10
+
+
+@pytest.mark.asyncio
+async def test_kill_qdrant_mid_add_observation_compensates(memory_service, qdrant_container):
+    """
+    PR-4 regression witness: Kill Qdrant mid-add_observation.
+
+    1. Create entity successfully (both stores healthy).
+    2. Kill Qdrant container.
+    3. Call add_observation — graph write succeeds, Qdrant upsert fails.
+    4. Assert: SearchError raised (not generic Exception).
+    5. Assert: Observation node was compensated (DETACH DELETE) — no orphan
+       observation left in the graph.
+    """
+    # Step 1: create entity while everything is healthy
+    entity_params = EntityCreateParams(
+        name="CompensationTarget",
+        node_type="Concept",
+        project_id="test-pr4",
+        properties={},
+    )
+    entity = await memory_service.create_entity(entity_params)
+    entity_id = entity.id
+
+    # Step 2: kill Qdrant
+    qdrant_container.get_wrapped_container().kill()
+
+    # Step 3+4: add_observation should raise SearchError
+    obs_params = ObservationParams(
+        entity_id=entity_id,
+        content="This observation should be rolled back",
+    )
+    with pytest.raises(SearchError, match="Vector store unavailable during observation add"):
+        await memory_service.add_observation(obs_params)
+
+    # Step 5: verify no orphan Observation node in graph
+    result = await memory_service.repo.execute_cypher(
+        "MATCH (o:Observation) WHERE o.entity_id = $eid OR "
+        "(o)<-[:HAS_OBSERVATION]-(:Entity {id: $eid}) "
+        "RETURN count(o)",
+        {"eid": entity_id},
+    )
+    obs_count = result.result_set[0][0] if result.result_set else 0
+    assert obs_count == 0, (
+        f"Expected 0 orphan observations for entity {entity_id}, found {obs_count}"
+    )

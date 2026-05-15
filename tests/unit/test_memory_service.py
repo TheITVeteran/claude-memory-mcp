@@ -386,7 +386,11 @@ async def test_evil7_add_observation_skip_embed_on_entity_not_found(service: Mem
 
 
 async def test_evil8_add_observation_vector_upsert_failure_raises(service: MemoryService) -> None:
-    """Audit #1: vector upsert failure on add_observation must raise — no silent split-brain."""
+    """Audit #1: vector upsert failure on add_observation must raise SearchError and compensate.
+
+    PR-4: Observation cross-store compensation. On Qdrant failure, the graph
+    observation must be DETACH DELETEd (no split-brain), and SearchError raised.
+    """
     mock_obs_node = MagicMock()
     mock_obs_node.properties = {
         "id": "obs-003",
@@ -402,8 +406,14 @@ async def test_evil8_add_observation_vector_upsert_failure_raises(service: Memor
         content=OBSERVATION_CONTENT,
         certainty=CERTAINTY_CONFIRMED,
     )
-    with pytest.raises(ConnectionError, match="qdrant down"):
+    with pytest.raises(SearchError, match="Vector store unavailable during observation add"):
         await service.add_observation(params)
+
+    # Verify compensating DETACH DELETE was issued
+    # The last execute_cypher call should be the compensation delete
+    last_call = service.repo.execute_cypher.call_args_list[-1]
+    assert "DETACH DELETE" in last_call[0][0]
+    assert last_call[0][1]["id"] == "obs-003"
 
 
 # ─── end_session Tests ─────────────────────────────────────────────
