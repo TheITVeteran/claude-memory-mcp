@@ -71,7 +71,14 @@ Before any LLM reasoning, run the deterministic tools:
 
 7. **Cross-check against this spec's per-PR section.** Every listed criterion must be satisfied. Missing any = audit fail = back to AG.
 
-8. **Discoveries section.** For each finding you identify as a new bug outside this spec's scope — flag in a separate "Discoveries" section in your audit response. These don't block the current round but feed the next remediation cycle.
+8. **Test-first evidence verification (PR-5 onwards only).** For PRs that include a Tests-as-table section in the build spec (PR-5 and PR-6 of this batch), each test row marks expected pre-PR behavior. For any test marked **"TEST FAILS"** on pre-PR:
+   - The handoff doc MUST include verbatim first-run failure output for that test, captured against the pre-PR base commit
+   - You MUST independently verify the failure by checking out the pre-PR commit in a worktree (`git worktree add ../audit-base <pre-pr-commit>`), copying the new test file in, and running it. The actual failure output must match the handoff's claim.
+   - If the test passes on pre-PR base when the spec says it should fail: the test isn't testing what the spec wants. Mark as PARTIAL PASS with a Discovery: "tests-enforcing-bugs anti-pattern — test design did not lead implementation; rewrite tests with adversarial framing."
+   - Tests marked **"TEST PASSES"** on pre-PR are regression-prevention and exempt — do not require failure capture for those.
+   - PRs without the Tests-as-table format (PR-1 through PR-4) skip this step.
+
+9. **Discoveries section.** For each finding you identify as a new bug outside this spec's scope — flag in a separate "Discoveries" section in your audit response. These don't block the current round but feed the next remediation cycle.
 
 ---
 
@@ -143,12 +150,12 @@ Each section below tells you the bug being fixed (so you understand what outcome
 
 ### PR-5 — Channel Degradation Surfaced Through MCP
 
-**Bug being fixed:** `search.py:615` tracks per-channel degradation; `server.py:311` exposes only temporal-exhaustion metadata. Channel health is computed and discarded. Caller can't tell if a result set is partial due to FTS being down. Fix: return per-channel metadata in the search response payload; remove the shared `self._last_*` instance attributes (TOCTOU risk).
+**Bug being fixed:** `search.py:615` tracks per-channel degradation; `server.py:311` exposes only temporal-exhaustion metadata. Channel health is computed and discarded. Caller can't tell if a result set is partial due to FTS being down. Fix uses **option A architecture**: `MemoryService.search()` always returns dict shape `{'results': [...], 'metadata': {...}}`; MCP `server.search_memory()` strips metadata and returns plain list when `include_meta=False`; all internal callers updated to access `result['results']`.
 
 **Criteria:**
-- (a) `self._last_*` instance attributes are gone (grep confirms zero matches in `search.py`).
-- (b) Concurrent-search test passes — two parallel `search_memory` calls both return correct per-call metadata with no cross-talk via shared state.
-- (c) Backward-compat preserved: callers without `include_meta=True` see no schema change (grep existing tests / call sites to verify).
+- (a) `self._last_*` instance attributes are gone (`rg "self\._last_" src/claude_memory/` returns zero matches, including comments).
+- (b) Concurrent-search test passes — two parallel `MemoryService.search()` calls (one with FTS killed mid-flight, one healthy) both return correct per-call metadata in their dict responses with no cross-talk via shared state.
+- (c) **Service-level always returns dict; MCP-level transforms to list when `include_meta=False`.** Verify: `MemoryService.search()` direct call returns `{'results': [...], 'metadata': {...}}`. `server.search_memory(include_meta=False)` returns plain list (backward compat at MCP boundary only). All internal callers of `MemoryService.search()` access `result["results"]` — verify with `rg "memory_service\.search\(|service\.search\(" --type py` and check each call site updated.
 - (d) `tox -e contracts` post-PR — delta = 0 (no NEW violations introduced).
 
 ---

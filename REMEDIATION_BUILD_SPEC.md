@@ -233,9 +233,9 @@ The asymmetry: `create_entity` has compensation. `add_observation` does not. Res
 
 **Problem:** `search.py:615` tracks per-channel degradation (which of the 6 retrieval channels failed mid-query). `server.py:311` exposes only temporal-exhaustion metadata via `include_meta`. The channel health is computed and discarded. Caller can't tell if the result set is partial due to FTS being down.
 
-**Concrete fix (no inference allowed):**
+**Concrete fix (no inference allowed) — option A architecture: service always returns dict, MCP transforms for backward compat:**
 
-1. In `search.py` around line 605-615, the per-call metadata is stored on `self._last_*` (shared service instance — TOCTOU risk already noted in the code). Refactor: return metadata in the search response payload instead.
+1. In `search.py:615-650` (the search method of `MemoryService`): **always** return the dict shape. No conditional; service layer is the source of truth for channel metadata.
 
    ```python
    return {
@@ -254,19 +254,41 @@ The asymmetry: `create_entity` has compensation. `add_observation` does not. Res
    }
    ```
 
-2. In `server.py:300-320`, when `include_meta=True`, surface the full metadata dict (not just temporal). When `include_meta=False`, strip the metadata wrapping and return just `results` (backward compat).
+2. **Remove `self._last_*` instance attributes entirely** (including any commented-out references). Per-call return is the new contract; shared instance state is the bug.
 
-3. Remove the `self._last_*` instance attributes. They were a band-aid; per-call return is cleaner.
+3. In `server.py:300-320` (`server.search_memory` MCP tool wrapper): when `include_meta=True`, return the full dict. When `include_meta=False`, return just `result["results"]` as a plain list (backward compat at MCP boundary only — service layer no longer offers list-shape).
 
-**Files:** `src/claude_memory/search.py`, `src/claude_memory/server.py`.
-**LoC:** ~40.
-**Tests:** Integration test — kill FTS DB mid-search, call `search_memory(query="x", include_meta=True)`, assert response includes `metadata.channels.fts == "failed"`. Concurrency test: two parallel `search_memory` calls, both return correct per-call metadata (no cross-talk via shared state).
+4. **Update all internal callers of `MemoryService.search()`** to access `result["results"]` instead of `result` directly. Run `rg "memory_service\.search\(|service\.search\(" --type py` to enumerate. Known caller sites (not exhaustive — verify with rg):
+   - `tests/integration/test_db_kill_scenarios.py` (e.g., `test_kill_falkordb_mid_search_degrades_gracefully`)
+   - `tests/e2e_functional.py`
+   - `tests/unit/test_hybrid_search.py` (line 272 area — also remove `_last_temporal_exhausted` accesses)
+   - `tests/unit/test_memory_service.py`
+   - `tests/unit/test_router.py`
+   - `tests/unit/test_server.py`
+   - `tests/unit/test_channel_degradation.py` (any references already there)
+
+5. Fix the mypy `[no-any-return]` errors at `router.py:199` and `router.py:243` introduced in the previous PR-5 attempt. Add explicit type annotation or cast.
+
+**Files:** `src/claude_memory/search.py`, `src/claude_memory/server.py`, `src/claude_memory/router.py`, multiple test files (per step 4 inventory).
+**LoC:** ~60 production + ~30 test updates.
+
+**Tests (3 evil + 1 sad + 1 neutral, test-first):**
+
+| Test | Category | Scenario | Pre-PR | Post-PR |
+|------|----------|----------|--------|---------|
+| test_evil_kill_fts_mid_search | evil | testcontainers `container.kill()` on FTS DB mid-`search_memory` (via MCP, `include_meta=True`) | TEST FAILS (no metadata field in response; KeyError on `.channels.fts`) | TEST PASSES (response contains `metadata.channels.fts == "failed"`, partial results from other channels) |
+| test_evil_kill_qdrant_mid_search | evil | testcontainers `container.kill()` on Qdrant mid-`search_memory` (via MCP, `include_meta=True`) | TEST FAILS (same — no metadata) | TEST PASSES (`metadata.channels.vector == "failed"`) |
+| test_evil_concurrent_search_no_crosstalk | evil | Two parallel `MemoryService.search()` calls — one with FTS killed mid-flight, one with all healthy | TEST FAILS (shared `self._last_*` causes the healthy call to inherit the failed call's degradation metadata, or vice versa) | TEST PASSES (each call returns its own correct per-call metadata in its dict response, no shared-state crosstalk) |
+| test_sad_include_meta_false_strips_metadata | sad | MCP `search_memory(query="x", include_meta=False)` against healthy infra | TEST PASSES (current MCP behavior already returns plain list — regression-prevention) | TEST PASSES (must remain plain list at MCP layer) |
+| test_neutral_service_returns_dict_shape | neutral | `MemoryService.search(query="x")` direct call with all infra healthy | TEST FAILS (current returns plain list, no `metadata` field) | TEST PASSES (returns `{'results': [...], 'metadata': {'channels': {...all 6 healthy...}}}`) |
 
 **The bar (Codex will verify):**
-- `self._last_*` instance attributes are gone (grep)
-- Concurrent-search test passes (no TOCTOU on shared state)
-- Backward-compat: existing callers without `include_meta=True` see no schema change
-- `tox -e contracts` post-PR — delta = 0 (no NEW violations)
+- All `self._last_*` instance attributes gone, including comments (`rg "self\._last_" src/claude_memory/` returns zero matches)
+- All five tests have the documented pre-PR and post-PR behavior
+- For tests marked "TEST FAILS" pre-PR (3 of 5: evil_kill_fts, evil_kill_qdrant, evil_concurrent, neutral_service_dict), handoff doc includes verbatim first-run failure output captured against pre-PR base
+- `MemoryService.search()` always returns dict shape; MCP `server.search_memory()` strips to list when `include_meta=False`; all internal callers updated
+- No mypy `[no-any-return]` errors in `router.py` (confirms the regression is fixed)
+- `tox -e contracts` post-PR — delta = 0 (no NEW violations; if a new `await self.repo.X()` site is introduced, suppress with the documented `# noqa: contract` marker)
 
 ---
 
@@ -299,13 +321,25 @@ The asymmetry: `create_entity` has compensation. `add_observation` does not. Res
 
 **Files:** `scripts/trace_contracts_dragon.py`.
 **LoC:** ~25.
-**Tests:** Unit test in `tests/unit/test_contract_scanner.py` (new file) — synthetic AST with `await self.repo.get_node(...)` should NOT flag; bare `self.repo.get_node(...)` inside async def SHOULD flag.
+
+**Tests (3 evil + 1 sad + 1 neutral, test-first):**
+
+Create `tests/unit/test_contract_scanner.py` (new file). Use synthetic-AST fixtures or temp .py files for each case.
+
+| Test | Category | Scenario | Pre-PR | Post-PR |
+|------|----------|----------|--------|---------|
+| test_evil_awaited_self_repo_call_NOT_flagged | evil | Synthetic async function with `await self.repo.get_node(x)` | TEST FAILS (scanner flags it as Sync IO in Async — false positive) | TEST PASSES (scanner correctly skips awaited calls) |
+| test_evil_unawaited_self_repo_call_IS_flagged | evil | Synthetic async function with bare `self.repo.get_node(x)` (no await) | TEST PASSES (scanner correctly flags it today — regression-prevention) | TEST PASSES (must remain flagged) |
+| test_evil_sync_io_outside_async_def_NOT_flagged | evil | Synthetic regular `def` (not async) calling `self.repo.get_node(x)` | TEST PASSES (scanner correctly only fires inside async def — regression-prevention) | TEST PASSES (must remain not-flagged) |
+| test_sad_malformed_python_file_handled | sad | Synthetic file with syntax error fed to scanner | TEST PASSES if scanner handles cleanly today; TEST FAILS if it crashes — verify which | Either way, post-PR must not crash; must report parse failure and exit cleanly |
+| test_neutral_baseline_against_real_repo | neutral | Run scanner against current `src/claude_memory` directory | TEST FAILS (returns 75 violations) | TEST PASSES (returns exactly 13 violations matching absolute baseline) |
 
 **The bar (Codex will verify):**
 - `tox -e contracts` post-PR shows 13 violations matching absolute baseline (this is the only PR with absolute-baseline criterion; PR-1-5 are delta-based)
-- Await-detection logic verified on a synthetic test case
-- Scanner still flags genuine bugs — synthetic file with `async def f(): self.repo.get_node(x)` (no await) is flagged
-- Change is purely additive — no existing violations were silently dropped
+- All five tests have the documented pre-PR and post-PR behavior
+- For tests marked "TEST FAILS" pre-PR (at least 2 of 5: `test_evil_awaited_NOT_flagged`, `test_neutral_baseline_against_real_repo`; possibly also `test_sad_malformed_python_file_handled` depending on current scanner robustness), handoff includes verbatim first-run failure output captured against pre-PR base
+- Change is purely additive — no existing violations from the original 13 baseline categories (Bare Pass, Silent Fallback, Per-Item Swallow) were silently dropped
+- Note: PR-4 already added `is_allowlisted(node)` honoring to Pattern 10 (out-of-scope scope-creep flagged in PR-4 audit). This PR's await-detection is the orthogonal automatic mechanism. Both should coexist.
 
 ---
 
@@ -334,6 +368,19 @@ Sequential build. Each PR independently auditable, independently mergeable. Afte
 **Handoff doc diff hygiene:** The "diff summary" section MUST list every file appearing in `git diff --name-only master..HEAD` — not just the files you intentionally changed. If `git add .` swept up an unrelated file (working-tree noise, spec docs, etc.), it shows up in the diff and must appear in the handoff. Codex independently runs the diff and flags omissions as Discoveries; missed listings are auditor friction, not silent — but cleaner to handle upstream.
 
 **Handoff doc commit hash hygiene:** The commit hash recorded in the handoff doc MUST match `git rev-parse HEAD` on the branch at the time of audit invocation. If you amend the commit (`git commit --amend`) or rebase after writing the handoff, **regenerate the handoff** with the new hash. Codex compares the doc's stated hash against `git log` and flags drift as a Discovery — not blocking, but indicates handoff was prepared against a stale state.
+
+**Test-first evidence requirement (applies to PR-5 onwards):** Each PR's Tests section is a 5-row table: 3 evil / 1 sad / 1 neutral. Each test row marks expected pre-PR and post-PR behavior. For any test marked **"TEST FAILS"** on pre-PR (i.e., genuine TDD targets), AG MUST:
+1. Check out the pre-PR base in a separate worktree (`git worktree add ../pre-pr-base <pre-pr-commit-hash>`)
+2. Copy the new test file into that worktree
+3. Run the test against the pre-PR base, capture verbatim failure output
+4. Paste the captured failure output in the handoff under a "Test-first evidence" section, organized per failing test
+5. Then implement the fix in the actual PR branch and verify all tests pass
+
+Tests marked **"TEST PASSES"** on pre-PR (regression-prevention or already-correct-behavior verifications) are exempt from the failure-capture requirement — they pass on pre-PR by design.
+
+The neutral (happy-path) test is also exempt; it's expected to pass post-implementation by definition.
+
+This forces TDD ordering. Without test-first evidence, the test was written after the code (anti-pattern: tests-enforcing-bugs, Layer 3.5.16). Codex independently re-runs the test against the pre-PR commit and verifies the failure output matches your handoff claim.
 
 ---
 

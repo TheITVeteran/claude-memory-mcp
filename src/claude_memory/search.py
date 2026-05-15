@@ -465,13 +465,19 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
             # Channel health accumulator (AUDIT-B3)
             channel_status: list[ChannelStatus] = []
 
-            # Step 1: Vector search (always)
-            vector_results = await self._execute_vector_search(
-                query, limit, project_id, offset, mmr
-            )
-            channel_status.append(
-                ChannelStatus(channel="vector", status="ok", result_count=len(vector_results))
-            )
+            try:
+                vector_results = await self._execute_vector_search(
+                    query, limit, project_id, offset, mmr
+                )
+                channel_status.append(
+                    ChannelStatus(channel="vector", status="ok", result_count=len(vector_results))
+                )
+            except Exception as exc:
+                vector_results = []
+                channel_status.append(
+                    ChannelStatus(channel="vector", status="failed", error=str(exc))
+                )
+                logger.warning("Vector search failed", exc_info=True)
 
             # Step 2: FTS5 lexical search (always — complements vector)
             try:
@@ -482,7 +488,7 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
             except Exception as exc:
                 fts_results = []
                 channel_status.append(
-                    ChannelStatus(channel="fts", status="degraded", error=str(exc))
+                    ChannelStatus(channel="fts", status="failed", error=str(exc))
                 )
                 logger.warning("FTS enrichment failed", exc_info=True)
 
