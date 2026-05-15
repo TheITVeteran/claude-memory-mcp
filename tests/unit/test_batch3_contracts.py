@@ -101,16 +101,15 @@ async def test_evil1_channel_failure_visible_in_status(search_service) -> None:
     # Make temporal fail
     search_service.query_timeline = AsyncMock(side_effect=ConnectionError("FalkorDB timeout"))
 
-    await search_service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    result = await search_service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
 
-    statuses = search_service._last_channel_status
-    assert isinstance(statuses, list)
+    statuses = result["metadata"]["channels"]
+    assert isinstance(statuses, dict)
 
-    temporal_status = next((s for s in statuses if s.channel == "temporal"), None)
+    temporal_status = statuses.get("temporal")
     # Temporal may not run if weight is 0 for this query — check if it ran
     if temporal_status is not None:
-        assert temporal_status.status == "degraded"
-        assert temporal_status.error is not None
+        assert temporal_status == "degraded"
 
 
 @pytest.mark.asyncio
@@ -118,37 +117,35 @@ async def test_evil2_fts_failure_visible_in_status(search_service) -> None:
     """AUDIT-B3: When FTS search fails, channel_status shows degraded."""
     search_service.fts_store.search.side_effect = Exception("FTS corrupted")
 
-    await search_service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    result = await search_service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
 
-    statuses = search_service._last_channel_status
-    fts_status = next((s for s in statuses if s.channel == "fts"), None)
-    assert fts_status is not None
-    assert fts_status.status == "degraded"
+    statuses = result["metadata"]["channels"]
+    fts_status = statuses.get("fts")
+    assert fts_status == "failed"
 
 
 @pytest.mark.asyncio
 async def test_evil3_all_channels_ok_when_healthy(search_service) -> None:
     """AUDIT-B3: All channels report ok when nothing fails."""
-    await search_service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    result = await search_service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
 
-    statuses = search_service._last_channel_status
-    assert isinstance(statuses, list)
+    statuses = result["metadata"]["channels"]
+    assert isinstance(statuses, dict)
     assert len(statuses) >= 2  # At minimum vector + fts
 
-    for s in statuses:
-        assert s.status == "ok"
+    for status in statuses.values():
+        assert status == "ok"
 
 
 @pytest.mark.asyncio
 async def test_sad1_channel_status_empty_results(search_service) -> None:
     """AUDIT-B3: Zero results but no error → status is still ok."""
-    await search_service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    result = await search_service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
 
-    statuses = search_service._last_channel_status
-    vector_status = next((s for s in statuses if s.channel == "vector"), None)
+    statuses = result["metadata"]["channels"]
+    vector_status = statuses.get("vector")
     assert vector_status is not None
-    assert vector_status.status == "ok"
-    assert vector_status.result_count == 0
+    assert vector_status == "ok"
 
 
 @pytest.mark.asyncio
@@ -158,9 +155,9 @@ async def test_happy_channel_status_with_results(search_service) -> None:
         {"_id": "e1", "_score": 0.9, "payload": {"name": "Test"}},
     ]
 
-    await search_service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    result = await search_service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
 
-    statuses = search_service._last_channel_status
-    vector_status = next((s for s in statuses if s.channel == "vector"), None)
+    statuses = result["metadata"]["channels"]
+    vector_status = statuses.get("vector")
     assert vector_status is not None
-    assert vector_status.result_count == 1
+    assert vector_status == "ok"

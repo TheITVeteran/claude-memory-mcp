@@ -103,10 +103,24 @@ def service() -> MemoryService:
 
     # Replace repo, vector_store, lock_manager with mocks
     svc.repo = AsyncMock()
-    svc.repo = AsyncMock()
-    svc.repo = AsyncMock()
+    svc.repo.get_subgraph.return_value = {"nodes": [], "edges": []}
     svc.vector_store = AsyncMock()
+    svc.fts_store = MagicMock()
+    svc.fts_store.search = MagicMock(return_value=[])
     svc.lock_manager = MagicMock()
+
+    # Soft routing defaults
+    svc.query_timeline = AsyncMock(return_value=[])
+    svc.traverse_path = AsyncMock(return_value=[])
+
+    # Reranker defaults
+    svc.reranker = MagicMock()
+    svc.reranker.rerank = AsyncMock(side_effect=lambda q, c, **kw: c)
+
+    # Activation defaults
+    svc.activation_engine = MagicMock()
+    svc.activation_engine.activate = AsyncMock(return_value={})
+    svc.activation_engine.spread = AsyncMock(return_value={})
 
     # Lock context manager mock — supports both sync and async with
     mock_lock = MagicMock()
@@ -467,6 +481,7 @@ async def test_happy_record_breakthrough_without_session(service: MemoryService)
 
 async def test_happy_traverse_path_with_nodes(service: MemoryService) -> None:
     """When path has .nodes attribute, extract properties."""
+    service.traverse_path = MemoryService.traverse_path.__get__(service)
     mock_node_a = MagicMock()
     mock_node_a.properties = {"id": ENTITY_ID, "name": "NodeA", "embedding": MOCK_EMBEDDING}
     mock_node_b = MagicMock()
@@ -1318,6 +1333,7 @@ async def test_happy_create_entity_respects_user_occurred_at(
 @pytest.mark.asyncio()
 async def test_happy_service_query_timeline(service: MemoryService) -> None:
     """MemoryService.query_timeline delegates to repo."""
+    service.query_timeline = MemoryService.query_timeline.__get__(service)
     from datetime import UTC, datetime
 
     from claude_memory.schema import TemporalQueryParams
@@ -1337,6 +1353,7 @@ async def test_sad20_service_query_timeline_with_project(
     service: MemoryService,
 ) -> None:
     """MemoryService.query_timeline passes project_id to repo."""
+    service.query_timeline = MemoryService.query_timeline.__get__(service)
     from datetime import UTC, datetime
 
     from claude_memory.schema import TemporalQueryParams
@@ -1717,33 +1734,30 @@ async def test_evil19_delete_entity_hard_vector_failure_always_raises(
 
 
 async def test_evil20_search_raises_on_embedder_failure(service: MemoryService) -> None:
-    """AUDIT-B1: Embedder ConnectionError raises SearchError, not silent []."""
-    from claude_memory.exceptions import SearchError
-
+    """PR-5: Embedder ConnectionError degrades gracefully, sets semantic channel to error."""
     service.embedder.encode.side_effect = ConnectionError("Embedding server down")
 
-    with pytest.raises(SearchError, match="Memory retrieval unavailable"):
-        await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    res = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+
+    assert res["metadata"]["channels"]["vector"] == "failed"
 
 
 async def test_evil21_search_raises_on_vector_store_failure(service: MemoryService) -> None:
-    """AUDIT-B1: Qdrant ConnectionError raises SearchError, not silent []."""
-    from claude_memory.exceptions import SearchError
-
+    """PR-5: Qdrant ConnectionError degrades gracefully, sets semantic channel to error."""
     service.vector_store.search.side_effect = ConnectionError("Qdrant unreachable")
 
-    with pytest.raises(SearchError, match="Memory retrieval unavailable"):
-        await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    res = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+
+    assert res["metadata"]["channels"]["vector"] == "failed"
 
 
 async def test_evil22_search_raises_on_timeout(service: MemoryService) -> None:
-    """AUDIT-B1: TimeoutError during search raises SearchError."""
-    from claude_memory.exceptions import SearchError
-
+    """PR-5: TimeoutError during search degrades gracefully."""
     service.embedder.encode.side_effect = TimeoutError("Embedding timed out")
 
-    with pytest.raises(SearchError, match="Memory retrieval unavailable"):
-        await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    res = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+
+    assert res["metadata"]["channels"]["vector"] == "failed"
 
 
 async def test_evil23_search_associative_raises_on_embedder_failure(
@@ -1776,12 +1790,11 @@ async def test_evil24_search_associative_raises_on_vector_store_failure(
 
 async def test_evil25_search_raises_on_os_error(service: MemoryService) -> None:
     """AUDIT-B1: OSError during search raises SearchError (network-level failure)."""
-    from claude_memory.exceptions import SearchError
 
     service.embedder.encode.side_effect = OSError("Network unreachable")
 
-    with pytest.raises(SearchError, match="Memory retrieval unavailable"):
-        await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    res = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    assert res["metadata"]["channels"]["vector"] == "failed"
 
 
 async def test_sad28_search_empty_query_returns_empty(service: MemoryService) -> None:

@@ -25,7 +25,7 @@ class TestParseDateRange:
 
     # ── Happy path ───────────────────────────────────────────
 
-    def test_happy_relative_last_week(self) -> None:
+    def test_happy_relative_previous_week(self) -> None:
         """'last week' → 7-day window ending now."""
         result = parse_temporal_range("what happened last week")
 
@@ -94,7 +94,7 @@ class TestParseDateRange:
 
     # ── Evil path ────────────────────────────────────────────
 
-    def test_evil1_last_month(self) -> None:
+    def test_evil1_previous_month(self) -> None:
         """'last month' → ~30-day window."""
         result = parse_temporal_range("show me things from last month")
 

@@ -2,7 +2,7 @@ import asyncio
 import os
 import sys
 
-from claude_memory.schema import EntityCreateParams
+from claude_memory.schema import EntityCreateParams, SearchMemoryParams
 from claude_memory.tools import MemoryService
 
 # Ensure we can import the src module
@@ -32,7 +32,10 @@ async def verify_native_search() -> None:
     # 2. Search for it
     print("Searching for 'unique entity verifying functionality'...")
     # This query semantic matches the description
-    results = await service.search("unique entity verifying functionality", limit=5)
+    results_env = await service.search(
+        SearchMemoryParams(query="unique entity verifying functionality", limit=5)
+    )
+    results = results_env.get("results", [])
 
     found = False
     for r in results:

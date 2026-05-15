@@ -52,7 +52,10 @@ async def main() -> None:
         # FalkorDB index is dimension fixed?
 
         # Let's see what happens.
-        results = await service.search("Singularity", limit=5)
+        from claude_memory.schema import SearchMemoryParams
+
+        results_env = await service.search(SearchMemoryParams(query="Singularity", limit=5))
+        results = results_env.get("results", [])
         if not results:
             print("⚠️  WARNING: Search returned 0 results.")
             print("   - Possible cause: Embedding mismatch or Index empty.")

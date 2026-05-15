@@ -29,6 +29,7 @@ from claude_memory.schema import (
     EntityDeleteParams,
     ObservationParams,
     RelationshipCreateParams,
+    SearchMemoryParams,
     SessionEndParams,
     SessionStartParams,
     TemporalQueryParams,
@@ -135,11 +136,14 @@ async def run_e2e() -> bool:
 
     # Small delay for indexing
     await asyncio.sleep(0.5)
-    search_results = await svc.search(
-        "graph traversal algorithms",
-        limit=5,
-        project_id=TEST_PROJECT,
+    search_env = await svc.search(
+        SearchMemoryParams(
+            query="graph traversal algorithms",
+            limit=5,
+            project_id=TEST_PROJECT,
+        )
     )
+    search_results = search_env.get("results", [])
     check(
         "Vector search returns results",
         isinstance(search_results, list) and len(search_results) > 0,
@@ -230,11 +234,14 @@ async def run_e2e() -> bool:
     # ── 9. Verify Deletion ───────────────────────────────────────────
     _banner("9. VERIFY DELETION")
 
-    post_search = await svc.search(
-        E2E_PREFIX + "Alpha",
-        limit=5,
-        project_id=TEST_PROJECT,
+    post_env = await svc.search(
+        SearchMemoryParams(
+            query=E2E_PREFIX + "Alpha",
+            limit=5,
+            project_id=TEST_PROJECT,
+        )
     )
+    post_search = post_env.get("results", [])
     alpha_still_exists = any(
         E2E_PREFIX + "Alpha" in str(r.get("name", ""))
         if isinstance(r, dict)

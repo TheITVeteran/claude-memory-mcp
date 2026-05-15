@@ -47,6 +47,7 @@ from claude_memory.schema import (
     GetHologramParams,
     GetNeighborsParams,
     PointInTimeQueryParams,
+    SearchMemoryParams,
     TraversePathParams,
 )
 
@@ -378,11 +379,14 @@ async def test_search(service: Any) -> None:
 
     try:
         # Basic search
-        search_results = await service.search(
-            "test entity for E2E validation",
-            limit=5,
-            project_id=PROJECT_ID,
+        search_results_env = await service.search(
+            SearchMemoryParams(
+                query="test entity for E2E validation",
+                limit=5,
+                project_id=PROJECT_ID,
+            )
         )
+        search_results = search_results_env.get("results", [])
         assert len(search_results) > 0, "No search results returned"
         names = [r.name for r in search_results]
         found = any(ENTITY_PREFIX in n for n in names)
@@ -392,20 +396,26 @@ async def test_search(service: Any) -> None:
             results.warn("Semantic search", f"Got results but test entity not in top 5: {names}")
 
         # MMR search
-        mmr_results = await service.search(
-            "test entity validation",
-            limit=5,
-            project_id=PROJECT_ID,
-            mmr=True,
+        mmr_results_env = await service.search(
+            SearchMemoryParams(
+                query="test entity validation",
+                limit=5,
+                project_id=PROJECT_ID,
+                mmr=True,
+            )
         )
+        mmr_results = mmr_results_env.get("results", [])
         results.ok(f"MMR search returned {len(mmr_results)} results")
 
         # Search with no results
-        empty = await service.search(
-            "xyzzy_nonexistent_term_12345",
-            limit=5,
-            project_id="nonexistent_project",
+        empty_env = await service.search(
+            SearchMemoryParams(
+                query="xyzzy_nonexistent_term_12345",
+                limit=5,
+                project_id="nonexistent_project",
+            )
         )
+        empty = empty_env.get("results", [])
         results.ok(f"Empty search returned {len(empty)} results (expected 0)")
 
     except Exception as e:
@@ -1068,7 +1078,10 @@ async def test_update_then_search(service: Any) -> None:
         await asyncio.sleep(0.5)
 
         # Search for it
-        search_results = await service.search(unique_name, limit=5, project_id=PROJECT_ID)
+        search_results_env = await service.search(
+            SearchMemoryParams(query=unique_name, limit=5, project_id=PROJECT_ID)
+        )
+        search_results = search_results_env.get("results", [])
         found = any(r.id == entity_id for r in search_results)
         if found:
             results.ok("Entity found in search after creation")
@@ -1097,12 +1110,15 @@ async def test_router_strategies(service: Any) -> None:
     strategies = ["auto", "semantic"]
     for strategy_name in strategies:
         try:
-            search_results = await service.search(
-                "test entity",
-                limit=3,
-                project_id=PROJECT_ID,
-                strategy=strategy_name,
+            search_env = await service.search(
+                SearchMemoryParams(
+                    query="test entity",
+                    limit=3,
+                    project_id=PROJECT_ID,
+                    strategy=strategy_name,
+                )
             )
+            search_results = search_env.get("results", [])
             results.ok(f"Strategy '{strategy_name}' -> {len(search_results)} results")
         except Exception as e:
             results.warn(f"Strategy '{strategy_name}'", str(e)[:80])
@@ -1115,12 +1131,15 @@ async def test_deep_search(service: Any) -> None:
     results.start_phase(f"[24/{TOTAL_PHASES}] Deep Search (E-2)")
 
     try:
-        search_results = await service.search(
-            "test entity E2E",
-            limit=3,
-            project_id=PROJECT_ID,
-            deep=True,
+        search_env = await service.search(
+            SearchMemoryParams(
+                query="test entity E2E",
+                limit=3,
+                project_id=PROJECT_ID,
+                deep=True,
+            )
         )
+        search_results = search_env.get("results", [])
         if search_results:
             first = search_results[0]
             has_obs = hasattr(first, "observations") and first.observations is not None
@@ -1246,15 +1265,21 @@ async def test_search_error_recovery(service: Any) -> None:
 
     try:
         # Normal search should work
-        normal = await service.search("test recovery", limit=3, project_id=PROJECT_ID)
+        normal_env = await service.search(
+            SearchMemoryParams(query="test recovery", limit=3, project_id=PROJECT_ID)
+        )
+        normal = normal_env.get("results", [])
         results.ok(f"Normal search works -> {len(normal)} results")
 
         # Search with invalid project should return empty, not crash
-        empty = await service.search(
-            "xyzzy_nonexistent_12345",
-            limit=3,
-            project_id="nonexistent_project_99",
+        empty_env = await service.search(
+            SearchMemoryParams(
+                query="xyzzy_nonexistent_12345",
+                limit=3,
+                project_id="nonexistent_project_99",
+            )
         )
+        empty = empty_env.get("results", [])
         assert isinstance(empty, list), f"Expected list, got {type(empty)}"
         results.ok(f"Search with bad project -> {len(empty)} results (graceful)")
 

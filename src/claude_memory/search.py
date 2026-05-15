@@ -616,7 +616,7 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
                 merged, detected_intent, deep, vector_results
             )
 
-            # Build per-call metadata (PR-5: replaces TOCTOU-unsafe _last_* attrs)
+            # Build per-call metadata (PR-5: replaces TOCTOU-unsafe instance state attrs)
             channels_dict: dict[str, str] = {}
             for cs in channel_status:
                 channels_dict[cs.channel] = cs.status

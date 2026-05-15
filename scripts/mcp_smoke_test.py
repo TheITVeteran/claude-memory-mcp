@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 async def smoke() -> None:
     from claude_memory.embedding import EmbeddingService
-    from claude_memory.schema import BottleQueryParams
+    from claude_memory.schema import BottleQueryParams, SearchMemoryParams
     from claude_memory.tools import MemoryService
 
     embedder = EmbeddingService()
@@ -30,7 +30,8 @@ async def smoke() -> None:
 
     # 2. search_memory
     try:
-        results = await svc.search("test query", limit=3)
+        results_env = await svc.search(SearchMemoryParams(query="test query", limit=3))
+        results = results_env.get("results", [])
         print(f"[PASS] search_memory -> {len(results)} results")
         passed += 1
     except Exception as e:

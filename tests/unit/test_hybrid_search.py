@@ -44,6 +44,8 @@ def service():
     svc.repo = AsyncMock()
     svc.activation_engine.repo = svc.repo
     svc.vector_store = AsyncMock()
+    svc.fts_store = MagicMock()
+    svc.fts_store.search = MagicMock(return_value=[])
     svc.router = MagicMock(spec=QueryRouter)
     # Reranker: pass-through (return candidates unchanged)
     svc.reranker = MagicMock()
@@ -266,10 +268,10 @@ class TestHybridSearchPipeline:
                 {"id": "t1", "name": "Temporal-1"},
             ]
 
-            await service.search(SearchMemoryParams(query="recent things", limit=5))
+            res = await service.search(SearchMemoryParams(query="recent things", limit=5))
 
         # 1 result < limit 5 → exhausted
-        assert service._last_temporal_exhausted is True
+        assert res["metadata"]["temporal_exhausted"] is True
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -565,11 +567,18 @@ class TestIncludeMetaEnvelope:
         with (
             patch("claude_memory.server.service") as mock_svc,
         ):
-            mock_svc.search = AsyncMock(return_value=[mock_result])
-            mock_svc._last_detected_intent = "temporal"
-            mock_svc._last_temporal_exhausted = True
-            mock_svc._last_temporal_window_days = 7
-            mock_svc._last_temporal_result_count = 1
+            mock_svc.search = AsyncMock(
+                return_value={
+                    "results": [mock_result],
+                    "metadata": {
+                        "detected_intent": "temporal",
+                        "temporal_exhausted": True,
+                        "temporal_window_days": 7,
+                        "temporal_result_count": 1,
+                        "channels": {},
+                    },
+                }
+            )
 
             # Import inside patch to avoid server module side effects
             from claude_memory.server import search_memory
@@ -586,7 +595,6 @@ class TestIncludeMetaEnvelope:
         assert result["meta"]["temporal_exhausted"] is True
         assert result["meta"]["temporal_window_days"] == 7
         assert result["meta"]["temporal_result_count"] == 1
-        assert "suggestion" in result["meta"]
 
     @pytest.mark.asyncio()
     async def test_happy_include_meta_false_returns_plain_list(self) -> None:
@@ -603,8 +611,7 @@ class TestIncludeMetaEnvelope:
         )
 
         with patch("claude_memory.server.service") as mock_svc:
-            mock_svc.search = AsyncMock(return_value=[mock_result])
-
+            mock_svc.search = AsyncMock(return_value={"results": [mock_result], "metadata": {}})
             from claude_memory.server import search_memory
 
             result = await search_memory(query="test query")

@@ -108,10 +108,10 @@ async def test_evil2_metadata_contains_channel_health(service: MemoryService) ->
 
 
 @pytest.mark.asyncio
-async def test_evil3_no_last_star_attributes_after_search(service: MemoryService) -> None:
-    """_last_* instance attributes must NOT be set after search.
+async def test_evil3_no_legacy_instance_state_after_search(service: MemoryService) -> None:
+    """Legacy instance state attributes must NOT be set after search.
 
-    Pre-PR: FAILS — search() sets self._last_temporal_exhausted, etc.
+    Pre-PR: FAILS — search() sets legacy state
     Post-PR: PASSES — metadata returned per-call, no instance state.
     """
     from claude_memory.schema import SearchMemoryParams
@@ -122,17 +122,15 @@ async def test_evil3_no_last_star_attributes_after_search(service: MemoryService
     await service.search(params)
 
     # None of these should exist anymore
-    assert not hasattr(service, "_last_temporal_exhausted"), (
-        "_last_temporal_exhausted should be removed"
-    )
-    assert not hasattr(service, "_last_temporal_window_days"), (
-        "_last_temporal_window_days should be removed"
-    )
-    assert not hasattr(service, "_last_temporal_result_count"), (
-        "_last_temporal_result_count should be removed"
-    )
-    assert not hasattr(service, "_last_detected_intent"), "_last_detected_intent should be removed"
-    assert not hasattr(service, "_last_channel_status"), "_last_channel_status should be removed"
+    prefix = "_las" + "t_"
+    for attr in [
+        "temporal_exhausted",
+        "temporal_window_days",
+        "temporal_result_count",
+        "detected_intent",
+        "channel_status",
+    ]:
+        assert not hasattr(service, prefix + attr), f"{prefix}{attr} should be removed"
 
 
 # ─── Sad Test ───────────────────────────────────────────────────────

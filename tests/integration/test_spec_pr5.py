@@ -26,8 +26,8 @@ def falkordb_container():
     yield container
     try:
         container.stop()
-    except Exception:
-        pass  # noqa: S110
+    except Exception:  # noqa: S110
+        pass
 
 
 @pytest.fixture
@@ -37,8 +37,8 @@ def qdrant_container():
     yield container
     try:
         container.stop()
-    except Exception:
-        pass  # noqa: S110
+    except Exception:  # noqa: S110
+        pass
 
 
 @pytest.fixture

@@ -350,7 +350,9 @@ class SearchChannelsMixin:
 
         results: list[SearchResult] = []
         for m in merged:
-            node_props = nodes_map.get(m.entity_id) or {}
+            node_props = nodes_map.get(m.entity_id)
+            if not node_props:
+                continue
 
             try:
                 observations, relationships = await self._deep_hydrate_node(

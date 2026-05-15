@@ -325,9 +325,10 @@ async def test_sad9_prune_stale() -> None:
 
 
 async def test_sad10_search_memory_no_results() -> None:
-    """Empty results (not infra error) still returns 'No results found.'"""
+    """Empty results (not infra error) returns empty result shape."""
+    server.service.search = AsyncMock(return_value={"results": [], "metadata": {"channels": {}}})
     result = await server.search_memory(query=SEARCH_QUERY)
-    assert result == "No results found."
+    assert result == []
 
 
 async def test_evil11_search_memory_returns_error_on_search_error() -> None:
