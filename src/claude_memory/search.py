@@ -36,7 +36,6 @@ if TYPE_CHECKING:  # pragma: no cover
         GetEvolutionParams,
         GetNeighborsParams,
         PointInTimeQueryParams,
-        SearchResult,
         TraversePathParams,
     )
 
@@ -415,7 +414,21 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
     async def search(  # noqa: C901, PLR0915, PLR0912
         self,
         params: SearchMemoryParams,
-    ) -> list["SearchResult"]:
+    ) -> dict[str, Any]:
+        """Search for entities using the hybrid pipeline (ADR-007).
+
+        Default path (``strategy=None``): vector search + intent-based graph
+        enrichment + RRF merge.  Explicit strategies dispatch directly.
+
+        ``strategy='auto'`` is deprecated — logs a warning and falls through
+        to the hybrid default.
+
+        Returns:
+            Dict with ``results`` (list[SearchResult]) and ``metadata`` (dict)
+            containing per-call temporal exhaustion info and per-channel health.
+            PR-5: replaces the old ``self._last_*`` instance attributes to
+            eliminate TOCTOU risk under concurrent requests.
+        """
         query = params.query
         limit = params.limit
         project_id = params.project_id
@@ -424,16 +437,9 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
         strategy = params.strategy
         deep = params.deep
         temporal_window_days = params.temporal_window_days
-        """Search for entities using the hybrid pipeline (ADR-007).
 
-        Default path (``strategy=None``): vector search + intent-based graph
-        enrichment + RRF merge.  Explicit strategies dispatch directly.
-
-        ``strategy='auto'`` is deprecated — logs a warning and falls through
-        to the hybrid default.
-        """
         if not query:
-            return []
+            return {"results": [], "metadata": {"channels": {}}}
 
         _t0 = time.perf_counter()
         try:
@@ -443,9 +449,16 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
                     logger.warning("strategy='auto' is deprecated; using hybrid default")
                     strategy = None  # fall through to hybrid
                 else:
-                    return await self._direct_strategy_search(
+                    direct_results = await self._direct_strategy_search(
                         query, strategy, limit, project_id, temporal_window_days
                     )
+                    return {
+                        "results": direct_results,
+                        "metadata": {
+                            "detected_intent": strategy,
+                            "channels": {strategy: "ok"},
+                        },
+                    }
 
             # ── HYBRID DEFAULT PATH ──
 
@@ -601,18 +614,21 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
                 merged, detected_intent, deep, vector_results
             )
 
-            # Store temporal exhaustion info on the instance for server layer
-            # NOTE: TOCTOU-unsafe under concurrent requests. These instance
-            # attributes may be overwritten by a subsequent search() call
-            # before the server reads them. Acceptable for single-user MCP
-            # but would need request-scoped storage for multi-tenant use.
-            self._last_temporal_exhausted = temporal_exhausted
-            self._last_temporal_window_days = temporal_window_days
-            self._last_temporal_result_count = (
-                len(temporal_results) if (detected_intent == QueryIntent.TEMPORAL) else 0
-            )
-            self._last_detected_intent = detected_intent
-            self._last_channel_status = channel_status
+            # Build per-call metadata (PR-5: replaces TOCTOU-unsafe _last_* attrs)
+            channels_dict: dict[str, str] = {}
+            for cs in channel_status:
+                channels_dict[cs.channel] = cs.status
+
+            metadata: dict[str, Any] = {
+                "temporal_exhausted": temporal_exhausted,
+                "temporal_window_days": temporal_window_days,
+                "temporal_result_count": (
+                    len(temporal_results) if (detected_intent == QueryIntent.TEMPORAL) else 0
+                ),
+                "detected_intent": detected_intent.value,
+                "channels": channels_dict,
+                "channel_details": [cs.model_dump() for cs in channel_status],
+            }
 
             # DRIFT-002: record search stats
             # Wrapped in its own try/except — stats failure must not kill pipeline
@@ -632,7 +648,7 @@ class SearchMixin(SearchAdvancedMixin, SearchChannelsMixin):
             except Exception:
                 logger.warning("Stats recording failed", exc_info=True)
 
-            return search_results
+            return {"results": search_results, "metadata": metadata}
         except INFRA_ERRORS as exc:
             logger.error("search: infrastructure error for query=%r", query, exc_info=True)
             raise SearchError("Memory retrieval unavailable") from exc

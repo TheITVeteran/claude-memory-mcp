@@ -421,14 +421,17 @@ async def test_sad5_traverse_path_no_nodes_attr(service: MemoryService) -> None:
 
 
 async def test_sad6_search_empty_query(service: MemoryService) -> None:
-    result = await service.search(SearchMemoryParams(query="", limit=SEARCH_LIMIT))
+    _res = await service.search(SearchMemoryParams(query="", limit=SEARCH_LIMIT))
+    result = _res.get("results", []) if isinstance(_res, dict) else _res
     assert result == []
 
 
 async def test_sad7_search_no_vector_results(service: MemoryService) -> None:
     service.vector_store.search.return_value = []
 
-    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    _res = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+
+    result = _res.get("results", []) if isinstance(_res, dict) else _res
     assert result == []
 
 
@@ -449,7 +452,9 @@ async def test_happy_search_with_results(service: MemoryService) -> None:
         "edges": [],
     }
 
-    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    _res = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+
+    result = _res.get("results", []) if isinstance(_res, dict) else _res
     assert len(result) == 1
     assert result[0].id == ENTITY_ID
     assert result[0].name == ENTITY_NAME
@@ -463,7 +468,9 @@ async def test_sad8_search_node_not_in_graph(service: MemoryService) -> None:
     ]
     service.repo.get_subgraph.return_value = {"nodes": [], "edges": []}
 
-    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    _res = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+
+    result = _res.get("results", []) if isinstance(_res, dict) else _res
     assert result == []
 
 
@@ -488,9 +495,10 @@ async def test_happy_search_with_project_id_filter(service: MemoryService) -> No
         "edges": [],
     }
 
-    result = await service.search(
+    _res = await service.search(
         SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT, project_id=PROJECT_ID)
     )
+    result = _res.get("results", []) if isinstance(_res, dict) else _res
     assert len(result) == 1
 
     # Verify filter was passed to vector_store.search

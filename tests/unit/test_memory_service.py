@@ -503,14 +503,17 @@ async def test_sad5_traverse_path_no_nodes_attr(service: MemoryService) -> None:
 
 
 async def test_sad6_search_empty_query(service: MemoryService) -> None:
-    result = await service.search(SearchMemoryParams(query="", limit=SEARCH_LIMIT))
+    _res = await service.search(SearchMemoryParams(query="", limit=SEARCH_LIMIT))
+    result = _res.get("results", []) if isinstance(_res, dict) else _res
     assert result == []
 
 
 async def test_sad7_search_no_vector_results(service: MemoryService) -> None:
     service.vector_store.search.return_value = []
 
-    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    _res = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+
+    result = _res.get("results", []) if isinstance(_res, dict) else _res
     assert result == []
 
 
@@ -531,7 +534,9 @@ async def test_happy_search_with_results(service: MemoryService) -> None:
         "edges": [],
     }
 
-    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    _res = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+
+    result = _res.get("results", []) if isinstance(_res, dict) else _res
     assert len(result) == 1
     assert result[0].id == ENTITY_ID
     assert result[0].name == ENTITY_NAME
@@ -545,7 +550,9 @@ async def test_sad8_search_node_not_in_graph(service: MemoryService) -> None:
     ]
     service.repo.get_subgraph.return_value = {"nodes": [], "edges": []}
 
-    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    _res = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+
+    result = _res.get("results", []) if isinstance(_res, dict) else _res
     assert result == []
 
 
@@ -576,9 +583,10 @@ async def test_happy_search_deep_returns_observations(service: MemoryService) ->
     obs_result.result_set = [["First observation"], ["Second observation"]]
     service.repo.execute_cypher.return_value = obs_result
 
-    result = await service.search(
+    _res = await service.search(
         SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT, deep=True)
     )
+    result = _res.get("results", []) if isinstance(_res, dict) else _res
     assert len(result) == 1
     assert result[0].observations == ["First observation", "Second observation"]
 
@@ -608,9 +616,10 @@ async def test_happy_search_deep_returns_relationships(service: MemoryService) -
     obs_result.result_set = []
     service.repo.execute_cypher.return_value = obs_result
 
-    result = await service.search(
+    _res = await service.search(
         SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT, deep=True)
     )
+    result = _res.get("results", []) if isinstance(_res, dict) else _res
     assert len(result) == 1
     assert len(result[0].relationships) == 2
 
@@ -632,7 +641,9 @@ async def test_sad9_search_shallow_backward_compat(service: MemoryService) -> No
         "edges": [],
     }
 
-    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    _res = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+
+    result = _res.get("results", []) if isinstance(_res, dict) else _res
     assert len(result) == 1
     # Shallow search should have empty/None observations and relationships
     assert not result[0].observations
@@ -660,9 +671,10 @@ async def test_happy_search_with_project_id_filter(service: MemoryService) -> No
         "edges": [],
     }
 
-    result = await service.search(
+    _res = await service.search(
         SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT, project_id=PROJECT_ID)
     )
+    result = _res.get("results", []) if isinstance(_res, dict) else _res
     assert len(result) == 1
 
     # Verify filter was passed to vector_store.search
@@ -688,9 +700,10 @@ async def test_happy_search_with_mmr_flag(service: MemoryService) -> None:
         "edges": [],
     }
 
-    result = await service.search(
+    _res = await service.search(
         SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT, mmr=True)
     )
+    result = _res.get("results", []) if isinstance(_res, dict) else _res
     assert len(result) == 1
     # Verify search_mmr was called instead of search
     service.vector_store.search_mmr.assert_awaited_once()
@@ -1012,7 +1025,9 @@ async def test_happy_search_fires_salience_async(service: MemoryService) -> None
         }
     ]
 
-    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    _res = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+
+    result = _res.get("results", []) if isinstance(_res, dict) else _res
     assert len(result) == 1
     # Returns PRE-update salience from graph data (fire-and-forget)
     assert result[0].salience_score == SALIENCE_DEFAULT
@@ -1048,7 +1063,9 @@ async def test_evil13_search_salience_background_error_silent(service: MemorySer
     }
     service.repo.increment_salience.side_effect = ConnectionError("FalkorDB down")
 
-    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    _res = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+
+    result = _res.get("results", []) if isinstance(_res, dict) else _res
     assert len(result) == 1
     # Uses graph node's salience_score (background error is silent)
     assert result[0].salience_score == 3.5
@@ -1078,7 +1095,9 @@ async def test_sad15_search_salience_fallback_default(service: MemoryService) ->
     }
     service.repo.increment_salience.return_value = []  # No updates returned
 
-    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    _res = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+
+    result = _res.get("results", []) if isinstance(_res, dict) else _res
     assert len(result) == 1
     assert result[0].salience_score == 0.0
 
@@ -1767,7 +1786,8 @@ async def test_evil25_search_raises_on_os_error(service: MemoryService) -> None:
 
 async def test_sad28_search_empty_query_returns_empty(service: MemoryService) -> None:
     """AUDIT-B1: Empty query still returns [] (not SearchError) — it's not an infra failure."""
-    result = await service.search(SearchMemoryParams(query="", limit=SEARCH_LIMIT))
+    _res = await service.search(SearchMemoryParams(query="", limit=SEARCH_LIMIT))
+    result = _res.get("results", []) if isinstance(_res, dict) else _res
     assert result == []
 
 
@@ -1783,7 +1803,8 @@ async def test_happy_search_normal_operation_returns_results(service: MemoryServ
     service.repo.get_subgraph.return_value = {"nodes": [], "edges": []}
 
     # search() returns results, does not raise
-    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    _res = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    result = _res.get("results", []) if isinstance(_res, dict) else _res
     # Result may be empty if hydration mocks aren't set up, but should NOT raise
     assert isinstance(result, list)
 

@@ -113,7 +113,9 @@ class TestHybridSearchPipeline:
             mock_tl.return_value = [{"id": "t1", "name": "Temporal-1"}]
             service.repo.get_subgraph.return_value = _graph_nodes("a", "t1")
 
-            _ = await service.search(SearchMemoryParams(query="what happened recently"))
+            _res = await service.search(SearchMemoryParams(query="what happened recently"))
+
+            _ = _res.get("results", []) if isinstance(_res, dict) else _res
 
         mock_tl.assert_called_once()
         service.vector_store.search.assert_called_once()
@@ -152,7 +154,9 @@ class TestHybridSearchPipeline:
         service.activation_engine.spread = MagicMock(return_value={"a": 1.0, "b": 0.6, "c": 0.3})
         service.repo.get_subgraph.return_value = _graph_nodes("a", "b", "c")
 
-        results = await service.search(SearchMemoryParams(query="things related to auth"))
+        _res = await service.search(SearchMemoryParams(query="things related to auth"))
+
+        results = _res.get("results", []) if isinstance(_res, dict) else _res
 
         # Activation engine was used with the seeds from vector results
         service.activation_engine.activate.assert_called_once_with(["a", "b"])
@@ -165,7 +169,9 @@ class TestHybridSearchPipeline:
         service.router.classify.return_value = QueryIntent.SEMANTIC
         service.repo.get_subgraph.return_value = _graph_nodes("a")
 
-        results = await service.search(SearchMemoryParams(query="what is Python"))
+        _res = await service.search(SearchMemoryParams(query="what is Python"))
+
+        results = _res.get("results", []) if isinstance(_res, dict) else _res
 
         # Under soft routing, all channels fire — vector still dominates
         assert len(results) == 1
@@ -178,7 +184,9 @@ class TestHybridSearchPipeline:
         service.router.classify.return_value = QueryIntent.SEMANTIC
         service.repo.get_subgraph.return_value = _graph_nodes("a")
 
-        results = await service.search(SearchMemoryParams(query="test query"))
+        _res = await service.search(SearchMemoryParams(query="test query"))
+
+        results = _res.get("results", []) if isinstance(_res, dict) else _res
 
         for r in results:
             assert r.retrieval_strategy in (
@@ -201,7 +209,9 @@ class TestHybridSearchPipeline:
         with patch.object(service, "query_timeline", new_callable=AsyncMock) as mock_tl:
             mock_tl.return_value = [{"id": "a", "name": "Node-a"}]
 
-            results = await service.search(SearchMemoryParams(query="recent work"))
+            _res = await service.search(SearchMemoryParams(query="recent work"))
+
+            results = _res.get("results", []) if isinstance(_res, dict) else _res
 
         # The key assertion: score is NOT 0.0 for an entity that has a vector match
         assert len(results) > 0
@@ -219,7 +229,8 @@ class TestHybridSearchPipeline:
         service.repo.get_subgraph.return_value = _graph_nodes("a")
 
         with caplog.at_level(logging.WARNING):
-            results = await service.search(SearchMemoryParams(query="test", strategy="auto"))
+            _res = await service.search(SearchMemoryParams(query="test", strategy="auto"))
+            results = _res.get("results", []) if isinstance(_res, dict) else _res
 
         assert "deprecated" in caplog.text.lower()
         # Should still return results (ran hybrid path)

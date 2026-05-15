@@ -193,10 +193,10 @@ class QueryRouter:
         if resolved_intent == QueryIntent.ASSOCIATIVE:
             return await self._route_associative(service, query, limit, project_id, **kwargs)
 
-        # Default: SEMANTIC
-        # Ignore kwargs as they might not be in SearchMemoryParams
+        # Default: SEMANTIC — search() returns {"results": [...], "metadata": {...}}
         params = SearchMemoryParams(query=query, limit=limit, project_id=project_id)
-        return await service.search(params)
+        response = await service.search(params)
+        return response.get("results", []) if isinstance(response, dict) else response
 
     # ── Private dispatch helpers ─────────────────────────────────────
 
@@ -239,7 +239,8 @@ class QueryRouter:
             return await service.traverse_path(t_params)  # type: ignore[no-any-return]
 
         # Fallback: semantic search (we can't reliably extract entities)
-        return await service.search(SearchMemoryParams(query=query, limit=10))
+        response = await service.search(SearchMemoryParams(query=query, limit=10))
+        return response.get("results", []) if isinstance(response, dict) else response
 
     @staticmethod
     async def _route_associative(

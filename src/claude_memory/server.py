@@ -294,7 +294,7 @@ async def search_memory(  # noqa: PLR0913
             temporal_window_days=temporal_window_days,
             deep=False,
         )
-        results = await service.search(params)
+        search_response = await service.search(params)
     except SearchError:
         logger.error("search_memory: infrastructure error for query=%r", query, exc_info=True)
         return {
@@ -302,31 +302,25 @@ async def search_memory(  # noqa: PLR0913
             "message": "Memory retrieval unavailable",
             "retry_safe": True,
         }
+
+    # PR-5: search() now returns {"results": [...], "metadata": {...}}
+    results = search_response.get("results", [])
+    metadata = search_response.get("metadata", {})
+
     if not results:
         return "No results found."
 
     result_dicts = [res.model_dump() for res in results]
 
-    # Return temporal metadata envelope when opted-in
-    if include_meta and hasattr(service, "_last_detected_intent"):
-        from claude_memory.router import QueryIntent  # noqa: PLC0415
+    # Return full metadata envelope when opted-in (PR-5: channel health + temporal)
+    if include_meta:
         from claude_memory.schema import HybridSearchResponse  # noqa: PLC0415
 
-        if service._last_detected_intent == QueryIntent.TEMPORAL:
-            response = HybridSearchResponse(
-                results=results,
-                meta={
-                    "temporal_exhausted": getattr(service, "_last_temporal_exhausted", False),
-                    "temporal_window_days": getattr(service, "_last_temporal_window_days", 7),
-                    "temporal_result_count": getattr(service, "_last_temporal_result_count", 0),
-                    "suggestion": (
-                        "Widen temporal_window_days for more historical results"
-                        if getattr(service, "_last_temporal_exhausted", False)
-                        else None
-                    ),
-                },
-            )
-            return response.model_dump()
+        response = HybridSearchResponse(
+            results=results,
+            meta=metadata,
+        )
+        return response.model_dump()
 
     return result_dicts
 

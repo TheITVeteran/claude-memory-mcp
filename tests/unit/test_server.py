@@ -106,7 +106,7 @@ def _mock_service(monkeypatch: pytest.MonkeyPatch) -> None:
     mock_svc.point_in_time_query = AsyncMock(return_value=[])
     mock_svc.archive_entity = AsyncMock(return_value={"status": "archived"})
     mock_svc.prune_stale = AsyncMock(return_value={"pruned": PRUNE_DAYS})
-    mock_svc.search = AsyncMock(return_value=[])
+    mock_svc.search = AsyncMock(return_value={"results": [], "metadata": {}})
     mock_svc.create_memory_type = MagicMock(return_value={"name": MEMORY_TYPE_NAME})
     monkeypatch.setattr(server, "service", mock_svc)
     monkeypatch.setattr(tools_extra, "_service", mock_svc)
@@ -363,7 +363,7 @@ async def test_evil13_search_memory_non_search_error_propagates() -> None:
 async def test_happy_search_memory_with_results() -> None:
     mock_result = MagicMock()
     mock_result.model_dump.return_value = {"id": ENTITY_ID, "name": ENTITY_NAME}
-    server.service.search = AsyncMock(return_value=[mock_result])
+    server.service.search = AsyncMock(return_value={"results": [mock_result], "metadata": {}})
     result = await server.search_memory(
         query=SEARCH_QUERY, project_id=PROJECT_ID, limit=SEARCH_LIMIT
     )
