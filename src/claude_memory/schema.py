@@ -58,7 +58,7 @@ class ChannelStatus(BaseModel):
     """
 
     channel: str
-    status: Literal["ok", "degraded", "skipped"]
+    status: Literal["ok", "degraded", "skipped", "failed"]
     result_count: int = 0
     error: str | None = None
 

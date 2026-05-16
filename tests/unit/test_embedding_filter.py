@@ -27,6 +27,16 @@ def mock_service():
     with patch("claude_memory.tools.MemoryRepository"):
         service = MemoryService(embedding_service=mock_embedder, vector_store=mock_vector)
     service.repo = AsyncMock()
+    service.fts_store = MagicMock()
+    service.fts_store.search = MagicMock(return_value=[])
+    service.reranker = MagicMock()
+    service.reranker.rerank = AsyncMock(side_effect=lambda q, c, **kw: c)
+    # Soft routing
+    service.query_timeline = AsyncMock(return_value=[])
+    service.traverse_path = AsyncMock(return_value=[])
+    service.activation_engine = MagicMock()
+    service.activation_engine.activate = AsyncMock(return_value={})
+    service.activation_engine.spread = AsyncMock(return_value={})
     return service
 
 
@@ -112,7 +122,8 @@ async def test_happy_search_results_have_no_embedding_field(mock_service):
     }
     mock_service._fire_salience_update = MagicMock()
 
-    results = await mock_service.search(SearchMemoryParams(query="test query"))
+    _res = await mock_service.search(SearchMemoryParams(query="test query"))
+    results = _res.get("results", []) if isinstance(_res, dict) else _res
 
     assert len(results) == 1
     assert isinstance(results[0], SearchResult)

@@ -180,12 +180,17 @@ async def query_system(
     Returns:
         Dict with 'answer' (top result text) and 'retrieved_ids'.
     """
-    results = await service.search(
-        query=question,
-        project_id=project_id,
-        limit=10,
-        deep=True,
+    from claude_memory.schema import SearchMemoryParams
+
+    results_env = await service.search(
+        SearchMemoryParams(
+            query=question,
+            project_id=project_id,
+            limit=10,
+            deep=True,
+        )
     )
+    results = results_env.get("results", [])
 
     # results is list[SearchResult] — pydantic models with .id, .name, .observations
     retrieved_ids = [r.id for r in results]

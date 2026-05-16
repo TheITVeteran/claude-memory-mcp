@@ -244,7 +244,7 @@ def test_happy_main_search_mode_with_query() -> None:
 
     with patch.object(dashboard_app, "get_service", return_value=mock_service):
         if True:
-            mock_service.search = AsyncMock(return_value=[mock_search_result])
+            mock_service.search = AsyncMock(return_value={"results": [mock_search_result]})
             dashboard_app.main()
 
 

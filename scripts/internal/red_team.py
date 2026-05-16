@@ -5,7 +5,7 @@ import string
 import time
 
 from claude_memory.embedding import EmbeddingService
-from claude_memory.schema import EntityCreateParams, RelationshipCreateParams
+from claude_memory.schema import EntityCreateParams, RelationshipCreateParams, SearchMemoryParams
 from claude_memory.tools import MemoryService
 
 # Configure logging
@@ -83,11 +83,12 @@ async def test_concurrency() -> None:
     )
     await service.create_entity(create_params)
     # Ideally get the real ID, but for now we search or assume created
-    res = await service.search("Concurrent Target")
+    res_env = await service.search(SearchMemoryParams(query="Concurrent Target"))
+    res = res_env.get("results", [])
     if not res:
         logger.error("❌ Setup failed")
         return
-    real_id = res[0]["id"]
+    real_id = res[0].id if hasattr(res[0], "id") else res[0]["id"]
 
     async def fast_update(idx: int) -> bool:
         try:

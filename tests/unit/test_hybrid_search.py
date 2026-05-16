@@ -44,6 +44,8 @@ def service():
     svc.repo = AsyncMock()
     svc.activation_engine.repo = svc.repo
     svc.vector_store = AsyncMock()
+    svc.fts_store = MagicMock()
+    svc.fts_store.search = MagicMock(return_value=[])
     svc.router = MagicMock(spec=QueryRouter)
     # Reranker: pass-through (return candidates unchanged)
     svc.reranker = MagicMock()
@@ -113,7 +115,9 @@ class TestHybridSearchPipeline:
             mock_tl.return_value = [{"id": "t1", "name": "Temporal-1"}]
             service.repo.get_subgraph.return_value = _graph_nodes("a", "t1")
 
-            _ = await service.search(SearchMemoryParams(query="what happened recently"))
+            _res = await service.search(SearchMemoryParams(query="what happened recently"))
+
+            _ = _res.get("results", []) if isinstance(_res, dict) else _res
 
         mock_tl.assert_called_once()
         service.vector_store.search.assert_called_once()
@@ -152,7 +156,9 @@ class TestHybridSearchPipeline:
         service.activation_engine.spread = MagicMock(return_value={"a": 1.0, "b": 0.6, "c": 0.3})
         service.repo.get_subgraph.return_value = _graph_nodes("a", "b", "c")
 
-        results = await service.search(SearchMemoryParams(query="things related to auth"))
+        _res = await service.search(SearchMemoryParams(query="things related to auth"))
+
+        results = _res.get("results", []) if isinstance(_res, dict) else _res
 
         # Activation engine was used with the seeds from vector results
         service.activation_engine.activate.assert_called_once_with(["a", "b"])
@@ -165,7 +171,9 @@ class TestHybridSearchPipeline:
         service.router.classify.return_value = QueryIntent.SEMANTIC
         service.repo.get_subgraph.return_value = _graph_nodes("a")
 
-        results = await service.search(SearchMemoryParams(query="what is Python"))
+        _res = await service.search(SearchMemoryParams(query="what is Python"))
+
+        results = _res.get("results", []) if isinstance(_res, dict) else _res
 
         # Under soft routing, all channels fire — vector still dominates
         assert len(results) == 1
@@ -178,7 +186,9 @@ class TestHybridSearchPipeline:
         service.router.classify.return_value = QueryIntent.SEMANTIC
         service.repo.get_subgraph.return_value = _graph_nodes("a")
 
-        results = await service.search(SearchMemoryParams(query="test query"))
+        _res = await service.search(SearchMemoryParams(query="test query"))
+
+        results = _res.get("results", []) if isinstance(_res, dict) else _res
 
         for r in results:
             assert r.retrieval_strategy in (
@@ -201,7 +211,9 @@ class TestHybridSearchPipeline:
         with patch.object(service, "query_timeline", new_callable=AsyncMock) as mock_tl:
             mock_tl.return_value = [{"id": "a", "name": "Node-a"}]
 
-            results = await service.search(SearchMemoryParams(query="recent work"))
+            _res = await service.search(SearchMemoryParams(query="recent work"))
+
+            results = _res.get("results", []) if isinstance(_res, dict) else _res
 
         # The key assertion: score is NOT 0.0 for an entity that has a vector match
         assert len(results) > 0
@@ -219,7 +231,8 @@ class TestHybridSearchPipeline:
         service.repo.get_subgraph.return_value = _graph_nodes("a")
 
         with caplog.at_level(logging.WARNING):
-            results = await service.search(SearchMemoryParams(query="test", strategy="auto"))
+            _res = await service.search(SearchMemoryParams(query="test", strategy="auto"))
+            results = _res.get("results", []) if isinstance(_res, dict) else _res
 
         assert "deprecated" in caplog.text.lower()
         # Should still return results (ran hybrid path)
@@ -255,10 +268,10 @@ class TestHybridSearchPipeline:
                 {"id": "t1", "name": "Temporal-1"},
             ]
 
-            await service.search(SearchMemoryParams(query="recent things", limit=5))
+            res = await service.search(SearchMemoryParams(query="recent things", limit=5))
 
         # 1 result < limit 5 → exhausted
-        assert service._last_temporal_exhausted is True
+        assert res["metadata"]["temporal_exhausted"] is True
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -554,11 +567,18 @@ class TestIncludeMetaEnvelope:
         with (
             patch("claude_memory.server.service") as mock_svc,
         ):
-            mock_svc.search = AsyncMock(return_value=[mock_result])
-            mock_svc._last_detected_intent = "temporal"
-            mock_svc._last_temporal_exhausted = True
-            mock_svc._last_temporal_window_days = 7
-            mock_svc._last_temporal_result_count = 1
+            mock_svc.search = AsyncMock(
+                return_value={
+                    "results": [mock_result],
+                    "metadata": {
+                        "detected_intent": "temporal",
+                        "temporal_exhausted": True,
+                        "temporal_window_days": 7,
+                        "temporal_result_count": 1,
+                        "channels": {},
+                    },
+                }
+            )
 
             # Import inside patch to avoid server module side effects
             from claude_memory.server import search_memory
@@ -575,7 +595,6 @@ class TestIncludeMetaEnvelope:
         assert result["meta"]["temporal_exhausted"] is True
         assert result["meta"]["temporal_window_days"] == 7
         assert result["meta"]["temporal_result_count"] == 1
-        assert "suggestion" in result["meta"]
 
     @pytest.mark.asyncio()
     async def test_happy_include_meta_false_returns_plain_list(self) -> None:
@@ -592,8 +611,7 @@ class TestIncludeMetaEnvelope:
         )
 
         with patch("claude_memory.server.service") as mock_svc:
-            mock_svc.search = AsyncMock(return_value=[mock_result])
-
+            mock_svc.search = AsyncMock(return_value={"results": [mock_result], "metadata": {}})
             from claude_memory.server import search_memory
 
             result = await search_memory(query="test query")

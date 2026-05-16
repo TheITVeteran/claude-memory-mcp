@@ -5,6 +5,7 @@ import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 
+from claude_memory.schema import SearchMemoryParams
 from claude_memory.server import service
 
 logging.basicConfig(level=logging.INFO)
@@ -17,7 +18,8 @@ async def verify() -> None:
     # Test 1: Get Entity from Seed
     # Since we don't have direct get_by_name in service yet (only search), we use search
     logger.info("Test 1: Search for 'TestUser'")
-    results = await service.search("TestUser", limit=1)
+    results_env = await service.search(SearchMemoryParams(query="TestUser", limit=1))
+    results = results_env.get("results", [])
     if results:
         e = results[0]
         logger.info(f"✅ Found: {e.name} ({e.node_type}) - Score: {e.score}")
@@ -26,7 +28,8 @@ async def verify() -> None:
 
     # Test 2: Semantic Search (Hybrid)
     logger.info("Test 2: Semantic search for 'Director'")
-    results = await service.search("someone who directs", limit=5)
+    results_env = await service.search(SearchMemoryParams(query="someone who directs", limit=5))
+    results = results_env.get("results", [])
     found = any(r.name == "TestUser" for r in results)
     if found:
         logger.info("✅ Semantic search working (found TestUser for 'someone who directs')")

@@ -212,8 +212,8 @@ def _render_search_tab(service: MemoryService) -> None:
     query = st.text_input("Query")
     if query:
         params = SearchMemoryParams(query=query)
-        results = asyncio.run(service.search(params))  # nest_asyncio makes this safe
-        for res in results:
+        results_env = asyncio.run(service.search(params))  # nest_asyncio makes this safe
+        for res in results_env.get("results", []):
             with st.expander(f"{res.name} (Score: {res.score:.2f})"):
                 st.json(res)
 

@@ -131,8 +131,13 @@ class SearchAdvancedMixin:
         """
         logger.info("Generating Hologram for: %s", params.query)
 
-        # 1. Get Anchors
-        anchors = await self.search(SearchMemoryParams(query=params.query, limit=5))  # type: ignore[attr-defined]
+        # 1. Get Anchors — search() returns {"results": [...], "metadata": {...}}
+        search_response = await self.search(SearchMemoryParams(query=params.query, limit=5))  # type: ignore[attr-defined]
+
+        if isinstance(search_response, dict):
+            anchors = search_response.get("results", [])
+        else:
+            anchors = search_response
 
         if not anchors:
             return {"nodes": [], "edges": []}

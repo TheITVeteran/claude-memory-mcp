@@ -336,8 +336,13 @@ class SearchChannelsMixin:
         # (observations, relationships) is handled by _deep_hydrate_node.
         # depth=1 causes get_subgraph to fail on isolated nodes due to
         # UNWIND relationships(path) producing zero rows for unconnected nodes.
-        graph_data = await self.repo.get_subgraph(ids, depth=0)
-        nodes_map = {n["id"]: n for n in graph_data["nodes"]}
+        try:
+            graph_data = await self.repo.get_subgraph(ids, depth=0)
+            nodes_map = {n["id"]: n for n in graph_data["nodes"]}
+        except Exception:
+            logger.warning("Hydration failed, returning unhydrated nodes", exc_info=True)
+            graph_data = {"nodes": [], "edges": []}
+            nodes_map = {}
 
         # Fire-and-forget salience update
         self._fire_salience_update(ids)  # type: ignore[attr-defined]
@@ -349,9 +354,13 @@ class SearchChannelsMixin:
             if not node_props:
                 continue
 
-            observations, relationships = await self._deep_hydrate_node(
-                m.entity_id, graph_data, deep
-            )
+            try:
+                observations, relationships = await self._deep_hydrate_node(
+                    m.entity_id, graph_data, deep
+                )
+            except Exception:
+                logger.warning(f"Deep hydration failed for {m.entity_id}", exc_info=True)
+                observations, relationships = [], []
 
             # Determine retrieval strategy label
             if len(m.retrieval_sources) > 1:

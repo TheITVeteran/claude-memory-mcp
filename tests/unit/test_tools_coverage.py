@@ -103,10 +103,24 @@ def service() -> MemoryService:
 
     # Replace repo, vector_store, lock_manager with mocks
     svc.repo = AsyncMock()
-    svc.repo = AsyncMock()
-    svc.repo = AsyncMock()
+    svc.repo.get_subgraph.return_value = {"nodes": [], "edges": []}
     svc.vector_store = AsyncMock()
+    svc.fts_store = MagicMock()
+    svc.fts_store.search = MagicMock(return_value=[])
     svc.lock_manager = MagicMock()
+
+    # Soft routing defaults
+    svc.query_timeline = AsyncMock(return_value=[])
+    svc.traverse_path = AsyncMock(return_value=[])
+
+    # Reranker pass-through
+    svc.reranker = MagicMock()
+    svc.reranker.rerank = AsyncMock(side_effect=lambda q, c, **kw: c)
+
+    # Activation engine defaults
+    svc.activation_engine = MagicMock()
+    svc.activation_engine.activate = AsyncMock(return_value={})
+    svc.activation_engine.spread = AsyncMock(return_value={})
 
     # Lock context manager mock — supports both sync and async with
     mock_lock = MagicMock()
@@ -395,6 +409,9 @@ async def test_happy_traverse_path_with_nodes(service: MemoryService) -> None:
 
     service.repo.execute_cypher.return_value = _make_cypher_result([[mock_path]])
 
+    # Unmock traverse_path for this test
+    service.traverse_path = MemoryService.traverse_path.__get__(service)
+
     result = await service.traverse_path(TraversePathParams(from_id=ENTITY_ID, to_id=ENTITY_ID_2))
     assert len(result) == 2
     # Verify embedding was stripped
@@ -403,6 +420,7 @@ async def test_happy_traverse_path_with_nodes(service: MemoryService) -> None:
 
 async def test_sad4_traverse_path_no_path_found(service: MemoryService) -> None:
     service.repo.execute_cypher.return_value = _make_cypher_result([])
+    service.traverse_path = MemoryService.traverse_path.__get__(service)
 
     result = await service.traverse_path(TraversePathParams(from_id=ENTITY_ID, to_id=ENTITY_ID_2))
     assert result == []
@@ -412,6 +430,7 @@ async def test_sad5_traverse_path_no_nodes_attr(service: MemoryService) -> None:
     """When path object doesn't have .nodes attribute."""
     mock_path = MagicMock(spec=[])  # No attributes
     service.repo.execute_cypher.return_value = _make_cypher_result([[mock_path]])
+    service.traverse_path = MemoryService.traverse_path.__get__(service)
 
     result = await service.traverse_path(TraversePathParams(from_id=ENTITY_ID, to_id=ENTITY_ID_2))
     assert result == []
@@ -421,14 +440,18 @@ async def test_sad5_traverse_path_no_nodes_attr(service: MemoryService) -> None:
 
 
 async def test_sad6_search_empty_query(service: MemoryService) -> None:
-    result = await service.search(SearchMemoryParams(query="", limit=SEARCH_LIMIT))
+    _res = await service.search(SearchMemoryParams(query="", limit=SEARCH_LIMIT))
+    result = _res.get("results", []) if isinstance(_res, dict) else _res
     assert result == []
 
 
 async def test_sad7_search_no_vector_results(service: MemoryService) -> None:
     service.vector_store.search.return_value = []
+    service.repo.get_subgraph.return_value = {"nodes": [], "edges": []}
 
-    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    _res = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+
+    result = _res.get("results", []) if isinstance(_res, dict) else _res
     assert result == []
 
 
@@ -449,7 +472,9 @@ async def test_happy_search_with_results(service: MemoryService) -> None:
         "edges": [],
     }
 
-    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    _res = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+
+    result = _res.get("results", []) if isinstance(_res, dict) else _res
     assert len(result) == 1
     assert result[0].id == ENTITY_ID
     assert result[0].name == ENTITY_NAME
@@ -463,7 +488,9 @@ async def test_sad8_search_node_not_in_graph(service: MemoryService) -> None:
     ]
     service.repo.get_subgraph.return_value = {"nodes": [], "edges": []}
 
-    result = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+    _res = await service.search(SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT))
+
+    result = _res.get("results", []) if isinstance(_res, dict) else _res
     assert result == []
 
 
@@ -488,9 +515,10 @@ async def test_happy_search_with_project_id_filter(service: MemoryService) -> No
         "edges": [],
     }
 
-    result = await service.search(
+    _res = await service.search(
         SearchMemoryParams(query=SEARCH_QUERY, limit=SEARCH_LIMIT, project_id=PROJECT_ID)
     )
+    result = _res.get("results", []) if isinstance(_res, dict) else _res
     assert len(result) == 1
 
     # Verify filter was passed to vector_store.search

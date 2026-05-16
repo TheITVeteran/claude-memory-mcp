@@ -29,7 +29,7 @@ def router() -> QueryRouter:
 def mock_service() -> MagicMock:
     """MemoryService with all methods mocked."""
     svc = MagicMock()
-    svc.search = AsyncMock(return_value=[{"id": "sem-1"}])
+    svc.search = AsyncMock(return_value={"results": [{"id": "sem-1"}], "metadata": {}})
     svc.search_associative = AsyncMock(return_value=[{"id": "assoc-1"}])
     svc.query_timeline = AsyncMock(return_value=[{"id": "temp-1"}])
     svc.traverse_path = AsyncMock(return_value=[{"id": "rel-1"}])
@@ -297,7 +297,7 @@ class TestSearchStrategy:
             svc, SearchMemoryParams(query="what is Python", strategy="semantic")
         )
         svc._direct_strategy_search.assert_called_once()
-        assert len(result) == 1
+        assert len(result["results"]) == 1
 
     @pytest.mark.asyncio()
     async def test_happy_search_strategy_none_uses_hybrid_pipeline(self) -> None:
@@ -328,7 +328,7 @@ class TestSearchStrategy:
 
         # In ADR-007, strategy=None now uses router.classify()
         svc.router.classify.assert_called_once_with("test query")
-        assert len(result) == 1
+        assert len(result["results"]) == 1
 
     @pytest.mark.asyncio()
     async def test_happy_search_strategy_temporal_attaches_vector_scores(self) -> None:
@@ -353,8 +353,8 @@ class TestSearchStrategy:
         result = await SearchMixin.search(
             svc, SearchMemoryParams(query="timeline of events", strategy="temporal")
         )
-        assert len(result) == 1
-        assert result[0].retrieval_strategy == "temporal"
+        assert len(result["results"]) == 1
+        assert result["results"][0].retrieval_strategy == "temporal"
 
     @pytest.mark.asyncio()
     async def test_sad5_search_strategy_empty_query_returns_empty(self) -> None:
@@ -363,4 +363,4 @@ class TestSearchStrategy:
 
         svc = MagicMock()
         result = await SearchMixin.search(svc, SearchMemoryParams(query="", strategy="auto"))
-        assert result == []
+        assert result["results"] == []
