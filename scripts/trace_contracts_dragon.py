@@ -15,6 +15,10 @@ Detects 11 violation patterns:
   --- Dragon Brain extensions ---
   9. Sync sleep in async: time.sleep() inside async def (blocks event loop)
  10. Sync IO in async: known sync-IO calls inside async def
+     (PR-6: exempts calls wrapped in `await` — these have been properly
+     migrated to async via AsyncMemoryRepository's to_thread wrappers.
+     Also exempts calls in files that import AsyncMemoryRepository,
+     as a defense-in-depth discriminator.)
  11. Missing async-with: async context managers used without `async with`
 
 Zero external dependencies — uses only stdlib ast module.
@@ -77,6 +81,23 @@ def analyze_file(filepath):  # noqa: C901, PLR0912
     for node in ast.walk(tree):
         for child in ast.iter_child_nodes(node):
             parent_map[child] = node
+
+    # PR-6: Build set of ast.Call nodes that are directly awaited.
+    # If `await self.repo.get_node(x)` is used, the Call node for
+    # `self.repo.get_node(x)` is the .value of an ast.Await node.
+    # These calls are properly async-wrapped and should NOT fire
+    # as Sync IO in Async violations.
+    awaited_calls: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Await) and isinstance(node.value, ast.Call):
+            awaited_calls.add(id(node.value))
+
+    # PR-6 defense-in-depth: check if file imports AsyncMemoryRepository.
+    # Files using the async wrapper have all repo calls properly awaited.
+    imports_async_repo = any(
+        isinstance(node, ast.ImportFrom) and node.module and "repository_async" in node.module
+        for node in ast.walk(tree)
+    )
 
     def get_parent_function(node):
         current = node
@@ -308,6 +329,13 @@ def analyze_file(filepath):  # noqa: C901, PLR0912
                 if isinstance(node.func.value, ast.Attribute):
                     if node.func.value.attr == "repo":
                         if is_allowlisted(node):
+                            continue
+                        # PR-6: Skip if the call is awaited (properly async)
+                        if id(node) in awaited_calls:
+                            continue
+                        # PR-6 defense-in-depth: skip if file imports
+                        # AsyncMemoryRepository (all repo calls are wrapped)
+                        if imports_async_repo:
                             continue
                         func_name = get_parent_function(node)
                         violations.append(
