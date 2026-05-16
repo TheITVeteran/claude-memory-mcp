@@ -399,6 +399,46 @@ Dragon Brain is the first open-source memory system we know of with a CI-enforce
 
 Full gauntlet results: [docs/GAUNTLET_RESULTS.md](docs/GAUNTLET_RESULTS.md) · Trust boundaries: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · Integration tests: [tests/integration/test_db_kill_scenarios.py](tests/integration/test_db_kill_scenarios.py)
 
+### Round 2 (May 2026, v1.2.1) — The Adversarial Auditor
+
+Round 1 installed the contract that prevents silent failure. Round 2 added the auditor that catches the contract being violated.
+
+The AI Council formalized a four-seat trifecta:
+
+- **Architect** writes specs + audit criteria
+- **Builder** implements per spec
+- **Auditor** verifies per pre-defined criteria — independently of the builder
+- **Director** approves
+
+The auditor doesn't see the build recipe. Auditing recipes biases verification toward checkbox-following instead of outcome-achievement. The auditor sees the bug being fixed and the per-PR criteria; everything else they reconstruct from running the code themselves.
+
+**What the new auditor caught that 10 batches of prior Round 1 remediation missed:**
+
+- A **Cypher label injection** vector — unvalidated user input was being interpolated into a graph schema `MERGE` statement at `repository.py:90`
+- A **`point_in_time_query` silently returning wrong answers** — the temporal filter checked a Qdrant payload field that the writer never stored
+- A **temporal direction enum drift** — `forward`/`backward` parameter values silently fell through to the default branch because the repository only matched `before`/`after`
+
+Three real production bugs, in code that had already passed prior trifecta scrutiny. The auditor seat earned its keep on the first audit pass.
+
+**Plus a deterministic-tooling lesson reinforced:** the AST contract scanner caught 62 false-positive violations (properly-awaited async calls flagged because the scanner's heuristic didn't check the `await` keyword) that LLM eyeballing could never have enumerated. The audit protocol now mandates running deterministic tools (`tox -e contracts`, `mypy --strict`, `bandit`, `ruff`, `tox -e integration`) before any LLM reasoning. **LLM consensus ≠ correctness; deterministic tools are the fourth leg of the table.**
+
+**Full process artifacts public** in [`process/`](process/) as a worked example of the trifecta pattern in production:
+
+- [`process/REMEDIATION_BUILD_SPEC.md`](process/REMEDIATION_BUILD_SPEC.md) — builder-facing spec
+- [`process/REMEDIATION_AUDIT_SPEC.md`](process/REMEDIATION_AUDIT_SPEC.md) — auditor-facing spec
+- [`process/PR_1_HANDOFF.md`](process/PR_1_HANDOFF.md) through [`process/PR_6_HANDOFF.md`](process/PR_6_HANDOFF.md) — per-PR completion artifacts
+
+Includes the 6-round PR-5 saga where the auditor sent the builder back multiple times — for a test bug masking the actual scenario being tested, a scope-creep refactor that broke dashboard/scripts callers, and persistent handoff hygiene drift — before clean landing.
+
+### Updated Receipts (v1.2.1)
+
+- **1,278 unit tests** (up from 1,166) — 0 failures, integration tests passing under real-container `testcontainers` harness
+- **Contract scanner baseline: 13** (down from 75 — 62 false positives eliminated in PR-6's await-detection fix)
+- **Cross-store compensation symmetric** — both entity and observation create paths roll back graph writes on Qdrant failure
+- **Channel health observable** — `search_memory(include_meta=True).metadata.channels` exposes per-channel status (`healthy`/`degraded`/`failed`) across all 6 retrieval channels
+- **`point_in_time_query` actually works** — was producing wrong answers pre-v1.2.1; fixed via payload contract + backfill script
+- **Cypher injection vector closed** — `create_memory_type(name=...)` validates against a strict regex; defensive assert at the repository layer as belt-and-braces
+
 ## Why I Built This
 
 Claude is brilliant but forgets everything between conversations. Every new chat starts from scratch — no context, no continuity, no accumulated understanding. I wanted Claude to *remember* me: my projects, preferences, breakthroughs, and the connections between them. Not a flat chat history dump, but a living knowledge graph that grows richer over time.

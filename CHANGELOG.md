@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.2.1] - 2026-05-17
+
+The output of **Round 2** of Dragon Brain's adversarial audit arc. ChatGPT Codex 5.5 was added as a formal Auditor seat in the AI Council trifecta workflow (Architect / Builder / Auditor / Director). Codex independently caught three production bugs that 10 batches of the previous trifecta had missed across Round 1. See `process/` for the full worked example.
+
+### Fixed
+
+- **Cypher label injection vulnerability** in `create_memory_type` — memory type names now validated against `[A-Z][A-Za-z0-9_]{0,63}` regex before interpolation into Cypher labels. Closes graph-corruption-from-typo hazard. (PR-1)
+- **`point_in_time_query` was producing wrong answers** — Qdrant payload didn't store `created_at`, so the temporal filter silently returned everything or nothing depending on query. Now stores `created_at` at write time; `scripts/backfill_created_at_payload.py` repairs existing points (live-safe, zero-downtime, idempotent). (PR-2)
+- **`get_temporal_neighbors` silently wrong on `direction="forward"`/`"backward"`** — schema accepted these spellings but repository only branched on `before`/`after`, so non-matching values silently fell through to the default `"both"` query. All four spellings now produce semantically correct results as permanent aliases (`forward`=`after`, `backward`=`before`). (PR-3)
+- **`add_observation` cross-store partial writes** — graph write succeeded but Qdrant failure left orphan Observation nodes. Now mirrors the `create_entity` compensation pattern: Qdrant failure triggers graph rollback via `DETACH DELETE` + raises `SearchError`. (PR-4)
+- **Channel degradation hidden from MCP callers** — per-channel health (`vector`, `fts`, `entity`, `temporal`, `relational`, `associative`) was computed during search but discarded. Now surfaced through `search_memory(include_meta=True).metadata.channels` so callers can detect partial-result conditions. (PR-5)
+- **TOCTOU risk in shared search metadata** — concurrent `search_memory` calls could cross-contaminate metadata via `self._last_*` shared instance attributes. Per-call return shape eliminates the shared state entirely. (PR-5)
+- **Contract scanner false positives** — Pattern 10 ("Sync IO in Async") flagged properly-awaited `AsyncMemoryRepository` calls because the heuristic didn't check the `await` keyword. Scanner now correctly recognizes awaited calls; absolute baseline returns to 13 (down from 75). (PR-6)
+
+### Changed
+
+- **`MemoryService.search()` return shape** — now returns `{"results": [...], "metadata": {...}}` dict at the service layer for both channel metadata exposure and per-call isolation. MCP boundary (`server.search_memory`) preserves backward compatibility: callers with default `include_meta=False` continue to receive a plain list. Only direct service-layer callers see the dict change.
+- **`MemoryService.search()` signature** — now accepts `params: SearchMemoryParams` (Pydantic-validated) instead of positional/keyword args. Internal callers updated; MCP boundary unchanged for downstream agents.
+- **Contract scanner baseline:** 75 → 13 (62 false positives eliminated via PR-6's await-detection fix).
+- **Unit test suite:** 1,166 → 1,278 tests, 0 failures.
+
+### Added
+
+- **`scripts/backfill_created_at_payload.py`** — live-safe, idempotent script to backfill `created_at` payload field for existing Qdrant points. <2 min runtime on ~2228 points, zero service stop.
+- **`process/` directory** — internal AI Council coordination artifacts (build spec, audit spec, per-PR handoff docs) organized under a clearly-labeled subdirectory. See [`process/README.md`](process/README.md) for context. Public-facing as a worked example of the trifecta pattern; library users don't need to read any of it.
+- **Test-first discipline framework** in internal specs — each PR requires a 5-row test design table (3 evil + 1 sad + 1 neutral) with explicit pre-PR/post-PR behavior. Auditor independently verifies "TEST FAILS" rows by re-running tests against the pre-PR base commit.
+- **Pre-handoff sanity checklist** in internal specs — 9-item deterministic gate AG runs before submitting any PR for audit (commit hash, mypy, contracts, ruff, bandit, caller sweep, etc.).
+
 ## [Unreleased]
 
 ### Added

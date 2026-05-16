@@ -105,20 +105,46 @@ Add an observation (fact, note) linked to an entity.
 
 ### `search_memory`
 
-Search for entities using vector similarity. Supports strategy routing.
+Search for entities using vector similarity. Supports strategy routing and per-channel health metadata.
 
-| Param        | Type   | Default  |
-| ------------ | ------ | -------- |
-| `query`      | `str`  | required |
-| `project_id` | `str`  | `None`   |
-| `limit`      | `int`  | `10`     |
-| `offset`     | `int`  | `0`      |
-| `mmr`        | `bool` | `False`  |
-| `strategy`   | `str`  | `None`   |
+| Param                  | Type   | Default  | Description                                                       |
+| ---------------------- | ------ | -------- | ----------------------------------------------------------------- |
+| `query`                | `str`  | required | Search query                                                      |
+| `project_id`           | `str`  | `None`   | Scope to a single project                                         |
+| `limit`                | `int`  | `10`     | Max results                                                       |
+| `offset`               | `int`  | `0`      | Pagination offset                                                 |
+| `mmr`                  | `bool` | `False`  | Maximal Marginal Relevance reranking for result diversity         |
+| `strategy`             | `str`  | `None`   | Explicit channel routing — see below                              |
+| `temporal_window_days` | `int`  | `7`      | Lookback window for temporal queries                              |
+| `include_meta`         | `bool` | `False`  | Include `metadata` field with channel health + temporal exhaustion |
+| `deep`                 | `bool` | `False`  | Hydrate results with linked observations + relationships (E-2)    |
 
-**Strategy values:** `auto`, `semantic`, `associative`, `temporal`, `relational`
+**Strategy values:** `semantic`, `associative`, `temporal`, `relational`. Omit (default `None`) for hybrid search — vector + intent-detected graph enrichment, the recommended path. `strategy="auto"` is deprecated.
 
-**Returns:** `list[SearchResult]` — `{id, name, score, node_type, observations?, relationships?}`
+**Returns (default, `include_meta=False`):** `list[SearchResult]` — `{id, name, score, node_type, observations?, relationships?}`. Backward-compatible plain list shape for MCP callers.
+
+**Returns (`include_meta=True`):** `dict` —
+
+```python
+{
+    "results": list[SearchResult],
+    "metadata": {
+        "temporal_exhausted": bool,    # results may exist beyond temporal_window_days
+        "channels": {                  # per-channel health (v1.2.1+)
+            "vector":      "healthy" | "degraded" | "failed",
+            "fts":         "healthy" | "degraded" | "failed",
+            "entity":      "healthy" | "degraded" | "failed",
+            "temporal":    "healthy" | "degraded" | "failed",
+            "relational":  "healthy" | "degraded" | "failed",
+            "associative": "healthy" | "degraded" | "failed",
+        },
+    },
+}
+```
+
+> [!NOTE]
+> **v1.2.1:** Channel metadata is new. Pre-v1.2.1 only `temporal_exhausted` was surfaced.
+> Per-channel health was computed internally but discarded; a shared `_last_*` instance attribute also leaked metadata between concurrent calls (TOCTOU). Per-call dict return shape eliminates both.
 
 ### `search_associative`
 
@@ -215,7 +241,10 @@ Find entities connected by temporal edges.
 | `direction` | `str` | `"both"` |
 | `limit`     | `int` | `10`     |
 
-**Direction values:** `before`, `after`, `both`
+**Direction values:** `before` / `backward` (incoming temporal edges — the past), `after` / `forward` (outgoing temporal edges — the future), `both` (union, default).
+
+> [!NOTE]
+> **v1.2.1:** `forward` and `backward` are now permanent semantic aliases for `after` and `before`. Pre-v1.2.1, the schema accepted these spellings but the repository only branched on `before`/`after`, so `forward`/`backward` silently fell through to the default `both` query — a silent wrong-answer bug fixed in PR-3.
 
 **Returns:** `list[dict]` — temporal neighbors
 
@@ -247,6 +276,9 @@ Execute a search considering only knowledge known before `as_of`.
 | `as_of`      | `str` (ISO 8601) | required |
 
 **Returns:** `list[dict]` — results filtered by temporal cutoff
+
+> [!IMPORTANT]
+> **v1.2.1 bug fix:** This tool was producing wrong answers pre-v1.2.1. The Qdrant payload didn't store `created_at`, so the temporal filter at `vector_store.py` silently returned everything or nothing depending on query. Fixed in PR-2: payload now stores `created_at` at write time; `scripts/backfill_created_at_payload.py` repairs existing points (live-safe, zero-downtime, idempotent). If you operated a Dragon Brain instance pre-v1.2.1, run the backfill once after upgrade.
 
 ### `diff_knowledge_state`
 
@@ -431,6 +463,14 @@ Register a new memory type in the ontology.
 | `name`                | `str`       | required |
 | `description`         | `str`       | required |
 | `required_properties` | `list[str]` | `None`   |
+
+**Name validation (v1.2.1+):** `name` is validated against `[A-Z][A-Za-z0-9_]{0,63}` — must start with an uppercase letter, alphanumeric + underscore only, max 64 chars. Invalid names raise `ValidationError` at the MCP boundary.
+
+Examples accepted: `Entity`, `MemoryType`, `Concept_v2`, `A`.
+Examples rejected: `entity` (lowercase start), `Memory Type` (space), `Entity { x: 1}` (Cypher syntax), empty string.
+
+> [!IMPORTANT]
+> **v1.2.1 security fix:** Pre-v1.2.1, `name` was interpolated directly into a Cypher `MERGE (n:{name}:Entity ...)` query without validation. A malformed memory type name could corrupt the graph schema (Cypher injection / graph-corruption-from-typo). Fixed in PR-1: Pydantic validator at the MCP boundary as primary defense, defensive `assert` at the repository layer as belt-and-braces.
 
 **Returns:** `dict` — `{name, description, required_properties}`
 
