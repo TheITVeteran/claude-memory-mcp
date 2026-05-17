@@ -315,3 +315,80 @@ The system at Phase 3 completion had:
 | `sys.path.append` hack in dashboard      | **Removed** — package installed via pip     |
 | `app.py` monolithic `main()` (C901)      | **Extracted** 4 renderer functions          |
 | Globals undocumented in `tools_extra.py` | **Documented** with module-level docstrings |
+
+---
+
+## Audit Remediation Round 2 (May 13-17, 2026, v1.2.0 → v1.2.1)
+
+Codex 5.5 added as a formal **Auditor seat** in the AI Council trifecta. Codex independently caught three production bugs the prior trifecta (Architect + Builder only) missed across 10 batches of Round 1 remediation. Full process docs in `process/`.
+
+### PR-1: Cypher Label Injection Guard (`56f888d`)
+
+| Before                                                                       | After                                                                                          |
+| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `MERGE (n:{label}:Entity ...)` interpolated unvalidated user input           | **Pydantic validator** on `CreateMemoryTypeParams.name` — regex `[A-Z][A-Za-z0-9_]{0,63}`      |
+| No defense-in-depth at repo layer                                            | **Defensive `assert`** on `label` in `repository.create_node` — catches future-bypass paths    |
+| Memory type names could corrupt graph schema silently                        | Invalid names raise `ValidationError` at MCP boundary; `AssertionError` at repo on direct call |
+
+### PR-2: Point-in-Time `created_at` Payload Contract (`1489886`)
+
+| Before                                                                | After                                                                                            |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `point_in_time_query` filtered Qdrant on `created_at` field           | **`created_at` written to payload** at all three sites (create_entity, add_observation, re-embed) |
+| Qdrant payload only had `name`, `node_type`, `project_id`             | Existing points repaired via `scripts/backfill_created_at_payload.py`                            |
+| Filter silently returned wrong answers (everything or empty)          | Live-safe, zero-downtime, idempotent backfill (~2228 points in <2 min)                           |
+
+### PR-3: Temporal Direction Enum Drift (`21b097a`)
+
+| Before                                                                | After                                                                                  |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Schema accepted `forward`/`backward`/`both`                           | Schema accepts `before`/`after`/`both`/`forward`/`backward` — all four spellings first-class |
+| Repo only branched on `before`/`after` — others fell through to "both" | Repo treats `before`=`backward` (past) and `after`=`forward` (future) as semantic equivalents |
+| `direction="forward"` was a silent wrong-answer bug                   | No DeprecationWarning, no churn — both naming conventions accepted permanently         |
+
+### PR-4: Observation Cross-Store Compensation (`e3a1ca8`)
+
+| Before                                                                | After                                                                                  |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `add_observation` graph-write success + Qdrant failure → orphan obs   | **Qdrant failure triggers graph `DETACH DELETE`** + raises `SearchError`               |
+| Asymmetric with `create_entity` (which DID compensate)                | Now symmetric — same pattern, same `SearchError` class, same log message format        |
+| Integration tests didn't exercise Qdrant-kill-mid-`add_observation`   | New `test_kill_qdrant_mid_add_observation_compensates` with real `container.kill()`    |
+
+### PR-5: Channel Degradation Surfaced Through MCP (`d1f2bd2` → `dd26413`)
+
+| Before                                                                | After                                                                                  |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Per-channel health computed but discarded                             | **`search_memory(include_meta=True).metadata.channels`** exposes all 6 channels        |
+| Shared `self._last_*` instance attrs (TOCTOU between concurrent calls) | **Per-call dict return shape** — no shared state, no crosstalk                         |
+| `MemoryService.search()` returned `list[SearchResult]`                | Service returns `dict` with `results` + `metadata`; MCP boundary strips when `include_meta=False` |
+| All internal callers used positional args                             | Service signature: `params: SearchMemoryParams` (Pydantic); ~10 internal sites updated |
+| 6 audit rounds to clear (caught real defects: test bug, scope creep, dashboard breakage) | Final clean landing with full test-first evidence + complete caller sweep              |
+
+### PR-6: Contract Scanner Precision (`e1e0318`)
+
+| Before                                                                | After                                                                                  |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Pattern 10 flagged `self.repo.X(...)` inside async def without checking `await` | **Await-detection** — `awaited_calls` set built from AST; awaited calls exempt from Pattern 10 |
+| 62 false positives from properly-migrated B10 wrapper calls           | Scanner reports actual baseline: **13 violations** (down from 75)                      |
+| CI gate silently failing since B10                                    | CI gate green at absolute baseline 13                                                  |
+| PR-4 also added `is_allowlisted(node)` honoring (out-of-spec scope creep, accepted) | Both mechanisms coexist: manual noqa markers + automatic await detection               |
+
+### Cumulative changes (Round 2)
+
+| Metric                      | Round 1 close (v1.2.0) | Round 2 close (v1.2.1) |
+| --------------------------- | ---------------------- | ---------------------- |
+| Unit tests                  | 1,166                  | 1,278                  |
+| Integration tests           | 5                      | 7 (added PIT + observation compensation) |
+| Contract scanner violations | 75 (with 62 FPs)       | 13 (true baseline)     |
+| MCP tools                   | 34                     | 34 (no new tools; behavior fixes) |
+| Process artifacts location  | root                   | `process/`             |
+| AI Council seats formalized | 3 (Architect/Builder/Director) | 4 (+ Auditor)  |
+
+### New scripts
+
+- `scripts/backfill_created_at_payload.py` — one-shot live-safe backfill for PR-2's Qdrant payload contract change
+
+### Files reorganized
+
+- `REMEDIATION_BUILD_SPEC.md`, `REMEDIATION_AUDIT_SPEC.md`, `PR_1_HANDOFF.md` through `PR_6_HANDOFF.md` moved from repo root into `process/`
+- New `process/README.md` explaining the directory and the AI Council trifecta workflow

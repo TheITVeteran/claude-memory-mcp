@@ -54,9 +54,59 @@ If you hit `MEMORY_LAYER_DEGRADED`, the memory layer is broken — don't assume 
 - **Architecture:** `docs/ARCHITECTURE.md` (B9 deliverable) — trust boundary diagram + per-boundary contracts.
 - **Curriculum:** the patterns this audit applied — shape vs contract, behavioral contract tests, sub-batching discipline, tests-enforcing-bugs — are documented in operator's COMMANDNODE Code Literacy Layer 3.5. Not portable to public consumers; reference for operator-internal sessions only.
 
+## Audit Remediation Round 2 (May 13–17, 2026, v1.2.1)
+
+Round 1 (above) installed the SearchError contract and the `tox -e contracts` CI gate. Round 2 added an **adversarial Auditor seat** to the AI Council trifecta — ChatGPT Codex 5.5 — and proved its value end-to-end.
+
+### What the Auditor caught that Round 1 missed
+
+The previous trifecta (Claude as Architect + Antigravity as Builder) shipped 10 batches of remediation across April-May 2026. Codex's pre-build audit caught three production bugs the prior arc missed entirely:
+
+- **Cypher label injection** at `repository.py:90` — `MERGE (n:{label}:Entity ...)` interpolated unvalidated user input. Fixed in PR-1.
+- **Point-in-time `created_at` payload drift** — `search.py:187` filtered Qdrant on a field that `crud.py:136` never wrote. `point_in_time_query` was silently returning wrong answers. Fixed in PR-2.
+- **Temporal direction enum drift** — `schema.py:338` accepted `forward`/`backward` but `repository_queries.py:82` only matched `before`/`after`, silently routing unrecognized values to the default "both" branch. Fixed in PR-3.
+
+Plus three architectural improvements the audit drove:
+- Observation cross-store compensation symmetric with `create_entity` (PR-4)
+- Channel degradation observability through the MCP boundary (PR-5)
+- Contract scanner await-detection eliminating 62 false positives (PR-6)
+
+### The trifecta workflow (formalized)
+
+| Seat | Function |
+|------|----------|
+| **Director** | Strategy, final approval, calibration anchor |
+| **Architect** | Specs, audit guidelines, principles docs (this file, ARCHITECTURE.md, Code Literacy curriculum) |
+| **Builder** | Per-spec implementation. No editorial authority on principles documents |
+| **Auditor** | Adversarial verification per pre-defined criteria |
+
+**Audit-guidelines-before-build:** Auditor's criteria are written by the Architect *before* the Builder starts. The Auditor does not see the build recipe — outcomes, not recipes. Auditing the recipe biases verification toward checkbox-following instead of outcome-achievement.
+
+**Deterministic-tooling-as-fourth-leg:** LLM consensus ≠ correctness. The arc reaffirmed this — `scripts/trace_contracts_dragon.py` (AST contract scanner) caught 62 false-positive violations that LLM eyeballing could not have enumerated. Audit protocol now requires running deterministic tools BEFORE any LLM reasoning.
+
+### New API behavior (v1.2.1)
+
+User-facing changes from this arc:
+
+- `search_memory(include_meta=True)` now includes `metadata.channels` with per-channel health (`vector`, `fts`, `entity`, `temporal`, `relational`, `associative`). See "How to Search" → "Channel Health" below.
+- `get_temporal_neighbors(direction=...)` accepts all four spellings as permanent aliases: `before`=`backward`, `after`=`forward`, plus `both`. Previous silent-wrong-answer behavior is fixed.
+- `create_memory_type(name=...)` validates the name against `[A-Z][A-Za-z0-9_]{0,63}`. Invalid names raise `ValidationError` at the MCP boundary.
+- `point_in_time_query` now actually works as documented (was producing wrong answers pre-v1.2.1).
+- `add_observation` now compensates the graph write on Qdrant failure, matching `create_entity`'s pattern. No more graph-only orphan observations on infrastructure failure.
+
+### Where to dig deeper
+
+Full process artifacts public in [`process/`](process/):
+
+- [`process/REMEDIATION_BUILD_SPEC.md`](process/REMEDIATION_BUILD_SPEC.md) — builder-facing spec with per-PR concrete fix steps, test design tables, pre-handoff sanity checklist
+- [`process/REMEDIATION_AUDIT_SPEC.md`](process/REMEDIATION_AUDIT_SPEC.md) — auditor-facing spec with protocol, trigger semantics, scope rules
+- [`process/PR_1_HANDOFF.md`](process/PR_1_HANDOFF.md) through [`process/PR_6_HANDOFF.md`](process/PR_6_HANDOFF.md) — per-PR completion artifacts with tool outputs and per-criterion evidence
+
+The arc is documented as-shipped, including the 6-round PR-5 saga where the audit caught real defects (test bug masking the actual scenario, scope-creep refactor breaking dashboard/scripts callers, hash hygiene drift) before any could merge.
+
 ## What This Is
 
-A persistent memory system for AI agents. Knowledge graph (FalkorDB) + vector search (Qdrant) + MCP server. Any MCP-compatible client can store entities, observations, and relationships — then recall them semantically across sessions. Published on PyPI as `dragon-brain`. **v1.2.0 — 100% recall@5 on LongMemEval (ICLR 2025), no LLM required.**
+A persistent memory system for AI agents. Knowledge graph (FalkorDB) + vector search (Qdrant) + MCP server. Any MCP-compatible client can store entities, observations, and relationships — then recall them semantically across sessions. Published on PyPI as `dragon-brain`. **v1.2.1 — 100% recall@5 on LongMemEval (ICLR 2025), no LLM required.**
 
 ## Current Architecture
 
@@ -131,6 +181,30 @@ search_memory(query="recent work", include_meta=True)
 
 If the response includes `"temporal_exhausted": true`, widen the window for more history.
 
+### Channel Health (v1.2.1+)
+
+When you pass `include_meta=True`, the response also includes per-channel health for all 6 retrieval channels:
+
+```python
+result = search_memory(query="recent work", include_meta=True)
+# result["metadata"]["channels"] →
+# {
+#   "vector":      "healthy",
+#   "fts":         "failed",      # FTS DB unreachable
+#   "entity":      "healthy",
+#   "temporal":    "healthy",
+#   "relational":  "healthy",
+#   "associative": "degraded",
+# }
+```
+
+Channel statuses:
+- `"healthy"` — channel returned results normally
+- `"degraded"` — channel completed but with reduced quality (timeout fallback, partial result, etc.)
+- `"failed"` — channel infrastructure unavailable (FTS DB down, Qdrant unreachable, embedding service crashed, etc.)
+
+**Why it matters:** if FTS is down, your search returns only vector results — partial coverage that may miss keyword matches. The metadata tells you when to retry vs when to trust the result set. Pre-v1.2.1 this signal was computed internally but discarded before reaching callers (a shared-state TOCTOU bug also lurked there — fixed by per-call return shape).
+
 ### Understanding Results
 
 Each result includes:
@@ -156,6 +230,8 @@ create_entity(name="Project Alpha", node_type="Entity", project_id="my-project")
 ```
 
 Common node types: `Entity`, `Concept`, `Session`, `Breakthrough`, `Tool`, `Decision`, `Bottle`, `Analogy`, `Issue`, `Project`, `Procedure`, `Person`
+
+**Custom memory type name validation (v1.2.1+):** Custom types created via `create_memory_type(name=...)` are validated against `[A-Z][A-Za-z0-9_]{0,63}` — must start with an uppercase letter, alphanumeric + underscore only, max 64 chars. Invalid names raise `ValidationError` at the MCP boundary. Closes a Cypher injection / graph-corruption-from-typo vector (PR-1).
 
 ### Observations (Facts About Things)
 
@@ -249,6 +325,16 @@ Full results: [benchmarks/longmemeval/RESULTS.md](benchmarks/longmemeval/RESULTS
 | `diff_knowledge_state(as_of_start, as_of_end)` | "What changed between two dates?" — added/removed/evolved entities and relationships |
 | `start_session(project_id, focus)` | Begin a tracked session |
 | `end_session(session_id, summary)` | Close a session with outcomes |
+
+### Direction Aliases (v1.2.1+)
+
+`get_temporal_neighbors(direction=...)` accepts four spellings as permanent semantic equivalents:
+
+- `"before"` = `"backward"` — entities connected by incoming temporal edges (the past)
+- `"after"` = `"forward"` — entities connected by outgoing temporal edges (the future)
+- `"both"` — union (default)
+
+Pre-v1.2.1, only `before` / `after` / `both` produced correct results; `forward` / `backward` silently fell through to the default "both" branch — a silent wrong-answer bug fixed in PR-3. Both naming conventions now first-class.
 
 ### Time Diff
 

@@ -118,7 +118,6 @@ gold_stack_run.log
 gauntlet_drift_check.log
 # Working artifacts (not part of the project)
 SPEC-*.md
-release_notes.md
 social_preview*.png
 graph.html
 test_dynamic_ontology.json
