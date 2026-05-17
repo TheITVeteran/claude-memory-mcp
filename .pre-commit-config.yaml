@@ -28,3 +28,13 @@ repos:
       - id: detect-secrets
         args: ["--baseline", ".secrets.baseline"]
         exclude: package.lock.json
+
+  - repo: local
+    hooks:
+      - id: inject-handoff-hash
+        name: Inject HEAD hash into PR handoff docs
+        entry: python scripts/hooks/inject_handoff_hash.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [commit]
