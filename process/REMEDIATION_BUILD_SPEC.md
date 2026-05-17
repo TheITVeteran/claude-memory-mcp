@@ -369,7 +369,6 @@ Sequential build. Each PR independently auditable, independently mergeable. Afte
 
 **Handoff doc diff hygiene:** The "diff summary" section MUST list every file appearing in `git diff --name-only master..HEAD` — not just the files you intentionally changed. If `git add .` swept up an unrelated file (working-tree noise, spec docs, etc.), it shows up in the diff and must appear in the handoff. Codex independently runs the diff and flags omissions as Discoveries; missed listings are auditor friction, not silent — but cleaner to handle upstream.
 
-**Handoff doc commit hash hygiene:** The commit hash recorded in the handoff doc MUST match `git rev-parse HEAD` on the branch at the time of audit invocation. If you amend the commit (`git commit --amend`) or rebase after writing the handoff, **regenerate the handoff** with the new hash. Codex compares the doc's stated hash against `git log` and flags drift as a Discovery — not blocking, but indicates handoff was prepared against a stale state.
 
 **Pre-handoff sanity checklist (MANDATORY, run before writing `PR_N_HANDOFF.md`):**
 
