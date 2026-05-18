@@ -369,13 +369,12 @@ Sequential build. Each PR independently auditable, independently mergeable. Afte
 
 **Handoff doc diff hygiene:** The "diff summary" section MUST list every file appearing in `git diff --name-only master..HEAD` — not just the files you intentionally changed. If `git add .` swept up an unrelated file (working-tree noise, spec docs, etc.), it shows up in the diff and must appear in the handoff. Codex independently runs the diff and flags omissions as Discoveries; missed listings are auditor friction, not silent — but cleaner to handle upstream.
 
-**Handoff doc commit hash hygiene:** The commit hash recorded in the handoff doc MUST match `git rev-parse HEAD` on the branch at the time of audit invocation. If you amend the commit (`git commit --amend`) or rebase after writing the handoff, **regenerate the handoff** with the new hash. Codex compares the doc's stated hash against `git log` and flags drift as a Discovery — not blocking, but indicates handoff was prepared against a stale state.
 
 **Pre-handoff sanity checklist (MANDATORY, run before writing `PR_N_HANDOFF.md`):**
 
 Before declaring done, AG runs each of these in order and pastes evidence in a "Pre-handoff checklist" section at the top of the handoff doc. **If you can't paste evidence for any item, the PR isn't done — fix the gap before writing the handoff.** Codex independently verifies this section exists and is complete.
 
-1. **Commit hash:** Run `git rev-parse HEAD` — record the hash. Use this exact hash in the handoff. If you amend AFTER writing the handoff, regenerate the handoff with the new hash. Do not edit the handoff to "patch in" the new hash; regenerate from scratch.
+1. **Commit hash:** Write `**Commit:** <auto>` in the handoff doc's commit-hash field. The pre-commit hook at `scripts/hooks/inject_handoff_hash.py` will replace the placeholder with the actual HEAD hash (= the implementation commit being audited) at commit time. The handoff records the commit BEING AUDITED, not the handoff's own commit — this is the documented convention that resolves the chicken-and-egg hash-drift problem. **Do NOT manually edit the injected hash after commit.** If you amend the implementation commit, regenerate the handoff with `<auto>` and re-commit; the hook will re-inject.
 2. **Diff inventory:** Run `git diff --name-only master..HEAD` — paste output. Every file in the diff MUST also appear in the handoff's "Diff summary" section. No surprise files.
 3. **mypy --strict:** Run `python -m mypy --strict src/claude_memory` — paste output. MUST show "Success: no issues found in 40 source files." Zero errors. If errors appear, fix them; do not declare done with mypy failures.
 4. **Contract scanner:** Run `tox -e contracts` — paste output. Confirm violation count delta = 0 vs pre-PR baseline (PRs 1-5) OR absolute baseline 13 (PR-6 only).
