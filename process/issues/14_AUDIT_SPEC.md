@@ -77,25 +77,55 @@ python -m pytest tests/unit/test_memory_service.py -W error::RuntimeWarning -q
 
 Both must exit 0. These were the named PR-6 sites — if they still emit warnings, the fix is incomplete.
 
-### (d) Source-pattern audit (NOT warning-replay)
+### (d) Source-pattern audit (NOT warning-replay, with suppression check)
 
-**Important:** Runtime warning attribution is nondeterministic — `RuntimeWarning: coroutine never awaited` fires at GC time, not at the test that created the unawaited coroutine. Two pytest runs will attribute the same warnings to different sites. **Do not require AG's site list to match your replay's site list.** Verify via source pattern instead.
+**Important:** Runtime warning attribution is nondeterministic — `RuntimeWarning: coroutine never awaited` fires at GC time. **Do not require AG's site list to match your replay's site list.** Verify via source pattern + suppression-absence + empirical strict-gate cleanliness.
 
-The handoff doc MUST include a "Source-pattern audit" section — a table with every `MagicMock` call site in `tests/`, classified as async-target / sync-target / skipped-with-reason, and the action taken.
+**Three independent checks for this criterion:**
 
-Independently audit:
+**(d.1) Source-pattern audit completeness — per-site for async, batched for sync.**
+
+The handoff's "Source-pattern audit" section must include:
+- **Per-site classification** of every async-target candidate (with file:line, target, async-or-sync verdict, fix applied)
+- **Batched classification** of sync-target sites (acceptable to group by file + pattern with counts and justification)
+- **Total rg match count** that matches your independent `rg -n "MagicMock\(" tests/unit/ tests/lint/` count
+
+Verification:
+- Run the rg yourself. Note the total count.
+- Verify AG's total matches yours.
+- For the async-target list, spot-check 3-5 entries by reading the source — does the mocked target's actual definition match AG's async-or-sync verdict?
+- For the sync-target batches, spot-check 3-5 random sites — are they actually sync?
+
+Pass if total matches AND spot-checks confirm classifications. Fail with specifics if AG's count diverges or spot-check finds misclassification.
+
+**(d.2) No GC-suppression / warning-filter masking.**
+
+Suppression of the warning is a forbidden anti-pattern (per the build spec's Out of Scope section). Verify AG didn't smuggle in a suppression mechanism:
 
 ```bash
-rg -n "MagicMock\(" tests/unit/ tests/lint/
+# Check conftest.py for warning-suppression fixtures
+rg -n "filterwarnings|simplefilter|RuntimeWarning|catch_warnings|warnings\.simplefilter" tests/unit/conftest.py tests/conftest.py 2>/dev/null
+
+# Check for autouse fixtures involving gc.collect or warning handling
+rg -n "autouse=True" tests/unit/conftest.py tests/conftest.py 2>/dev/null
 ```
 
-Cross-check against AG's handoff table:
+If a fixture suppresses, filters, or otherwise hides `RuntimeWarning` without fixing the underlying mock, mark as FAIL with "Forbidden suppression mechanism at [file:line]." The fix must be at source level (MagicMock → AsyncMock), not at runtime suppression.
 
-- Every rg match must appear in AG's table (no missed sites)
-- For each match, verify AG's async-vs-sync classification by reading the mocked target's definition (look at the actual method/function the mock represents)
-- For every async-target classification, verify the fix was actually applied (the source line should now use `AsyncMock` or equivalent)
+The `filterwarnings = ["error::RuntimeWarning"]` config in `pyproject.toml` is NOT a suppression mechanism — it's the strict-gate config that escalates warnings to errors. That stays. Suppression means catching/ignoring/hiding the warning.
 
-Mark as FAIL with "Missed sites: [list]" or "Misclassified: [list with corrections]" if any gaps. Also independently verify by running the strict-gate suite — if `pytest tests/unit/ -W error::RuntimeWarning -q` exits 0 AND stdout/stderr contain zero `"RuntimeWarning: coroutine"` substrings AND zero `"PytestUnraisableExceptionWarning"` substrings, the fix is complete. Use stdout/stderr substring scanning, NOT exit code alone, because pytest wraps unraisable warnings and exits 0 regardless.
+**(d.3) Strict-gate empirical cleanliness.**
+
+Run the strict-gate suite and scan for sentinel strings:
+
+```bash
+python -m pytest tests/unit/ -W error::RuntimeWarning -v 2>&1 \
+    | grep -E "RuntimeWarning: coroutine|PytestUnraisableExceptionWarning"
+```
+
+This MUST return zero matches. If any line matches, AG didn't fix all sites — mark as FAIL with the matched line(s) as evidence.
+
+**All three sub-checks (d.1, d.2, d.3) must pass for criterion (d) to pass.**
 
 ### (e) Lint suite exists with required tests
 

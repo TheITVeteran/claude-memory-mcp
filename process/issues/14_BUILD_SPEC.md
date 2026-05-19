@@ -37,32 +37,65 @@ Codex flagged these in the PR-6 audit (v1.2.1 Round 2 remediation) as out-of-sco
 
 ## Concrete fix (no inference allowed)
 
-### Step 1 — Source-pattern audit (NOT warning-replay)
+### Step 1 — Source-pattern audit (NOT warning-replay, NOT GC suppression)
 
-**Important:** Runtime warning attribution is nondeterministic. The `RuntimeWarning: coroutine never awaited` fires at GC time, not at the test that created the unawaited coroutine. So two consecutive pytest runs will attribute the same set of warnings to DIFFERENT test sites depending on GC timing. This makes "list which tests emit warnings" an unsatisfiable audit criterion.
+**Important — read both warnings:**
 
-Use **source-pattern audit** instead — deterministic, file:line-stable, independent of runtime.
+1. **Warning attribution is GC-nondeterministic.** `RuntimeWarning: coroutine never awaited` fires at GC time, not at the test that created the unawaited coroutine. So "list which tests emit warnings" via runtime is an unsatisfiable audit criterion. Use deterministic source-pattern audit instead.
+2. **DO NOT add a conftest fixture, warning filter, or any other mechanism that SUPPRESSES the warnings without fixing the underlying mocks.** Suppression masks the bug; the unawaited coroutine still exists, the mock's behavior is still untested. The strict gate's job is to SEE the warnings until they're gone for real. Suppression = audit fail.
+
+**Source-pattern audit** is deterministic, file:line-stable, independent of runtime:
 
 ```bash
 rg -n "MagicMock\(" tests/unit/ tests/lint/
 ```
 
-For each match, read the surrounding code to determine: is the mocked target an async method/function? Three answers possible:
+**Classification with batching (large suite tolerated):**
 
-- **Async target → MUST FIX** (switch to `AsyncMock` per Step 2 patterns)
-- **Sync target → LEAVE ALONE** (MagicMock is correct for sync mocking; do not touch)
-- **Unclear → escalate per Round 5 discipline** (re-spec or get human review)
+If your test suite has hundreds of `MagicMock` sites (Dragon Brain has ~503), per-site classification is onerous and unnecessary. Use this hybrid approach:
 
-Paste the FULL rg output in your handoff under "Source-pattern audit" with one row per match:
+- **Per-site classification for async-target candidates.** Any site where the mocked target MIGHT be async — list it explicitly with file:line, target name, async-or-sync verdict, and fix applied.
+- **Batched classification for clearly-sync patterns.** Group sites by file + pattern (e.g., "test_foo.py: 42 occurrences of `MagicMock(spec=PydanticModelName)` — all sync Pydantic data class mocks, no fix needed"). Include a count.
+- **Summary count + spot checks** of pure-sync sites — Codex doesn't need per-site verification of every `MagicMock` mocking a `dict` or `int`.
 
-| file:line | Target | Async? | Action |
-|-----------|--------|--------|--------|
-| `tests/unit/test_tools_coverage.py:400` | `service.search` | YES (async def) | Fix to AsyncMock |
-| `tests/unit/test_memory_service.py:1754` | `repo.get_node` | YES (via AsyncMemoryRepository) | Fix to AsyncMock |
-| `tests/unit/test_foo.py:42` | `sync_helper` | NO | Skipped — sync target |
+Format your handoff's "Source-pattern audit" section:
+
+```markdown
+## Source-pattern audit
+
+**Total rg matches:** 503
+
+### Async-target sites (FIXED, per-site listing)
+
+| file:line | Target | Pre-fix | Post-fix |
+|-----------|--------|---------|----------|
+| `tests/unit/test_tools_coverage.py:400` | `service.search` (async) | `MagicMock(return_value=...)` | `AsyncMock(return_value=...)` |
 | ... | ... | ... | ... |
 
-Codex audits by independently running the same rg and cross-checking your classifications. Missed sites or wrong classifications = FAIL.
+### Async-target sites (UNCLEAR — escalated for re-spec)
+
+[any sites where async-vs-sync was ambiguous, escalated per Round 5]
+
+### Sync-target sites (batched, SKIPPED)
+
+| File | Pattern | Count | Justification |
+|------|---------|-------|---------------|
+| `tests/unit/test_foo.py` | `MagicMock(spec=FooModel)` (sync Pydantic) | 42 | All instances mock sync data class |
+| `tests/unit/test_bar.py` | `MagicMock()` for `int`/`str` return values | 18 | Sync return type |
+| ... | ... | ... | ... |
+```
+
+Codex audits by independently running the same rg, checking the async-target table for completeness, and spot-checking 5-10 sync-target batches for correctness. Missed async-target sites = FAIL.
+
+**Empirical verification (the canonical outcome check):**
+
+After fixes, run:
+
+```bash
+python -m pytest tests/unit/ -W error::RuntimeWarning -v 2>&1 | grep -E "RuntimeWarning: coroutine|PytestUnraisableExceptionWarning"
+```
+
+This must return ZERO matches. If even one match appears, an async-target site was missed. Iterate.
 
 ### Step 2 — Fix each warning site
 
@@ -248,6 +281,7 @@ The `test_sad_pytest_filterwarnings_config_present` test should be co-located in
 - Do NOT change the test count (preserve the existing 1,283 passing tests; mechanical fixes shouldn't add or remove tests). If a test needs to be SPLIT to fix, justify in handoff.
 - Do NOT add new dependencies — `AsyncMock` is in stdlib `unittest.mock`.
 - Do NOT bundle other warning-cleanup work (e.g., DeprecationWarning) — strict `error::RuntimeWarning` only, per issue #14 scope.
+- **Do NOT add conftest fixtures, warning filters, GC-control mechanisms, or any other tool that SUPPRESSES the warning without fixing the underlying MagicMock-on-async sites.** Suppression masks the bug; the unawaited coroutine still exists. The audit verifies the strict gate emits ZERO warning sentinels in stdout/stderr — if you suppress, you'll either still leak warnings (criterion failure) OR pass the gate fraudulently (which Codex will catch via source-pattern audit). The only correct fix is at the source — `MagicMock` → `AsyncMock` for async targets.
 
 ## Round 5 discipline reminder
 
