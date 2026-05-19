@@ -37,15 +37,32 @@ Codex flagged these in the PR-6 audit (v1.2.1 Round 2 remediation) as out-of-sco
 
 ## Concrete fix (no inference allowed)
 
-### Step 1 — Find the actual scope
+### Step 1 — Source-pattern audit (NOT warning-replay)
 
-Run the strict-warning gate first to enumerate everything:
+**Important:** Runtime warning attribution is nondeterministic. The `RuntimeWarning: coroutine never awaited` fires at GC time, not at the test that created the unawaited coroutine. So two consecutive pytest runs will attribute the same set of warnings to DIFFERENT test sites depending on GC timing. This makes "list which tests emit warnings" an unsatisfiable audit criterion.
+
+Use **source-pattern audit** instead — deterministic, file:line-stable, independent of runtime.
 
 ```bash
-python -m pytest tests/unit/ -W error::RuntimeWarning -q --tb=line 2>&1 | tee /tmp/async_warnings_audit.txt
+rg -n "MagicMock\(" tests/unit/ tests/lint/
 ```
 
-This will produce a list of every test that emits a `RuntimeWarning` escalated to an error. The two known sites from PR-6 (`test_tools_coverage.py:400`, `test_memory_service.py:1754`) are likely NOT the only ones — capture the full list before starting fixes. Paste the full list in your handoff under "Pre-PR scope inventory" so Codex can verify completeness.
+For each match, read the surrounding code to determine: is the mocked target an async method/function? Three answers possible:
+
+- **Async target → MUST FIX** (switch to `AsyncMock` per Step 2 patterns)
+- **Sync target → LEAVE ALONE** (MagicMock is correct for sync mocking; do not touch)
+- **Unclear → escalate per Round 5 discipline** (re-spec or get human review)
+
+Paste the FULL rg output in your handoff under "Source-pattern audit" with one row per match:
+
+| file:line | Target | Async? | Action |
+|-----------|--------|--------|--------|
+| `tests/unit/test_tools_coverage.py:400` | `service.search` | YES (async def) | Fix to AsyncMock |
+| `tests/unit/test_memory_service.py:1754` | `repo.get_node` | YES (via AsyncMemoryRepository) | Fix to AsyncMock |
+| `tests/unit/test_foo.py:42` | `sync_helper` | NO | Skipped — sync target |
+| ... | ... | ... | ... |
+
+Codex audits by independently running the same rg and cross-checking your classifications. Missed sites or wrong classifications = FAIL.
 
 ### Step 2 — Fix each warning site
 
@@ -210,7 +227,7 @@ The `test_sad_pytest_filterwarnings_config_present` test should be co-located in
 - (a) `pyproject.toml` (or equivalent) has `filterwarnings = ["error::RuntimeWarning"]` in pytest config
 - (b) Full unit suite runs clean under that config: `python -m pytest tests/unit/ -q` exits 0
 - (c) Specific PR-6 Discovery files demonstrably clean: `pytest tests/unit/test_tools_coverage.py tests/unit/test_memory_service.py -W error::RuntimeWarning -q` exits 0
-- (d) Pre-PR scope inventory pasted in handoff — all originally-flagged sites enumerated, all addressed
+- (d) Source-pattern audit complete — every `MagicMock` call site in `tests/` classified (async target / sync target / skipped with reason); every async-target site fixed to `AsyncMock` (or equivalent); Codex's independent rg + classification matches yours
 - (e) `tests/lint/test_async_warnings.py` exists with the 4 specified tests (3 evil + 1 sad); all pass against the new codebase
 - (f) `tox -e lint-warnings` runs the lint suite cleanly
 - (g) Test-first evidence: handoff includes verbatim pre-PR failure output for the 4 TEST FAILS rows

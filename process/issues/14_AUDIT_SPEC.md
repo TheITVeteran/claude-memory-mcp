@@ -77,19 +77,25 @@ python -m pytest tests/unit/test_memory_service.py -W error::RuntimeWarning -q
 
 Both must exit 0. These were the named PR-6 sites — if they still emit warnings, the fix is incomplete.
 
-### (d) Pre-PR scope inventory documented in handoff
+### (d) Source-pattern audit (NOT warning-replay)
 
-The handoff doc MUST include a "Pre-PR scope inventory" section listing EVERY warning site found via the initial strict-gate run against pre-PR base. The PR-6 Discovery only enumerated 2 sites; the actual scope is likely higher.
+**Important:** Runtime warning attribution is nondeterministic — `RuntimeWarning: coroutine never awaited` fires at GC time, not at the test that created the unawaited coroutine. Two pytest runs will attribute the same warnings to different sites. **Do not require AG's site list to match your replay's site list.** Verify via source pattern instead.
 
-Independently replay against the pre-PR base (commit immediately before the implementation commit):
+The handoff doc MUST include a "Source-pattern audit" section — a table with every `MagicMock` call site in `tests/`, classified as async-target / sync-target / skipped-with-reason, and the action taken.
+
+Independently audit:
 
 ```bash
-git worktree add ../audit-14-base <pre-pr-commit>
-cd ../audit-14-base
-python -m pytest tests/unit/ -W error::RuntimeWarning -q --tb=line 2>&1 | tee /tmp/audit_14_scope.txt
+rg -n "MagicMock\(" tests/unit/ tests/lint/
 ```
 
-Count the unique warning sites in your output. Compare to AG's handoff inventory. If AG missed sites, mark as FAIL with "Incomplete scope inventory: AG missed [list]."
+Cross-check against AG's handoff table:
+
+- Every rg match must appear in AG's table (no missed sites)
+- For each match, verify AG's async-vs-sync classification by reading the mocked target's definition (look at the actual method/function the mock represents)
+- For every async-target classification, verify the fix was actually applied (the source line should now use `AsyncMock` or equivalent)
+
+Mark as FAIL with "Missed sites: [list]" or "Misclassified: [list with corrections]" if any gaps. Also independently verify by running the strict-gate suite — if `pytest tests/unit/ -W error::RuntimeWarning -q` exits 0 AND stdout/stderr contain zero `"RuntimeWarning: coroutine"` substrings AND zero `"PytestUnraisableExceptionWarning"` substrings, the fix is complete. Use stdout/stderr substring scanning, NOT exit code alone, because pytest wraps unraisable warnings and exits 0 regardless.
 
 ### (e) Lint suite exists with required tests
 

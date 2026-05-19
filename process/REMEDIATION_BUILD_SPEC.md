@@ -374,7 +374,20 @@ Sequential build. Each PR independently auditable, independently mergeable. Afte
 
 Before declaring done, AG runs each of these in order and pastes evidence in a "Pre-handoff checklist" section at the top of the handoff doc. **If you can't paste evidence for any item, the PR isn't done — fix the gap before writing the handoff.** Codex independently verifies this section exists and is complete.
 
-1. **Commit hash:** Write `**Commit:** <auto>` in the handoff doc's commit-hash field. The pre-commit hook at `scripts/hooks/inject_handoff_hash.py` will replace the placeholder with the actual HEAD hash (= the implementation commit being audited) at commit time. The handoff records the commit BEING AUDITED, not the handoff's own commit — this is the documented convention that resolves the chicken-and-egg hash-drift problem. **Do NOT manually edit the injected hash after commit.** If you amend the implementation commit, regenerate the handoff with `<auto>` and re-commit; the hook will re-inject.
+1. **Commit hash:** Write `**Commit:** <auto>` in the handoff doc's commit-hash field. The pre-commit hook at `scripts/hooks/inject_handoff_hash.py` will replace the placeholder with the actual HEAD hash (= the implementation commit being audited) at commit time. The handoff records the commit BEING AUDITED, not the handoff's own commit — this is the documented convention that resolves the chicken-and-egg hash-drift problem.
+
+   **CRITICAL — two-commit topology required.** For the hook to record the IMPLEMENTATION commit (not whatever happened to be HEAD before your branch started), your PR branch MUST have at least two commits:
+
+   ```
+   commit A: implementation only (source code, tests, configs)
+   commit B: handoff doc only — **Commit:** <auto> placeholder, hook injects A's hash
+   ```
+
+   If you bundle implementation + handoff into a single commit, the hook fires pre-commit when HEAD is whatever master state preceded your branch (often a spec commit, not your implementation). That hash gets injected — wrong target. Codex will catch this and fail the audit.
+
+   The two-commit pattern also makes audit cleaner: Codex sees `HEAD` (handoff) and `HEAD~1` (implementation) and audits the latter.
+
+   **Do NOT manually edit the injected hash after commit.** If you amend the implementation commit, regenerate the handoff with `<auto>` and re-commit; the hook will re-inject correctly.
 2. **Diff inventory:** Run `git diff --name-only master..HEAD` — paste output. Every file in the diff MUST also appear in the handoff's "Diff summary" section. No surprise files.
 3. **mypy --strict:** Run `python -m mypy --strict src/claude_memory` — paste output. MUST show "Success: no issues found in 40 source files." Zero errors. If errors appear, fix them; do not declare done with mypy failures.
 4. **Contract scanner:** Run `tox -e contracts` — paste output. Confirm violation count delta = 0 vs pre-PR baseline (PRs 1-5) OR absolute baseline 13 (PR-6 only).
