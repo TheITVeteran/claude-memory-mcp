@@ -1,0 +1,16 @@
+# Per-issue write-guard config consumed by scripts/hooks/branch_write_guard.py
+# See process/issues/14_BUILD_SPEC.md and process/issues/14_AUDIT_SPEC.md for context.
+#
+# Topographical Forcing layer (per Deepthink consult, 2026-05-20):
+# Physically denies write access to paths the Builder might reach for as
+# shortest-path escape routes. The Architect identified these specific paths
+# based on the documented failure pattern (warning-suppression masking via
+# conftest fixtures during prior audit rounds).
+
+[issue-14]
+denied_paths = [
+    "tests/unit/conftest.py",
+    "tests/conftest.py",
+    "pytest.ini",
+]
+rationale = "Issue #14 requires source-level MagicMock -> AsyncMock fixes in the specific test files named in the per-file sub-issue specs. Modifying conftest.py risks adding warning-suppression fixtures (GC-collect autouse, filterwarnings, catch_warnings context) — these mask the symptom instead of fixing the underlying mocks. pyproject.toml's existing filterwarnings entry is allowlisted by being in a different file; modifying pytest.ini would be a new venue for the same anti-pattern. If a real test-infrastructure improvement is needed, escalate to Architect for spec revision."

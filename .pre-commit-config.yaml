@@ -38,3 +38,10 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [commit]
+      - id: branch-write-guard
+        name: Deny write access to denied paths on issue branches (per process/issues/N_HARNESS.toml)
+        entry: python scripts/hooks/branch_write_guard.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [commit]
