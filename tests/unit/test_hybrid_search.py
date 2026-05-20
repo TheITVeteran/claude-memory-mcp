@@ -27,6 +27,23 @@ NOW_ISO = datetime.now(UTC).isoformat()
 # ─── Fixtures ───────────────────────────────────────────────────────
 
 
+@pytest.fixture(autouse=True)
+def _drain_orphan_coroutines() -> None:
+    """Force GC after each test to drain orphan coroutines within test boundaries.
+
+    Without this, unawaited coroutines created by AsyncMock's internal
+    _execute_mock_call are reaped at session end, producing warnings.
+    Per-file fixture (branch write guard blocks conftest.py changes).
+    """
+    import gc
+    import warnings
+
+    yield
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        gc.collect()
+
+
 @pytest.fixture()
 def service():
     """MemoryService with all deps mocked."""
@@ -55,8 +72,8 @@ def service():
     svc.traverse_path = AsyncMock(return_value=[])
     svc.search_associative = AsyncMock(return_value=[])
     # Activation engine defaults
-    svc.activation_engine.activate = MagicMock(return_value={})
-    svc.activation_engine.spread = MagicMock(return_value={})
+    svc.activation_engine.activate = AsyncMock(return_value={})
+    svc.activation_engine.spread = AsyncMock(return_value={})
     return svc
 
 
@@ -81,6 +98,31 @@ def _graph_nodes(*ids: str) -> dict[str, Any]:
         ],
         "edges": [],
     }
+
+
+# ─── Topographical Forcing (architect-injected) ─────────────────────
+
+
+def test_meta_fixture_topology_required(service) -> None:
+    """Topographical forcing: activation_engine methods must be AsyncMock.
+
+    Architect-injected per process/issues/14c_BUILD_SPEC.md.
+    DO NOT remove or weaken this test.
+    """
+    from unittest.mock import AsyncMock
+
+    assert isinstance(service.repo, AsyncMock), (
+        "service.repo targets AsyncMemoryRepository (async) — must be AsyncMock"
+    )
+    assert isinstance(service.vector_store, AsyncMock), (
+        "service.vector_store has async methods — must be AsyncMock"
+    )
+    assert isinstance(service.activation_engine.activate, AsyncMock), (
+        "ActivationEngine.activate is async — must be AsyncMock"
+    )
+    assert isinstance(service.activation_engine.spread, AsyncMock), (
+        "ActivationEngine.spread is async — must be AsyncMock"
+    )
 
 
 # ═══════════════════════════════════════════════════════════════
