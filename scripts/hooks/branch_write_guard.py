@@ -38,7 +38,7 @@ import sys
 import tomllib
 from pathlib import Path
 
-ISSUE_BRANCH_PATTERN = re.compile(r"^issue-(\d+[a-z]?)(?:/|$)")
+ISSUE_BRANCH_PATTERN = re.compile(r"^issue-(\d+)[a-z]?(?:/|$)")
 
 
 def get_current_branch() -> str | None:
