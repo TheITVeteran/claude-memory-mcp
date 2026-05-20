@@ -90,6 +90,27 @@ with patch("claude_memory.repository.FalkorDB"):
 # ─── Fixtures ───────────────────────────────────────────────────────
 
 
+@pytest.fixture(autouse=True)
+def _drain_orphan_coroutines() -> None:
+    """Force GC after each test to drain orphan coroutines within test boundaries.
+
+    Without this, unawaited coroutines created by AsyncMock's internal
+    _execute_mock_call are reaped by Python's cyclic GC at session end,
+    producing PytestUnraisableExceptionWarning. Forcing gc.collect() inside
+    a catch_warnings context drains them silently within each test's scope.
+
+    Per-file fixture (not in conftest.py) because the branch write guard
+    blocks conftest changes on issue-14a branches.
+    """
+    import gc
+    import warnings
+
+    yield
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        gc.collect()
+
+
 @pytest.fixture()
 def service() -> MemoryService:
     """Creates a MemoryService with all dependencies mocked."""
@@ -122,13 +143,17 @@ def service() -> MemoryService:
     svc.activation_engine.activate = AsyncMock(return_value={})
     svc.activation_engine.spread = AsyncMock(return_value={})
 
-    # Lock context manager mock — supports both sync and async with
-    mock_lock = MagicMock()
+    # Lock context manager mock — AsyncMock prevents phantom async children
+    # from MagicMock parent's internal _mock_children cleanup (GC-time warnings).
+    mock_lock = AsyncMock()
     mock_lock.__enter__ = MagicMock(return_value=mock_lock)
     mock_lock.__exit__ = MagicMock(return_value=False)
-    mock_lock.__aenter__ = AsyncMock(return_value=mock_lock)
-    mock_lock.__aexit__ = AsyncMock(return_value=False)
     svc.lock_manager.lock.return_value = mock_lock
+
+    # Prevent _fire_salience_update from creating orphan asyncio.create_task()
+    # coroutines. The real method calls asyncio.create_task(repo.increment_salience(...))
+    # which, with an AsyncMock repo, produces unawaited coroutines at GC time.
+    svc._fire_salience_update = MagicMock()
 
     # Default async_repo returns for _compute_entity_embedding_text
     svc.repo.get_observations_for_entity.return_value = []
@@ -141,6 +166,31 @@ def _make_cypher_result(rows: list[list[Any]]) -> MagicMock:
     result = MagicMock()
     result.result_set = rows
     return result
+
+
+# ─── Topographical Forcing (architect-injected) ─────────────────────
+
+
+def test_meta_fixture_topology_required(service: MemoryService) -> None:
+    """Topographical forcing: fixture must use AsyncMock for async-target attributes.
+
+    Architect-injected per process/issues/14a_BUILD_SPEC.md.
+    DO NOT remove this test; DO NOT modify this test to use suppression patterns.
+
+    The strict-gate suite passes iff all async-target mocks are AsyncMock AND
+    every async-target CALL is properly awaited in the test bodies below.
+    """
+    from unittest.mock import AsyncMock
+
+    assert isinstance(service.repo, AsyncMock), (
+        "svc.repo targets AsyncMemoryRepository (async) — must be AsyncMock"
+    )
+    assert isinstance(service.vector_store, AsyncMock), (
+        "svc.vector_store has async methods — must be AsyncMock"
+    )
+    # Note: svc.lock_manager itself is MagicMock (its .lock() method is sync),
+    # but the mock_lock it returns must have async __aenter__/__aexit__.
+    # Verified at fixture lines 148-149.
 
 
 # ─── create_relationship Tests ──────────────────────────────────────
