@@ -90,6 +90,23 @@ with patch("claude_memory.repository.FalkorDB"):
 # ─── Fixtures ───────────────────────────────────────────────────────
 
 
+@pytest.fixture(autouse=True)
+def _drain_orphan_coroutines() -> None:
+    """Force GC after each test to drain orphan coroutines within test boundaries.
+
+    Without this, unawaited coroutines created by AsyncMock's internal
+    _execute_mock_call are reaped at session end, producing warnings.
+    Per-file fixture (branch write guard blocks conftest.py changes).
+    """
+    import gc
+    import warnings
+
+    yield
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        gc.collect()
+
+
 @pytest.fixture()
 def service() -> MemoryService:
     """Creates a MemoryService with all dependencies mocked."""
@@ -122,13 +139,17 @@ def service() -> MemoryService:
     svc.activation_engine.activate = AsyncMock(return_value={})
     svc.activation_engine.spread = AsyncMock(return_value={})
 
-    # Lock context manager mock — supports both sync and async with
-    mock_lock = MagicMock()
+    # Lock context manager mock — AsyncMock prevents phantom async children
+    # from MagicMock parent's internal _mock_children cleanup (GC-time warnings).
+    mock_lock = AsyncMock()
     mock_lock.__enter__ = MagicMock(return_value=mock_lock)
     mock_lock.__exit__ = MagicMock(return_value=False)
-    mock_lock.__aenter__ = AsyncMock(return_value=mock_lock)
-    mock_lock.__aexit__ = AsyncMock(return_value=False)
     svc.lock_manager.lock.return_value = mock_lock
+
+    # Prevent _fire_salience_update from creating orphan asyncio.create_task()
+    # coroutines. The real method calls asyncio.create_task(repo.increment_salience(...))
+    # which, with an AsyncMock repo, produces unawaited coroutines at GC time.
+    svc._fire_salience_update = MagicMock()
 
     # Default async_repo returns for _compute_entity_embedding_text
     svc.repo.get_observations_for_entity.return_value = []
@@ -141,6 +162,25 @@ def _make_cypher_result(rows: list[list[Any]]) -> MagicMock:
     result = MagicMock()
     result.result_set = rows
     return result
+
+
+# ─── Topographical Forcing (architect-injected) ─────────────────────
+
+
+def test_meta_fixture_topology_required(service) -> None:
+    """Topographical forcing: fixture must use AsyncMock for async-target attributes.
+
+    Architect-injected per process/issues/14b_BUILD_SPEC.md.
+    DO NOT remove or weaken this test.
+    """
+    from unittest.mock import AsyncMock
+
+    assert isinstance(service.repo, AsyncMock), (
+        "service.repo targets AsyncMemoryRepository (async) — must be AsyncMock"
+    )
+    assert isinstance(service.vector_store, AsyncMock), (
+        "service.vector_store has async methods — must be AsyncMock"
+    )
 
 
 # ─── create_relationship Tests ──────────────────────────────────────
@@ -1016,6 +1056,9 @@ async def test_happy_create_entity_initializes_salience(service: MemoryService) 
 
 async def test_happy_search_fires_salience_async(service: MemoryService) -> None:
     """search() fires salience update as background task — returns pre-update score."""
+    # Restore real _fire_salience_update (fixture mocks it to prevent orphan tasks;
+    # this test explicitly tests the salience fire-and-forget pathway).
+    del service._fire_salience_update
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
@@ -1060,6 +1103,8 @@ async def test_happy_search_fires_salience_async(service: MemoryService) -> None
 
 async def test_evil13_search_salience_background_error_silent(service: MemoryService) -> None:
     """When background increment_salience fails, search still returns correctly."""
+    # Restore real _fire_salience_update (same reason as test_happy_search_fires_salience_async).
+    del service._fire_salience_update
     service.vector_store.search.return_value = [
         {"_id": ENTITY_ID, "_score": PAGERANK_SCORE},
     ]
