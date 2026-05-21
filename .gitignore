@@ -129,3 +129,6 @@ benchmarks/longmemeval/print_results.py
 benchmarks_full_run.log
 contract_violations_report.md
 longmemeval_fts.db
+
+# Agent diagnostic scratch scripts (discovery loops)
+tests/lint/_*.py
