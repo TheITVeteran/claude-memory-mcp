@@ -82,6 +82,25 @@ Before any LLM reasoning, run the deterministic tools:
 
 10. **Discoveries section.** For each finding you identify as a new bug outside this spec's scope — flag in a separate "Discoveries" section in your audit response. These don't block the current round but feed the next remediation cycle.
 
+11. **Strict-gate multi-seed protocol (PR-5 onwards, for any RuntimeWarning-class audit).** When a per-PR audit criterion involves running pytest with `-W error::RuntimeWarning` or similar warning escalations, the canonical gate MUST be a multi-seed sweep — NOT a single run, NOT `-p no:randomly`. Single runs are seed-flaky (pytest-randomly is active by default; emission rate measured at ~25-33% across seeds on Dragon Brain's suite). The `-p no:randomly` shortcut freezes one lexical ordering — masks bugs at other orderings while passing deterministically. Canonical pattern:
+
+    ```bash
+    for seed in 1 7 12345 4231726796; do
+      result=$(python -m pytest <target> -W error::RuntimeWarning --randomly-seed=$seed -q --tb=no 2>&1 \
+        | grep -E "RuntimeWarning|PytestUnraisableExceptionWarning" | wc -l)
+      echo "seed=$seed matches=$result"
+    done
+    ```
+    All seeds must report `matches=0`. Any non-zero = FAIL. Seed values are illustrative; per-PR spec may specify different seeds.
+
+12. **Subprocess-per-test attribution (warning-class failures only).** If a multi-seed sweep emits warnings, BEFORE marking the audit as FAIL, run subprocess-per-test on the failing file at the failing seed to confirm attribution:
+
+    ```bash
+    python -m pytest <failing-file> --forked -W error::RuntimeWarning --randomly-seed=$failing_seed -v 2>&1
+    ```
+
+    (Requires `pytest-forked`; install if missing.) Subprocess isolation per test eliminates cross-test GC bleed — the warning's attribution becomes deterministic. The test that emits in its own subprocess IS the source. Report the confirmed attribution in your audit. This protocol prevents wasted trifecta cycles on misattributed sites — three prior cycles in Issue #14's arc burned on GC-misattribution before this rule existed.
+
 ---
 
 ## Constraints (Codex Must NOT)
