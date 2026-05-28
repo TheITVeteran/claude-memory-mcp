@@ -195,7 +195,7 @@ def pytest_configure(config: pytest.Config) -> None:
 |------|----------|------------------|--------|---------|
 | `test_evil_repo_is_asyncmock_with_async_methods` | evil | `svc.repo` is AsyncMock; `await svc.repo.get_node("x")` returns the configured coroutine value | TEST FAILS (helper doesn't exist) | TEST PASSES |
 | `test_evil_vector_store_is_asyncmock` | evil | `svc.vector_store` is AsyncMock; async methods coroutine-correctly | TEST FAILS | TEST PASSES |
-| `test_evil_activation_engine_methods_are_asyncmock` | evil | `svc.activation_engine.activate` and `.spread` are AsyncMock | TEST FAILS | TEST PASSES |
+| `test_evil_activation_engine_methods_have_correct_types` | evil | `svc.activation_engine.spread` is AsyncMock (async def per `src/claude_memory/activation.py:98`); `svc.activation_engine.activate` is MagicMock (sync def at `:76`); `svc.activation_engine.detect_weak_connections` is MagicMock (sync def at `:264`). Architect inventory was corrected 2026-05-28 after AG flagged the discrepancy at plan stage. | TEST FAILS | TEST PASSES |
 | `test_evil_sync_targets_are_magicmock` | evil | `svc.fts_store` is MagicMock; `svc.fts_store.search` is sync-callable | TEST FAILS | TEST PASSES |
 | `test_sad_override_replaces_dep` | sad | `make_mock_service(repo=my_mock)` uses provided mock instead of factory-default | TEST FAILS | TEST PASSES |
 | `test_sad_allow_sync_keeps_magicmock_on_async_target` | sad | `make_mock_service(allow_sync=["repo.get_node"])` keeps `repo.get_node` as MagicMock despite being async | TEST FAILS | TEST PASSES |
