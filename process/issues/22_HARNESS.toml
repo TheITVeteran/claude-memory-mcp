@@ -1,0 +1,19 @@
+# Per-issue write-guard config for the issue-22/* branch family
+# Read by scripts/hooks/branch_write_guard.py
+#
+# Issue #22 is the architectural intervention replacing the per-test
+# whack-a-mole of issue #14: build a mock_factory helper, migrate test files
+# to use it, add scanner Pattern 12 to detect remaining hand-rolled patterns.
+# Per process/issues/22a_BUILD_SPEC.md and follow-on 22b-22f specs.
+
+[issue-22]
+denied_paths = [
+    # Block all the conftest paths the issue #14 sneak-arounds touched
+    "tests/unit/conftest.py",
+    "tests/conftest.py",
+    "tests/integration/conftest.py",
+    "pytest.ini",
+    # Block production source for test-only PRs in this family
+    "src/claude_memory",
+]
+rationale = "Issue #22 family is test-only refactoring (mock factory helper + per-file migrations). Modifying conftest.py risks the suppression-fixture sneak-around from issue #14 redux. Modifying src/claude_memory is scope creep — if a production bug surfaces during migration, file a separate issue and DEFER. Sub-issue 22a specifically only modifies tests/_helpers/. Per-file migration sub-issues (22b-22e) modify ONE test file each as named in their spec; the per-sub-issue config (when filed) will add tighter constraints. For NOW, blocking the global infrastructure prevents the worst-case sneak-arounds."
