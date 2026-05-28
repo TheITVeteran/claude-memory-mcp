@@ -21,16 +21,23 @@ python -c "
 from tests._helpers.mock_factory import make_mock_service
 from unittest.mock import AsyncMock, MagicMock
 svc = make_mock_service()
-assert isinstance(svc.repo, AsyncMock), 'repo must be AsyncMock'
+# Async-target deps — should be AsyncMock per inspect.iscoroutinefunction
+assert isinstance(svc.repo, AsyncMock), 'repo must be AsyncMock (AsyncMemoryRepository)'
 assert isinstance(svc.vector_store, AsyncMock), 'vector_store must be AsyncMock'
-assert isinstance(svc.activation_engine.activate, AsyncMock), 'activate must be AsyncMock'
-assert isinstance(svc.activation_engine.spread, AsyncMock), 'spread must be AsyncMock'
+# ActivationEngine has MIXED method types — helper must introspect per-method:
+#   spread is `async def` (activation.py:98) → AsyncMock
+#   activate is `def` (activation.py:76) → MagicMock
+#   detect_weak_connections is `def` (activation.py:264) → MagicMock
+assert isinstance(svc.activation_engine.spread, AsyncMock), 'spread must be AsyncMock (async def)'
+assert isinstance(svc.activation_engine.activate, MagicMock), 'activate must be MagicMock (sync def)'
+assert not isinstance(svc.activation_engine.activate, AsyncMock), 'activate must NOT be AsyncMock'
+# Sync-target dep — should be MagicMock
 assert isinstance(svc.fts_store, MagicMock) and not isinstance(svc.fts_store, AsyncMock), 'fts_store must be MagicMock (sync target)'
 print('PASS: type-correct mock topology verified')
 "
 ```
 
-Must print `PASS: type-correct mock topology verified` with exit code 0.
+Must print `PASS: type-correct mock topology verified` with exit code 0. The mixed `ActivationEngine` assertions verify the helper's per-method introspection works — this is the load-bearing correctness check for the entire #22 architecture.
 
 ## Per-criterion verification
 
@@ -80,7 +87,7 @@ python -m pytest tests/_helpers/test_mock_factory.py -v --tb=short
 Output must show 8 PASSED. Verify each test name from build spec's Tests table is present:
 - `test_evil_repo_is_asyncmock_with_async_methods`
 - `test_evil_vector_store_is_asyncmock`
-- `test_evil_activation_engine_methods_are_asyncmock`
+- `test_evil_activation_engine_methods_have_correct_types`
 - `test_evil_sync_targets_are_magicmock`
 - `test_sad_override_replaces_dep`
 - `test_sad_allow_sync_keeps_magicmock_on_async_target`
