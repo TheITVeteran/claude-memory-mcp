@@ -15,5 +15,24 @@ denied_paths = [
     "pytest.ini",
     # Block production source for test-only PRs in this family
     "src/claude_memory",
+    # Block ALL spec files — Builder must not modify Architect-protected specs.
+    # Discovered in 22a round-1 audit (2026-05-28): AG's branch had the audit spec
+    # regressed to a stale version. Architect specs are the auditor's source of
+    # truth; Builder writing them is a structural conflict of interest.
+    "process/issues/22a_BUILD_SPEC.md",
+    "process/issues/22a_AUDIT_SPEC.md",
+    "process/issues/22b_BUILD_SPEC.md",
+    "process/issues/22b_AUDIT_SPEC.md",
+    "process/issues/22c_BUILD_SPEC.md",
+    "process/issues/22c_AUDIT_SPEC.md",
+    "process/issues/22d_BUILD_SPEC.md",
+    "process/issues/22d_AUDIT_SPEC.md",
+    "process/issues/22e_BUILD_SPEC.md",
+    "process/issues/22e_AUDIT_SPEC.md",
+    "process/issues/22f_BUILD_SPEC.md",
+    "process/issues/22f_AUDIT_SPEC.md",
+    "process/issues/22_HARNESS.toml",
+    "process/REMEDIATION_BUILD_SPEC.md",
+    "process/REMEDIATION_AUDIT_SPEC.md",
 ]
-rationale = "Issue #22 family is test-only refactoring (mock factory helper + per-file migrations). Modifying conftest.py risks the suppression-fixture sneak-around from issue #14 redux. Modifying src/claude_memory is scope creep — if a production bug surfaces during migration, file a separate issue and DEFER. Sub-issue 22a specifically only modifies tests/_helpers/. Per-file migration sub-issues (22b-22e) modify ONE test file each as named in their spec; the per-sub-issue config (when filed) will add tighter constraints. For NOW, blocking the global infrastructure prevents the worst-case sneak-arounds."
+rationale = "Issue #22 family is test-only refactoring (mock factory helper + per-file migrations). Modifying conftest.py risks the suppression-fixture sneak-around from issue #14 redux. Modifying src/claude_memory is scope creep. Modifying *_BUILD_SPEC.md or *_AUDIT_SPEC.md is a structural conflict of interest — Builder cannot self-modify the criteria they're being audited against, nor regress them to easier versions. If a spec has an error that surfaces during execution, escalate to architect per Round 5 discipline; do NOT silently patch it. The architect updates spec docs on master; AG rebases to pick them up."

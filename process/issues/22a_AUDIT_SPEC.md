@@ -73,10 +73,10 @@ The architect-prescribed sanity check from "Canonical pass/fail" above. All 5 as
 Inspect `tests/_helpers/conftest.py` — must define `mock_service_factory` fixture and call `config.addinivalue_line` for the `allow_sync_mock` marker. Then verify via:
 
 ```bash
-python -m pytest --markers 2>&1 | grep "allow_sync_mock"
+python -m pytest tests/_helpers/ --markers 2>&1 | grep "allow_sync_mock"
 ```
 
-Must return a non-empty match describing the marker.
+Must return a non-empty match describing the marker. **Note:** the marker registration lives in `tests/_helpers/conftest.py`, which pytest only loads when tests under `tests/_helpers/` are collected — that's why we scope the `--markers` invocation to that path. A root-level `pytest --markers` won't see this marker because root-level pytest doesn't traverse into nested conftests for marker discovery alone.
 
 ### (e) 8 tests present + all pass
 

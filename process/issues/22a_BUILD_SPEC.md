@@ -44,23 +44,51 @@ if TYPE_CHECKING:
     from claude_memory.tools import MemoryService
 
 
-def _build_typed_mock(cls: type | None, *, spec: bool = True) -> MagicMock:
-    """Build a Mock where async methods become AsyncMock automatically.
+def _build_typed_mock(cls: type | None, *, spec: bool = True) -> MagicMock | AsyncMock:
+    """Build a Mock whose OUTER type matches the class's async dominance.
 
-    Inspects cls's methods via inspect.iscoroutinefunction(). Methods detected
-    as async get AsyncMock attached; sync methods stay as MagicMock defaults.
+    Logic:
+      - cls is None → plain MagicMock (no introspection possible)
+      - cls is pure-async (every public method is `async def`) → outer is AsyncMock(spec=cls).
+        AsyncMock auto-creates AsyncMock children, so methods not explicitly
+        introspected still behave correctly when awaited. Safer for evolving classes.
+      - cls is mixed or pure-sync → outer is MagicMock(spec=cls), with AsyncMock
+        explicitly attached per async method. Prevents spurious coroutines on sync
+        method calls (e.g., ActivationEngine.activate is sync, must stay MagicMock).
+
+    Args:
+        cls: The dependency class to introspect, or None.
+        spec: Whether to apply `spec=cls` to the outer mock (default True for
+              attribute-error safety).
+
+    Returns:
+        AsyncMock(spec=cls) for pure-async classes, MagicMock(spec=cls) otherwise
+        with per-async-method AsyncMock attribute assignments.
     """
-    mock = MagicMock(spec=cls) if (cls and spec) else MagicMock()
     if cls is None:
-        return mock
+        return MagicMock()
+
+    # Enumerate public callables on the class
+    public_callables: list[tuple[str, Any]] = []
+    async_method_names: list[str] = []
     for name in dir(cls):
         if name.startswith("_"):
             continue
         attr = getattr(cls, name, None)
-        if attr is None:
+        if attr is None or not callable(attr):
             continue
+        public_callables.append((name, attr))
         if inspect.iscoroutinefunction(attr):
-            setattr(mock, name, AsyncMock())
+            async_method_names.append(name)
+
+    # Pure-async: outer = AsyncMock(spec=cls). AsyncMock auto-coroutines all child calls.
+    if public_callables and len(async_method_names) == len(public_callables):
+        return AsyncMock(spec=cls) if spec else AsyncMock()
+
+    # Mixed or pure-sync: outer = MagicMock(spec=cls), AsyncMock attached per async method.
+    mock = MagicMock(spec=cls) if spec else MagicMock()
+    for name in async_method_names:
+        setattr(mock, name, AsyncMock())
     return mock
 
 
