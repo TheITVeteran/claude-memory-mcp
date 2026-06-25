@@ -24,6 +24,7 @@ from claude_memory.schema import (
     SearchMemoryParams,
     TraversePathParams,
 )
+from tests._helpers.mock_factory import make_mock_service
 
 # ─── Test Constants ─────────────────────────────────────────────────
 
@@ -90,73 +91,50 @@ with patch("claude_memory.repository.FalkorDB"):
 # ─── Fixtures ───────────────────────────────────────────────────────
 
 
-@pytest.fixture(autouse=True)
-def _drain_orphan_coroutines() -> None:
-    """Force GC after each test to drain orphan coroutines within test boundaries.
-
-    Without this, unawaited coroutines created by AsyncMock's internal
-    _execute_mock_call are reaped by Python's cyclic GC at session end,
-    producing PytestUnraisableExceptionWarning. Forcing gc.collect() inside
-    a catch_warnings context drains them silently within each test's scope.
-
-    Per-file fixture (not in conftest.py) because the branch write guard
-    blocks conftest changes on issue-14a branches.
-    """
-    import gc
-    import warnings
-
-    yield
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", RuntimeWarning)
-        gc.collect()
-
-
 @pytest.fixture()
 def service() -> MemoryService:
-    """Creates a MemoryService with all dependencies mocked."""
+    """Creates a MemoryService with all dependencies mocked type-correctly via mock_factory.
+
+    Per process/issues/22c_BUILD_SPEC.md — uses make_mock_service() to eliminate
+    hand-rolled MagicMock-vs-AsyncMock decisions. Helper introspects each
+    dependency class to AsyncMock async methods and MagicMock sync methods
+    automatically.
+    """
     mock_embedder = MagicMock()
     mock_embedder.encode.return_value = MOCK_EMBEDDING
+    svc = make_mock_service(embedding_service=mock_embedder)
 
-    with patch("claude_memory.repository.FalkorDB"):
-        with patch("claude_memory.lock_manager.redis.Redis"):
-            with patch("claude_memory.vector_store.AsyncQdrantClient"):
-                svc = MemoryService(embedding_service=mock_embedder)
-
-    # Replace repo, vector_store, lock_manager with mocks
-    svc.repo = AsyncMock()
-    svc.repo.get_subgraph.return_value = {"nodes": [], "edges": []}
-    svc.vector_store = AsyncMock()
-    svc.fts_store = MagicMock()
-    svc.fts_store.search = MagicMock(return_value=[])
-    svc.lock_manager = MagicMock()
-
-    # Soft routing defaults
+    # MemoryService instance methods (not deps) — helper does not mock methods on
+    # the service itself, only deps. Preserve these per the soft-routing path.
     svc.query_timeline = AsyncMock(return_value=[])
     svc.traverse_path = AsyncMock(return_value=[])
-
-    # Reranker pass-through
-    svc.reranker = MagicMock()
-    svc.reranker.rerank = AsyncMock(side_effect=lambda q, c, **kw: c)
-
-    # Activation engine defaults
-    svc.activation_engine = MagicMock()
-    svc.activation_engine.activate = AsyncMock(return_value={})
-    svc.activation_engine.spread = AsyncMock(return_value={})
-
-    # Lock context manager mock — AsyncMock prevents phantom async children
-    # from MagicMock parent's internal _mock_children cleanup (GC-time warnings).
-    mock_lock = AsyncMock()
-    mock_lock.__enter__ = MagicMock(return_value=mock_lock)
-    mock_lock.__exit__ = MagicMock(return_value=False)
-    svc.lock_manager.lock.return_value = mock_lock
 
     # Prevent _fire_salience_update from creating orphan asyncio.create_task()
     # coroutines. The real method calls asyncio.create_task(repo.increment_salience(...))
     # which, with an AsyncMock repo, produces unawaited coroutines at GC time.
+    # This is a MemoryService instance method, not a dep — helper does not mock it.
     svc._fire_salience_update = MagicMock()
 
-    # Default async_repo returns for _compute_entity_embedding_text
+    # Test-default returns/side_effects on helper-built typed deps
+    svc.repo.get_subgraph.return_value = {"nodes": [], "edges": []}
     svc.repo.get_observations_for_entity.return_value = []
+    svc.fts_store.search.return_value = []
+    svc.reranker.rerank.side_effect = lambda q, c, **kw: c
+
+    # Per-test default return values on activation_engine. Per 22b's
+    # AG-reported discovery (AsyncMock chain semantics): without explicit
+    # return values, awaited results are bare AsyncMocks whose attribute access
+    # (e.g. spread_map.keys()) returns coroutines → TypeError + RuntimeWarning.
+    svc.activation_engine.activate.return_value = {}  # helper-typed MagicMock (sync)
+    svc.activation_engine.spread.return_value = {}  # helper-typed AsyncMock (async)
+
+    # Lock context manager mock — lock_manager.lock() returns a context manager
+    # used with `with`. Helper builds lock_manager via inspect; configure .lock
+    # to return the context manager mock.
+    mock_lock = AsyncMock()
+    mock_lock.__enter__ = MagicMock(return_value=mock_lock)
+    mock_lock.__exit__ = MagicMock(return_value=False)
+    svc.lock_manager.lock.return_value = mock_lock
 
     return svc
 
@@ -172,25 +150,43 @@ def _make_cypher_result(rows: list[list[Any]]) -> MagicMock:
 
 
 def test_meta_fixture_topology_required(service: MemoryService) -> None:
-    """Topographical forcing: fixture must use AsyncMock for async-target attributes.
+    """Topographical forcing: helper must produce type-correct deps.
 
-    Architect-injected per process/issues/14a_BUILD_SPEC.md.
-    DO NOT remove this test; DO NOT modify this test to use suppression patterns.
+    Updated 22c after 22a established the mock_factory helper and 22b
+    validated the pattern. DO NOT remove or weaken — guard against migrations
+    that bypass make_mock_service() and reintroduce the hand-rolled bug class.
 
-    The strict-gate suite passes iff all async-target mocks are AsyncMock AND
-    every async-target CALL is properly awaited in the test bodies below.
+    Per process/issues/22c_BUILD_SPEC.md.
     """
-    from unittest.mock import AsyncMock
+    from unittest.mock import AsyncMock, MagicMock
 
+    # Pure-async deps → AsyncMock
     assert isinstance(service.repo, AsyncMock), (
-        "svc.repo targets AsyncMemoryRepository (async) — must be AsyncMock"
+        "service.repo targets AsyncMemoryRepository (async) — must be AsyncMock"
     )
     assert isinstance(service.vector_store, AsyncMock), (
-        "svc.vector_store has async methods — must be AsyncMock"
+        "service.vector_store has async methods — must be AsyncMock"
     )
-    # Note: svc.lock_manager itself is MagicMock (its .lock() method is sync),
-    # but the mock_lock it returns must have async __aenter__/__aexit__.
-    # Verified at fixture lines 148-149.
+
+    # ActivationEngine is mixed (async spread + sync activate) — helper
+    # introspects per-method via inspect.iscoroutinefunction()
+    assert isinstance(service.activation_engine.spread, AsyncMock), (
+        "ActivationEngine.spread is `async def` (activation.py:98) — must be AsyncMock"
+    )
+    assert isinstance(service.activation_engine.activate, MagicMock), (
+        "ActivationEngine.activate is sync `def` (activation.py:76) — must be MagicMock"
+    )
+    assert not isinstance(service.activation_engine.activate, AsyncMock), (
+        "Guard against bare AsyncMock — production does NOT await activate"
+    )
+
+    # Sync deps → MagicMock
+    assert isinstance(service.fts_store, MagicMock), (
+        "service.fts_store has only sync methods — must be MagicMock"
+    )
+    assert isinstance(service.lock_manager, MagicMock), (
+        "service.lock_manager.lock() returns a context manager (sync API) — must be MagicMock"
+    )
 
 
 # ─── create_relationship Tests ──────────────────────────────────────
@@ -746,8 +742,6 @@ async def test_evil10_consolidate_memories_edge_error(service: MemoryService) ->
 
 
 def test_happy_create_memory_type(service: MemoryService) -> None:
-    service.ontology = MagicMock()
-
     result = service.create_memory_type(
         CreateMemoryTypeParams(
             name="Recipe",
@@ -761,8 +755,6 @@ def test_happy_create_memory_type(service: MemoryService) -> None:
 
 
 def test_sad12_create_memory_type_defaults(service: MemoryService) -> None:
-    service.ontology = MagicMock()
-
     result = service.create_memory_type(
         CreateMemoryTypeParams(name="Recipe", description="Culinary recipe")
     )
@@ -820,7 +812,6 @@ async def test_happy_get_hologram_with_non_dict_nodes(service: MemoryService) ->
             ],
             "edges": [],
         }
-        service.context_manager = MagicMock()
         service.context_manager.optimize.return_value = [
             {"id": ENTITY_ID, "name": ENTITY_NAME},
         ]
