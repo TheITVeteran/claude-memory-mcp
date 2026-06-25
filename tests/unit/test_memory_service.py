@@ -25,6 +25,7 @@ from claude_memory.schema import (
     SearchMemoryParams,
     TraversePathParams,
 )
+from tests._helpers.mock_factory import make_mock_service
 
 # ─── Test Constants ─────────────────────────────────────────────────
 
@@ -90,69 +91,39 @@ with patch("claude_memory.repository.FalkorDB"):
 # ─── Fixtures ───────────────────────────────────────────────────────
 
 
-@pytest.fixture(autouse=True)
-def _drain_orphan_coroutines() -> None:
-    """Force GC after each test to drain orphan coroutines within test boundaries.
-
-    Without this, unawaited coroutines created by AsyncMock's internal
-    _execute_mock_call are reaped at session end, producing warnings.
-    Per-file fixture (branch write guard blocks conftest.py changes).
-    """
-    import gc
-    import warnings
-
-    yield
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", RuntimeWarning)
-        gc.collect()
-
-
 @pytest.fixture()
 def service() -> MemoryService:
-    """Creates a MemoryService with all dependencies mocked."""
+    """Creates a MemoryService with all dependencies mocked type-correctly via mock_factory.
+
+    Per process/issues/22d_BUILD_SPEC.md — uses make_mock_service() to eliminate
+    hand-rolled MagicMock-vs-AsyncMock decisions. Same pattern as 22b/22c.
+    """
     mock_embedder = MagicMock()
     mock_embedder.encode.return_value = MOCK_EMBEDDING
+    svc = make_mock_service(embedding_service=mock_embedder)
 
-    with patch("claude_memory.repository.FalkorDB"):
-        with patch("claude_memory.lock_manager.redis.Redis"):
-            with patch("claude_memory.vector_store.AsyncQdrantClient"):
-                svc = MemoryService(embedding_service=mock_embedder)
-
-    # Replace repo, vector_store, lock_manager with mocks
-    svc.repo = AsyncMock()
-    svc.repo.get_subgraph.return_value = {"nodes": [], "edges": []}
-    svc.vector_store = AsyncMock()
-    svc.fts_store = MagicMock()
-    svc.fts_store.search = MagicMock(return_value=[])
-    svc.lock_manager = MagicMock()
-
-    # Soft routing defaults
+    # MemoryService instance methods (not deps) — preserve per soft-routing path.
     svc.query_timeline = AsyncMock(return_value=[])
     svc.traverse_path = AsyncMock(return_value=[])
 
-    # Reranker defaults
-    svc.reranker = MagicMock()
-    svc.reranker.rerank = AsyncMock(side_effect=lambda q, c, **kw: c)
+    # Prevent _fire_salience_update from creating orphan asyncio.create_task() coroutines.
+    svc._fire_salience_update = MagicMock()
 
-    # Activation defaults
-    svc.activation_engine = MagicMock()
-    svc.activation_engine.activate = AsyncMock(return_value={})
-    svc.activation_engine.spread = AsyncMock(return_value={})
+    # Test-default returns/side_effects on helper-built typed deps
+    svc.repo.get_subgraph.return_value = {"nodes": [], "edges": []}
+    svc.repo.get_observations_for_entity.return_value = []
+    svc.fts_store.search.return_value = []
+    svc.reranker.rerank.side_effect = lambda q, c, **kw: c
 
-    # Lock context manager mock — AsyncMock prevents phantom async children
-    # from MagicMock parent's internal _mock_children cleanup (GC-time warnings).
+    # Per-test default return values on activation_engine (22b's AG-reported AsyncMock-chain discovery).
+    svc.activation_engine.activate.return_value = {}
+    svc.activation_engine.spread.return_value = {}
+
+    # Lock context manager mock — same pattern as 22c.
     mock_lock = AsyncMock()
     mock_lock.__enter__ = MagicMock(return_value=mock_lock)
     mock_lock.__exit__ = MagicMock(return_value=False)
     svc.lock_manager.lock.return_value = mock_lock
-
-    # Prevent _fire_salience_update from creating orphan asyncio.create_task()
-    # coroutines. The real method calls asyncio.create_task(repo.increment_salience(...))
-    # which, with an AsyncMock repo, produces unawaited coroutines at GC time.
-    svc._fire_salience_update = MagicMock()
-
-    # Default async_repo returns for _compute_entity_embedding_text
-    svc.repo.get_observations_for_entity.return_value = []
 
     return svc
 
@@ -168,18 +139,42 @@ def _make_cypher_result(rows: list[list[Any]]) -> MagicMock:
 
 
 def test_meta_fixture_topology_required(service) -> None:
-    """Topographical forcing: fixture must use AsyncMock for async-target attributes.
+    """Topographical forcing: helper must produce type-correct deps.
 
-    Architect-injected per process/issues/14b_BUILD_SPEC.md.
-    DO NOT remove or weaken this test.
+    Updated 22d after 22a established the mock_factory helper, 22b validated
+    the pattern, and 22c expanded coverage to all mixed-async deps. DO NOT
+    remove or weaken — guard against migrations that bypass make_mock_service()
+    and reintroduce the hand-rolled bug class.
+
+    Per process/issues/22d_BUILD_SPEC.md.
     """
-    from unittest.mock import AsyncMock
+    from unittest.mock import AsyncMock, MagicMock
 
+    # Pure-async deps → AsyncMock
     assert isinstance(service.repo, AsyncMock), (
         "service.repo targets AsyncMemoryRepository (async) — must be AsyncMock"
     )
     assert isinstance(service.vector_store, AsyncMock), (
         "service.vector_store has async methods — must be AsyncMock"
+    )
+
+    # ActivationEngine is mixed (async spread + sync activate) — helper introspects per-method
+    assert isinstance(service.activation_engine.spread, AsyncMock), (
+        "ActivationEngine.spread is `async def` (activation.py:98) — must be AsyncMock"
+    )
+    assert isinstance(service.activation_engine.activate, MagicMock), (
+        "ActivationEngine.activate is sync `def` (activation.py:76) — must be MagicMock"
+    )
+    assert not isinstance(service.activation_engine.activate, AsyncMock), (
+        "Guard against bare AsyncMock — production does NOT await activate"
+    )
+
+    # Sync deps → MagicMock
+    assert isinstance(service.fts_store, MagicMock), (
+        "service.fts_store has only sync methods — must be MagicMock"
+    )
+    assert isinstance(service.lock_manager, MagicMock), (
+        "service.lock_manager.lock() returns a context manager (sync API) — must be MagicMock"
     )
 
 
@@ -926,8 +921,6 @@ async def test_evil12_consolidate_memories_edge_error(service: MemoryService) ->
 
 
 def test_happy_create_memory_type(service: MemoryService) -> None:
-    service.ontology = MagicMock()
-
     result = service.create_memory_type(
         CreateMemoryTypeParams(
             name="Recipe",
@@ -940,8 +933,6 @@ def test_happy_create_memory_type(service: MemoryService) -> None:
 
 
 def test_sad13_create_memory_type_defaults(service: MemoryService) -> None:
-    service.ontology = MagicMock()
-
     result = service.create_memory_type(
         CreateMemoryTypeParams(name="Recipe", description="Culinary recipe")
     )
@@ -999,7 +990,6 @@ async def test_happy_get_hologram_with_non_dict_nodes(service: MemoryService) ->
             ],
             "edges": [],
         }
-        service.context_manager = MagicMock()
         service.context_manager.optimize.return_value = [
             {"id": ENTITY_ID, "name": ENTITY_NAME},
         ]
@@ -1036,7 +1026,6 @@ async def test_happy_create_entity_initializes_salience(service: MemoryService) 
     }
     service.repo.get_total_node_count.return_value = 1
     service.repo.get_most_recent_entity.return_value = None
-    service.ontology = MagicMock()
     service.ontology.is_valid_type.return_value = True
 
     params = EntityCreateParams(
@@ -1323,14 +1312,13 @@ async def test_happy_create_entity_initializes_occurred_at(
     """create_entity sets occurred_at in properties."""
     from claude_memory.schema import EntityCreateParams
 
-    service.ontology.is_valid_type = MagicMock(return_value=True)
+    service.ontology.is_valid_type.return_value = True
     service.repo.create_node.return_value = {
         "id": "new-id",
         "name": ENTITY_NAME,
         "node_type": "Concept",
     }
     service.embedder.encode.return_value = [0.1] * 384
-    service.vector_store.upsert = AsyncMock()
     service.repo.get_total_node_count.return_value = 1
     service.repo.get_most_recent_entity.return_value = None
 
@@ -1352,13 +1340,12 @@ async def test_happy_create_entity_respects_user_occurred_at(
     """create_entity uses user-provided occurred_at value."""
     from claude_memory.schema import EntityCreateParams
 
-    service.ontology.is_valid_type = MagicMock(return_value=True)
+    service.ontology.is_valid_type.return_value = True
     service.repo.create_node.return_value = {
         "id": "new-id",
         "name": ENTITY_NAME,
     }
     service.embedder.encode.return_value = [0.1] * 384
-    service.vector_store.upsert = AsyncMock()
     service.repo.get_total_node_count.return_value = 1
     service.repo.get_most_recent_entity.return_value = None
 
@@ -1714,7 +1701,6 @@ async def test_evil16_create_entity_vector_failure_always_raises(
     service.repo.create_node.return_value = {"id": ENTITY_ID, "name": ENTITY_NAME}
     service.repo.get_total_node_count.return_value = 42
     service.repo.get_most_recent_entity.return_value = None
-    service.ontology = MagicMock()
     service.ontology.is_valid_type.return_value = True
     service.vector_store.upsert.side_effect = RuntimeError("Qdrant down")
 
