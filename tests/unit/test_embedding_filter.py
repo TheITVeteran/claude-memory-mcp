@@ -4,7 +4,7 @@ Embedding arrays (1024+ floats) must never leak into API responses.
 These tests verify the stripping logic at each boundary.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -15,29 +15,56 @@ from claude_memory.schema import (
     SearchMemoryParams,
     SearchResult,
 )
-from claude_memory.tools import MemoryService
+from tests._helpers.mock_factory import make_mock_service
 
 
 @pytest.fixture
 def mock_service():
-    """Build a MemoryService with all deps mocked."""
-    mock_embedder = MagicMock()
-    mock_vector = AsyncMock()
+    """MemoryService with all deps mocked type-correctly via mock_factory.
 
-    with patch("claude_memory.tools.MemoryRepository"):
-        service = MemoryService(embedding_service=mock_embedder, vector_store=mock_vector)
-    service.repo = AsyncMock()
-    service.fts_store = MagicMock()
-    service.fts_store.search = MagicMock(return_value=[])
-    service.reranker = MagicMock()
-    service.reranker.rerank = AsyncMock(side_effect=lambda q, c, **kw: c)
-    # Soft routing
+    Per process/issues/22e_BUILD_SPEC.md.
+    """
+    mock_embedder = MagicMock()
+    service = make_mock_service(embedding_service=mock_embedder)
+
+    # MemoryService instance methods (not deps) — preserve
     service.query_timeline = AsyncMock(return_value=[])
     service.traverse_path = AsyncMock(return_value=[])
-    service.activation_engine = MagicMock()
-    service.activation_engine.activate = AsyncMock(return_value={})
-    service.activation_engine.spread = AsyncMock(return_value={})
+
+    # Test-default returns on helper-built typed deps
+    service.fts_store.search.return_value = []
+    service.reranker.rerank.side_effect = lambda q, c, **kw: c
+    service.activation_engine.activate.return_value = {}  # helper-typed MagicMock (fixes wrong-type bug)
+    service.activation_engine.spread.return_value = {}  # helper-typed AsyncMock
     return service
+
+
+def test_meta_fixture_topology_required(mock_service) -> None:
+    """Topographical forcing: helper must produce type-correct deps.
+
+    Added 22e to extend forcing-test coverage to all migrated files.
+    DO NOT remove or weaken — guard against migrations that bypass
+    make_mock_service() and reintroduce the hand-rolled bug class.
+
+    Per process/issues/22e_BUILD_SPEC.md.
+    """
+    from unittest.mock import AsyncMock, MagicMock
+
+    assert isinstance(mock_service.repo, AsyncMock), (
+        "mock_service.repo targets AsyncMemoryRepository (async) — must be AsyncMock"
+    )
+    assert isinstance(mock_service.vector_store, AsyncMock), (
+        "mock_service.vector_store has async methods — must be AsyncMock"
+    )
+    assert isinstance(mock_service.activation_engine.spread, AsyncMock), (
+        "ActivationEngine.spread is `async def` — must be AsyncMock"
+    )
+    assert isinstance(mock_service.activation_engine.activate, MagicMock), (
+        "ActivationEngine.activate is sync `def` — must be MagicMock"
+    )
+    assert not isinstance(mock_service.activation_engine.activate, AsyncMock), (
+        "Guard against bare AsyncMock — production does NOT await activate"
+    )
 
 
 # ─── create_entity: embedding must not leak in receipt ──────────────
@@ -54,17 +81,9 @@ async def test_happy_create_entity_strips_embedding_from_receipt(mock_service):
     }
     mock_service.repo.get_total_node_count.return_value = 1
     mock_service.repo.get_most_recent_entity.return_value = None
-    mock_service.embedder.encode.return_value = [0.1] * 1024
-
-    # Mock vector upsert (async)
-    mock_service.vector_store.upsert = AsyncMock()
-    # Mock lock manager
-    with patch.object(mock_service, "lock_manager", MagicMock()):
-        mock_service.lock_manager.acquire_write = AsyncMock(return_value=True)
-        mock_service.lock_manager.release_write = AsyncMock()
-        result = await mock_service.create_entity(
-            EntityCreateParams(name="Test", node_type="Entity", project_id="test")
-        )
+    result = await mock_service.create_entity(
+        EntityCreateParams(name="Test", node_type="Entity", project_id="test")
+    )
 
     # The result dict should not contain 'embedding'
     assert "embedding" not in result
@@ -73,13 +92,7 @@ async def test_happy_create_entity_strips_embedding_from_receipt(mock_service):
 @pytest.mark.asyncio
 async def test_sad1_create_entity_receipt_missing_embedding_key_evil():
     """Evil: what if repo returns NO embedding key? Should still work."""
-    mock_embedder = MagicMock()
-    mock_vector = AsyncMock()
-    from unittest.mock import patch
-
-    with patch("claude_memory.tools.MemoryRepository"):
-        service = MemoryService(embedding_service=mock_embedder, vector_store=mock_vector)
-    service.repo = AsyncMock()
+    service = make_mock_service()
     service.repo.create_node.return_value = {
         "id": "456",
         "name": "Clean",
@@ -87,15 +100,9 @@ async def test_sad1_create_entity_receipt_missing_embedding_key_evil():
     }
     service.repo.get_total_node_count.return_value = 1
     service.repo.get_most_recent_entity.return_value = None
-    service.embedder.encode.return_value = [0.1] * 1024
-    service.vector_store.upsert = AsyncMock()
-
-    with patch.object(service, "lock_manager", MagicMock()):
-        service.lock_manager.acquire_write = AsyncMock(return_value=True)
-        service.lock_manager.release_write = AsyncMock()
-        result = await service.create_entity(
-            EntityCreateParams(name="Clean", node_type="Entity", project_id="test")
-        )
+    result = await service.create_entity(
+        EntityCreateParams(name="Clean", node_type="Entity", project_id="test")
+    )
 
     assert "embedding" not in result
 
@@ -107,7 +114,7 @@ async def test_sad1_create_entity_receipt_missing_embedding_key_evil():
 async def test_happy_search_results_have_no_embedding_field(mock_service):
     """search() returns SearchResult models which have no embedding field."""
     mock_service.embedder.encode.return_value = [0.1] * 1024
-    mock_service.vector_store.search = AsyncMock(return_value=[{"_id": "123", "_score": 0.9}])
+    mock_service.vector_store.search.return_value = [{"_id": "123", "_score": 0.9}]
     mock_service.repo.get_subgraph.return_value = {
         "nodes": [
             {
