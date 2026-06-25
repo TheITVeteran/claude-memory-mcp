@@ -12,8 +12,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from claude_memory.router import QueryIntent, QueryRouter
+from claude_memory.router import QueryIntent
 from claude_memory.schema import SearchMemoryParams
+from tests._helpers.mock_factory import make_mock_service
 
 if TYPE_CHECKING:
     from claude_memory.tools import MemoryService
@@ -27,53 +28,31 @@ NOW_ISO = datetime.now(UTC).isoformat()
 # ─── Fixtures ───────────────────────────────────────────────────────
 
 
-@pytest.fixture(autouse=True)
-def _drain_orphan_coroutines() -> None:
-    """Force GC after each test to drain orphan coroutines within test boundaries.
-
-    Without this, unawaited coroutines created by AsyncMock's internal
-    _execute_mock_call are reaped at session end, producing warnings.
-    Per-file fixture (branch write guard blocks conftest.py changes).
-    """
-    import gc
-    import warnings
-
-    yield
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", RuntimeWarning)
-        gc.collect()
-
-
 @pytest.fixture()
 def service():
-    """MemoryService with all deps mocked."""
+    """MemoryService with all deps mocked type-correctly via mock_factory.
+
+    Per process/issues/22b_BUILD_SPEC.md — uses make_mock_service() to eliminate
+    hand-rolled MagicMock-vs-AsyncMock decisions. Helper introspects each
+    dependency class to AsyncMock async methods and MagicMock sync methods
+    automatically.
+    """
     mock_embedder = MagicMock()
     mock_embedder.encode.return_value = MOCK_EMBEDDING
+    svc = make_mock_service(embedding_service=mock_embedder)
 
-    with patch("claude_memory.repository.FalkorDB"):
-        with patch("claude_memory.lock_manager.redis.Redis"):
-            with patch("claude_memory.vector_store.AsyncQdrantClient"):
-                from claude_memory.tools import MemoryService
-
-                svc = MemoryService(embedding_service=mock_embedder)
-
-    svc.repo = AsyncMock()
-    svc.repo = AsyncMock()
-    svc.activation_engine.repo = svc.repo
-    svc.vector_store = AsyncMock()
-    svc.fts_store = MagicMock()
-    svc.fts_store.search = MagicMock(return_value=[])
-    svc.router = MagicMock(spec=QueryRouter)
-    # Reranker: pass-through (return candidates unchanged)
-    svc.reranker = MagicMock()
-    svc.reranker.rerank = AsyncMock(side_effect=lambda q, c, **kw: c)
-    # Soft routing: all channels fire, so mock default returns for all enrichments
+    # MemoryService methods (not deps) — helper does not mock methods on the
+    # service itself, only deps. These three are MemoryService instance methods
+    # used by the search pipeline's soft-routing path.
     svc.query_timeline = AsyncMock(return_value=[])
     svc.traverse_path = AsyncMock(return_value=[])
     svc.search_associative = AsyncMock(return_value=[])
-    # Activation engine defaults
-    svc.activation_engine.activate = AsyncMock(return_value={})
-    svc.activation_engine.spread = AsyncMock(return_value={})
+    # Test-default returns/side_effects on helper-built typed deps
+    svc.fts_store.search.return_value = []
+    svc.reranker.rerank.side_effect = lambda q, c, **kw: c
+    svc.activation_engine.activate.return_value = {}
+    svc.activation_engine.spread.return_value = {}
+
     return svc
 
 
@@ -104,28 +83,46 @@ def _graph_nodes(*ids: str) -> dict[str, Any]:
 
 
 def test_meta_fixture_topology_required(service) -> None:
-    """Topographical forcing: activation_engine methods must be AsyncMock.
+    """Topographical forcing: helper must produce type-correct deps.
 
-    Architect-injected per process/issues/14c_BUILD_SPEC.md.
-    DO NOT remove or weaken this test.
+    Updated 22b after 22a established the mock_factory helper. The prior
+    assertion at line 120 was wrong-on-purpose-to-match-buggy-fixture: it
+    asserted activate is AsyncMock, but production code does NOT await activate
+    (sync def at src/claude_memory/activation.py:76). Helper now types it
+    correctly as MagicMock.
+
+    Per process/issues/22b_BUILD_SPEC.md. DO NOT remove or weaken — guard
+    against migrations that bypass make_mock_service() and reintroduce the
+    hand-rolled bug class.
     """
-    from unittest.mock import AsyncMock
+    from unittest.mock import AsyncMock, MagicMock
 
+    # Pure-async deps → AsyncMock
     assert isinstance(service.repo, AsyncMock), (
         "service.repo targets AsyncMemoryRepository (async) — must be AsyncMock"
     )
     assert isinstance(service.vector_store, AsyncMock), (
         "service.vector_store has async methods — must be AsyncMock"
     )
-    assert isinstance(service.activation_engine.activate, AsyncMock), (
-        "ActivationEngine.activate is async — must be AsyncMock"
-    )
+
+    # ActivationEngine is mixed (async spread + sync activate) — helper
+    # introspects per-method via inspect.iscoroutinefunction()
     assert isinstance(service.activation_engine.spread, AsyncMock), (
-        "ActivationEngine.spread is async — must be AsyncMock"
+        "ActivationEngine.spread is `async def` (activation.py:98) — must be AsyncMock"
+    )
+    assert isinstance(service.activation_engine.activate, MagicMock), (
+        "ActivationEngine.activate is sync `def` (activation.py:76) — must be MagicMock"
+    )
+    assert not isinstance(service.activation_engine.activate, AsyncMock), (
+        "Guard against bare AsyncMock — production does NOT await activate"
     )
 
+    # Sync deps → MagicMock
+    assert isinstance(service.fts_store, MagicMock), (
+        "service.fts_store has only sync methods — must be MagicMock"
+    )  # ═══════════════════════════════════════════════════════════════
 
-# ═══════════════════════════════════════════════════════════════
+
 #  §10.2 Checklist: Hybrid search pipeline
 # ═══════════════════════════════════════════════════════════════
 
@@ -192,10 +189,11 @@ class TestHybridSearchPipeline:
         vec_results = _vector_results("a", "b")
         service.vector_store.search.return_value = vec_results
         service.router.classify.return_value = QueryIntent.ASSOCIATIVE
-
-        # Mock the activation engine methods
-        service.activation_engine.activate = MagicMock(return_value={"a": 1.0, "b": 1.0})
-        service.activation_engine.spread = MagicMock(return_value={"a": 1.0, "b": 0.6, "c": 0.3})
+        # Configure return values on the helper-typed mocks (do NOT replace the
+        # mocks — replacement would reintroduce the type-mismatch bug class
+        # 22a/22b were built to prevent).
+        service.activation_engine.activate.return_value = {"a": 1.0, "b": 1.0}
+        service.activation_engine.spread.return_value = {"a": 1.0, "b": 0.6, "c": 0.3}
         service.repo.get_subgraph.return_value = _graph_nodes("a", "b", "c")
 
         _res = await service.search(SearchMemoryParams(query="things related to auth"))
