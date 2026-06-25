@@ -19,33 +19,68 @@ with patch("claude_memory.repository.FalkorDB"):
             from claude_memory.tools import MemoryService
 
 
+from tests._helpers.mock_factory import make_mock_service
+
 # ─── Fixtures ───────────────────────────────────────────────────────
 
 
 @pytest.fixture()
 def service() -> MemoryService:
-    """Creates a MemoryService with all dependencies mocked."""
+    """MemoryService with all deps mocked type-correctly via mock_factory.
+
+    Per process/issues/22e_BUILD_SPEC.md. Unique to this file: lock_manager.lock()
+    is used via `async with`, so the context manager mock uses __aenter__/__aexit__
+    (not __enter__/__exit__ like 22b/22c/22d).
+    """
     mock_embedder = MagicMock()
     mock_embedder.encode.return_value = [0.1, 0.2, 0.3]
+    svc = make_mock_service(embedding_service=mock_embedder)
 
-    with patch("claude_memory.repository.FalkorDB"):
-        with patch("claude_memory.lock_manager.redis.Redis"):
-            with patch("claude_memory.vector_store.AsyncQdrantClient"):
-                svc = MemoryService(embedding_service=mock_embedder)
-
-    svc.repo = AsyncMock()
-    svc.vector_store = AsyncMock()
-    svc.lock_manager = MagicMock()
-
-    # Lock context manager
+    # Async lock context manager — PRESERVE the __aenter__/__aexit__ pattern
+    # specific to this file's tests (they use `async with svc.lock_manager.lock(...)`)
     mock_lock = MagicMock()
     mock_lock.__aenter__ = AsyncMock(return_value=mock_lock)
     mock_lock.__aexit__ = AsyncMock(return_value=False)
     svc.lock_manager.lock.return_value = mock_lock
 
+    # Default returns on helper-built activation_engine mocks to prevent AsyncMock coroutine warnings
+    svc.activation_engine.activate.return_value = {}
+    svc.activation_engine.spread.return_value = {}
+
     svc.repo.get_observations_for_entity.return_value = []
 
     return svc
+
+
+def test_meta_fixture_topology_required(service) -> None:
+    """Topographical forcing: helper must produce type-correct deps.
+
+    Added 22e to extend forcing-test coverage to all migrated files.
+    DO NOT remove or weaken — guard against migrations that bypass
+    make_mock_service() and reintroduce the hand-rolled bug class.
+
+    Per process/issues/22e_BUILD_SPEC.md.
+    """
+    from unittest.mock import AsyncMock, MagicMock
+
+    assert isinstance(service.repo, AsyncMock), (
+        "service.repo targets AsyncMemoryRepository (async) — must be AsyncMock"
+    )
+    assert isinstance(service.vector_store, AsyncMock), (
+        "service.vector_store has async methods — must be AsyncMock"
+    )
+    assert isinstance(service.activation_engine.spread, AsyncMock), (
+        "ActivationEngine.spread is `async def` — must be AsyncMock"
+    )
+    assert isinstance(service.activation_engine.activate, MagicMock), (
+        "ActivationEngine.activate is sync `def` — must be MagicMock"
+    )
+    assert not isinstance(service.activation_engine.activate, AsyncMock), (
+        "Guard against bare AsyncMock — production does NOT await activate"
+    )
+    assert hasattr(service.lock_manager.lock.return_value, "__aenter__"), (
+        "lock_manager.lock() must return an async context manager (this file uses `async with`)"
+    )
 
 
 def _make_cypher_result(rows: list[list[Any]]) -> MagicMock:

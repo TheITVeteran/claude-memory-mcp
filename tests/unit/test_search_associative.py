@@ -18,6 +18,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from claude_memory.schema import SearchAssociativeParams
+from tests._helpers.mock_factory import make_mock_service
 
 # ─── Constants ──────────────────────────────────────────────────────
 
@@ -39,21 +40,51 @@ with patch("claude_memory.repository.FalkorDB"):
 
 @pytest.fixture()
 def service() -> MemoryService:
-    """MemoryService with all deps mocked."""
+    """MemoryService with all deps mocked type-correctly via mock_factory.
+
+    Per process/issues/22e_BUILD_SPEC.md.
+    """
     mock_embedder = MagicMock()
     mock_embedder.encode.return_value = MOCK_EMBEDDING
+    svc = make_mock_service(embedding_service=mock_embedder)
 
-    with patch("claude_memory.repository.FalkorDB"):
-        with patch("claude_memory.lock_manager.redis.Redis"):
-            with patch("claude_memory.vector_store.AsyncQdrantClient"):
-                svc = MemoryService(embedding_service=mock_embedder)
+    # Delegate mock calls to a real ActivationEngine to allow the real pipeline to run
+    from claude_memory.activation import ActivationEngine
 
-    svc.repo = AsyncMock()
-    svc.repo = AsyncMock()
-    svc.repo = AsyncMock()
-    svc.activation_engine.repo = svc.repo  # sync so spread() uses same mock
-    svc.vector_store = AsyncMock()
+    real_engine = ActivationEngine(repo=svc.repo)
+    svc.activation_engine.activate.side_effect = real_engine.activate
+    svc.activation_engine.spread.side_effect = real_engine.spread
+    svc.activation_engine.rank.side_effect = real_engine.rank
+
     return svc
+
+
+def test_meta_fixture_topology_required(service) -> None:
+    """Topographical forcing: helper must produce type-correct deps.
+
+    Added 22e to extend forcing-test coverage to all migrated files.
+    DO NOT remove or weaken — guard against migrations that bypass
+    make_mock_service() and reintroduce the hand-rolled bug class.
+
+    Per process/issues/22e_BUILD_SPEC.md.
+    """
+    from unittest.mock import AsyncMock, MagicMock
+
+    assert isinstance(service.repo, AsyncMock), (
+        "service.repo targets AsyncMemoryRepository (async) — must be AsyncMock"
+    )
+    assert isinstance(service.vector_store, AsyncMock), (
+        "service.vector_store has async methods — must be AsyncMock"
+    )
+    assert isinstance(service.activation_engine.spread, AsyncMock), (
+        "ActivationEngine.spread is `async def` — must be AsyncMock"
+    )
+    assert isinstance(service.activation_engine.activate, MagicMock), (
+        "ActivationEngine.activate is sync `def` — must be MagicMock"
+    )
+    assert not isinstance(service.activation_engine.activate, AsyncMock), (
+        "Guard against bare AsyncMock — production does NOT await activate"
+    )
 
 
 def _vector_results(*ids: str) -> list[dict[str, Any]]:
