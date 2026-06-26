@@ -36,24 +36,52 @@ Add to `scripts/trace_contracts_dragon.py`. Pattern 12 detects `MemoryService` c
 
 **Allowlist (hardcoded in the scanner):**
 
+**REVISED 2026-06-26 after 22f R1 audit:** AST scan during baseline verification surfaced 6 additional files (test_analysis_radar, test_entity_lifecycle, test_graph_traversal, test_phase4, test_semantic_radar, test_session) with the same lightweight-integration pattern as test_temporal/test_hologram/test_full_workflow. Architect investigation confirmed all 6 are Category D (multi-line `MemoryService(embedding_service=..., vector_store=...)` then `service.repo.client = MagicMock(); .select_graph.return_value = ...` — helper would mock the repo away and break tests). The prior 11-entry allowlist was incomplete; the canonical allowlist is now **17 entries** grouped by architectural reason. These exemptions MUST live in the public constant — NOT smuggled into the detector function body — so the structural audit check is meaningful.
+
 ```python
 # In scripts/trace_contracts_dragon.py, near ALLOWLIST_MARKERS:
 PATTERN_12_ALLOWLIST = frozenset({
-    # Legitimate helper — the ONE place hand-rolled construction lives
+    # ─── The one legitimate helper ─────────────────────────────────────
+    # The ONE place hand-rolled construction is intentional and necessary.
     "tests/_helpers/mock_factory.py",
-    # Category D files (architect-verified intentional patterns; helper would break them)
+
+    # ─── Bare-MagicMock-stub tests (2) ─────────────────────────────────
+    # These never construct a real MemoryService — they use MagicMock()
+    # as a service stub for testing tool wrappers / router classification.
     "tests/unit/test_router.py",
     "tests/unit/test_list_orphans.py",
-    "tests/unit/test_locking.py",         # uses real LockManager
-    "tests/unit/test_hologram.py",        # lightweight integration
-    "tests/unit/test_dynamic_validation.py",  # uses real OntologyManager
-    "tests/unit/test_full_workflow.py",   # integration-ish
-    "tests/unit/test_mutant_dict_crud.py",    # mutant-testing factory
-    "tests/unit/test_mutant_dict_services.py",  # mutant-testing factory
-    "tests/unit/test_mutant_temporal.py",  # mutant-testing factory
-    "tests/unit/test_temporal.py",        # lightweight integration
+
+    # ─── Real-dependency tests (2) ─────────────────────────────────────
+    # These tests verify behavior with the REAL dependency (not mocked):
+    "tests/unit/test_locking.py",            # uses real LockManager (patched redis)
+    "tests/unit/test_dynamic_validation.py", # uses real OntologyManager
+
+    # ─── Mutant-testing factories (3) ──────────────────────────────────
+    # Custom `_make_mock_service()` + `_build()` factory pattern that patches
+    # constructors at the `tools.X` boundary — specific mutation testing
+    # contract that helper would change semantics of.
+    "tests/unit/test_mutant_dict_crud.py",
+    "tests/unit/test_mutant_dict_services.py",
+    "tests/unit/test_mutant_temporal.py",
+
+    # ─── Lightweight-integration tests (9) ─────────────────────────────
+    # Multi-line `MemoryService(embedding_service=..., vector_store=...)`
+    # then `service.repo.client = MagicMock(); .select_graph.return_value = ...`.
+    # Tests access patched-FalkorDB through `.repo.client` directly.
+    # Helper would mock the entire repo away and break this access pattern.
+    "tests/unit/test_temporal.py",
+    "tests/unit/test_hologram.py",
+    "tests/unit/test_full_workflow.py",
+    "tests/unit/test_analysis_radar.py",     # added after 22f R1 AST surfaced it
+    "tests/unit/test_entity_lifecycle.py",   # added after 22f R1 AST surfaced it
+    "tests/unit/test_graph_traversal.py",    # added after 22f R1 AST surfaced it
+    "tests/unit/test_phase4.py",             # added after 22f R1 AST surfaced it
+    "tests/unit/test_semantic_radar.py",     # added after 22f R1 AST surfaced it
+    "tests/unit/test_session.py",            # added after 22f R1 AST surfaced it
 })
 ```
+
+**Why grouped by category in the constant comments:** the 22f R1 audit surfaced the smuggling-into-detector anti-pattern. Future maintainers reading this constant must immediately see WHICH allowlist group a new entry belongs to and WHY — making it harder to silently add unjustified entries. If a new file genuinely needs allowlisting, it must fit one of the four documented architectural reasons (helper, bare-stub, real-dep, mutant-testing factory, lightweight-integration).
 
 **Pattern 12 detector function (add as new function in the scanner):**
 
@@ -174,14 +202,14 @@ def test_evil_allowlist_helper_exempt() -> None:
 
 
 def test_evil_allowlist_category_d_exempt() -> None:
-    """All 10 Category D files are allowlisted — none should fire."""
+    """All 16 Category D files are allowlisted — none should fire."""
     source = dedent("""
         from claude_memory.tools import MemoryService
         svc = MemoryService(embedding_service=embedder, vector_store=vs)
     """)
     tree = ast.parse(source)
     category_d_files = [f for f in PATTERN_12_ALLOWLIST if f != "tests/_helpers/mock_factory.py"]
-    assert len(category_d_files) == 10, "Expected 10 Category D files in allowlist"
+    assert len(category_d_files) == 16, "Expected 16 Category D files in allowlist"
     for filepath in category_d_files:
         violations = detect_pattern_12_hand_rolled_memory_service(tree, filepath)
         assert violations == [], f"FAIL: Category D file {filepath} fired Pattern 12"
@@ -556,12 +584,13 @@ construction) structurally impossible to reintroduce without explicit intent.
 | 4. `trace_contracts_dragon.py` Pattern 12 | AST scanner flags hand-rolled `MemoryService(embedding_service=...)` outside helper + 10 Category D allowlist | Reintroduction of the bug class via new test files or migrations bypassing `make_mock_service()` |
 | 5. Existing scanner Patterns 1-11 | Baseline 13 (ratcheting toward zero quarterly) | Original audit-remediation contract violations |
 
-The 10 Category D allowlist files (intentional patterns where helper would
-change semantics): test_router, test_list_orphans, test_locking (real
-LockManager), test_hologram (lightweight integration), test_dynamic_validation
-(real OntologyManager), test_full_workflow (integration-ish), test_mutant_dict_crud,
-test_mutant_dict_services, test_mutant_temporal (mutant-testing factories),
-test_temporal (lightweight integration).
+The 16 Category D allowlist files (intentional patterns where helper would
+change semantics), grouped by architectural reason:
+
+- **Bare-MagicMock stubs (2):** test_router, test_list_orphans
+- **Real-dependency tests (2):** test_locking (real LockManager), test_dynamic_validation (real OntologyManager)
+- **Mutant-testing factories (3):** test_mutant_dict_crud, test_mutant_dict_services, test_mutant_temporal
+- **Lightweight-integration (9):** test_temporal, test_hologram, test_full_workflow, test_analysis_radar, test_entity_lifecycle, test_graph_traversal, test_phase4, test_semantic_radar, test_session
 
 Adding a new test file? Use `make_mock_service()` from `tests/_helpers/mock_factory.py`.
 Adding a new file that genuinely needs hand-rolled construction? Add the path to
@@ -614,7 +643,7 @@ cd - && git worktree remove ../22f-evidence
 
 ## The bar (Codex will verify)
 
-- (a) `scripts/trace_contracts_dragon.py` has `PATTERN_12_ALLOWLIST` constant with exactly 11 entries (helper + 10 Category D files)
+- (a) `scripts/trace_contracts_dragon.py` has `PATTERN_12_ALLOWLIST` constant with exactly 17 entries (helper + 16 Category D files), grouped by architectural reason via inline comments. **The detector function MUST NOT have any additional hardcoded path exemptions** — all allowlisting flows through the public constant so the structural audit check is meaningful (this was the 22f R1 smuggling anti-pattern).
 - (b) `scripts/trace_contracts_dragon.py` has `detect_pattern_12_hand_rolled_memory_service()` function with the prescribed signature
 - (c) Scanner `main()` wires Pattern 12 into the scan loop (also walks `tests/unit/`)
 - (d) `tests/unit/test_contract_scanner_pattern12.py` exists with ≥6 acceptance tests covering allowlist + detection + edge cases

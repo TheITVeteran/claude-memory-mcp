@@ -51,28 +51,70 @@ rm /tmp/PR_ISSUE_22Z_HANDOFF.md
 
 ## Per-criterion verification
 
-### (a) Pattern 12 allowlist exists with correct membership
+### (a) Pattern 12 allowlist exists with correct membership AND no smuggled exemptions
+
+**REVISED 2026-06-26 after 22f R1 audit:** AST scan surfaced 6 additional Category D files (test_analysis_radar, test_entity_lifecycle, test_graph_traversal, test_phase4, test_semantic_radar, test_session) — same lightweight-integration pattern as test_temporal/test_hologram. The canonical allowlist is now **17 entries**. The detector function MUST NOT have any additional hardcoded exemptions outside the constant (this was the 22f R1 smuggling anti-pattern Codex caught).
 
 ```bash
 python -c "
 from scripts.trace_contracts_dragon import PATTERN_12_ALLOWLIST
 expected = {
+    # The one legitimate helper
     'tests/_helpers/mock_factory.py',
+    # Bare-MagicMock stubs (2)
     'tests/unit/test_router.py',
     'tests/unit/test_list_orphans.py',
+    # Real-dependency tests (2)
     'tests/unit/test_locking.py',
-    'tests/unit/test_hologram.py',
     'tests/unit/test_dynamic_validation.py',
-    'tests/unit/test_full_workflow.py',
+    # Mutant-testing factories (3)
     'tests/unit/test_mutant_dict_crud.py',
     'tests/unit/test_mutant_dict_services.py',
     'tests/unit/test_mutant_temporal.py',
+    # Lightweight-integration (9)
     'tests/unit/test_temporal.py',
+    'tests/unit/test_hologram.py',
+    'tests/unit/test_full_workflow.py',
+    'tests/unit/test_analysis_radar.py',
+    'tests/unit/test_entity_lifecycle.py',
+    'tests/unit/test_graph_traversal.py',
+    'tests/unit/test_phase4.py',
+    'tests/unit/test_semantic_radar.py',
+    'tests/unit/test_session.py',
 }
 assert set(PATTERN_12_ALLOWLIST) == expected, \
     f'FAIL: allowlist mismatch. Missing: {expected - set(PATTERN_12_ALLOWLIST)}, Extra: {set(PATTERN_12_ALLOWLIST) - expected}'
-assert len(PATTERN_12_ALLOWLIST) == 11, f'FAIL: expected 11 entries, got {len(PATTERN_12_ALLOWLIST)}'
-print('PASS: PATTERN_12_ALLOWLIST has exactly 11 expected entries')
+assert len(PATTERN_12_ALLOWLIST) == 17, f'FAIL: expected 17 entries, got {len(PATTERN_12_ALLOWLIST)}'
+print('PASS: PATTERN_12_ALLOWLIST has exactly 17 expected entries')
+"
+```
+
+**Additional smuggling check (critical — added after 22f R1):** the detector function body must NOT contain any hardcoded file paths beyond what's in the constant. AST-scan the detector function for string literals containing `test_*.py` outside the constant reference:
+
+```bash
+python -c "
+import ast
+with open('scripts/trace_contracts_dragon.py') as f:
+    tree = ast.parse(f.read())
+detector_func = None
+for node in ast.walk(tree):
+    if isinstance(node, ast.FunctionDef) and node.name == 'detect_pattern_12_hand_rolled_memory_service':
+        detector_func = node
+        break
+assert detector_func, 'FAIL: detector function not found'
+
+# Find all string literals in the function body
+smuggled = []
+for node in ast.walk(detector_func):
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        if '.py' in node.value and ('test_' in node.value or 'tests/' in node.value):
+            smuggled.append(node.value)
+
+if smuggled:
+    print(f'FAIL: detector function contains hardcoded path exemptions outside PATTERN_12_ALLOWLIST: {smuggled}')
+    print('All allowlisting MUST flow through the public constant. See 22f R1 audit verdict.')
+    exit(1)
+print('PASS: no smuggled exemptions in detector function — all allowlisting flows through PATTERN_12_ALLOWLIST')
 "
 ```
 
