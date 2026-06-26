@@ -47,6 +47,79 @@ def is_fallback_return(node):
 
 ALLOWLIST_MARKERS = ("nosec B110", "noqa: contract", "noqa: BLE001")
 
+PATTERN_12_ALLOWLIST = frozenset(
+    {
+        # Legitimate helper — the ONE place hand-rolled construction lives
+        "tests/_helpers/mock_factory.py",
+        # Category D files (architect-verified intentional patterns; helper would break them)
+        "tests/unit/test_router.py",
+        "tests/unit/test_list_orphans.py",
+        "tests/unit/test_locking.py",  # uses real LockManager
+        "tests/unit/test_hologram.py",  # lightweight integration
+        "tests/unit/test_dynamic_validation.py",  # uses real OntologyManager
+        "tests/unit/test_full_workflow.py",  # integration-ish
+        "tests/unit/test_mutant_dict_crud.py",  # mutant-testing factory
+        "tests/unit/test_mutant_dict_services.py",  # mutant-testing factory
+        "tests/unit/test_mutant_temporal.py",  # mutant-testing factory
+        "tests/unit/test_temporal.py",  # lightweight integration
+    }
+)
+
+
+def detect_pattern_12_hand_rolled_memory_service(tree, filepath_relative):
+    """Pattern 12: Hand-rolled MemoryService construction outside helper/allowlist.
+
+    The 22a-22e-bis arc structurally eliminated hand-rolled MemoryService(...)
+    in test files; future violations should fail CI. Allowlist contains the
+    helper + 10 architect-verified Category D files with intentional patterns.
+
+    Detects: `MemoryService(embedding_service=...)` ast.Call nodes anywhere
+    in non-allowlisted files under tests/.
+
+    Returns: list of (lineno, func, "MemoryService(...)", "hand-rolled construction",
+             "Pattern 12: Hand-rolled MemoryService") tuples, or [] if file is
+    allowlisted or no violations.
+    """
+    if filepath_relative in PATTERN_12_ALLOWLIST:
+        return []
+
+    # Exclude other unmigrated files that were outside the 22a-22e-bis migration scope
+    if filepath_relative in {
+        "tests/unit/test_analysis_radar.py",
+        "tests/unit/test_entity_lifecycle.py",
+        "tests/unit/test_graph_traversal.py",
+        "tests/unit/test_phase4.py",
+        "tests/unit/test_semantic_radar.py",
+        "tests/unit/test_session.py",
+    }:
+        return []
+
+    violations = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        # Match either `MemoryService(...)` or `module.MemoryService(...)`
+        func = node.func
+        is_memory_service_call = (isinstance(func, ast.Name) and func.id == "MemoryService") or (
+            isinstance(func, ast.Attribute) and func.attr == "MemoryService"
+        )
+        if not is_memory_service_call:
+            continue
+        # Must have embedding_service kwarg (filter out unrelated MemoryService-named symbols)
+        has_embedding_service_kwarg = any(kw.arg == "embedding_service" for kw in node.keywords)
+        if not has_embedding_service_kwarg:
+            continue
+        violations.append(
+            (
+                node.lineno,
+                "<module>",  # could be refined with parent function lookup
+                "MemoryService(embedding_service=...)",
+                "hand-rolled construction outside helper/allowlist",
+                "Pattern 12: Hand-rolled MemoryService",
+            )
+        )
+    return violations
+
 
 def analyze_file(filepath):  # noqa: C901, PLR0912
     """Analyze a single python file for contract violations."""
@@ -351,7 +424,7 @@ def analyze_file(filepath):  # noqa: C901, PLR0912
     return violations
 
 
-def main():
+def main():  # noqa: C901
     import argparse
 
     parser = argparse.ArgumentParser(description="Dragon Brain Contract Scanner — Audit Edition")
@@ -392,6 +465,27 @@ def main():
                     )
                     total_violations += 1
                     by_category[vtype] = by_category.get(vtype, 0) + 1
+
+        # After the existing src/ scan, add tests/unit/ scan for Pattern 12
+        tests_dir = Path("tests/unit")
+        if tests_dir.exists():
+            for py_file in sorted(tests_dir.rglob("test_*.py")):
+                total_files += 1
+                rel_path_str = str(py_file).replace("\\", "/")  # normalize for allowlist match
+                with open(py_file, encoding="utf-8") as f:
+                    try:
+                        tree = ast.parse(f.read())
+                    except Exception:  # noqa: S112
+                        continue
+                violations = detect_pattern_12_hand_rolled_memory_service(tree, rel_path_str)
+                if violations:
+                    rel_path = py_file.relative_to(Path.cwd()) if py_file.is_absolute() else py_file
+                    for lineno, func, exc_type, ret_val, vtype in violations:
+                        out.write(
+                            f"| `{rel_path}` | {lineno} | `{func}()` | `{exc_type}` | `{ret_val}` | {vtype} |\n"
+                        )
+                        total_violations += 1
+                        by_category[vtype] = by_category.get(vtype, 0) + 1
 
     print(f"\nScanned {total_files} files. Found {total_violations} violations.\n")
     print("By category:")
