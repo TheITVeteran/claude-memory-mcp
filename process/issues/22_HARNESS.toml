@@ -29,6 +29,8 @@ denied_paths = [
     "process/issues/22d_AUDIT_SPEC.md",
     "process/issues/22e_BUILD_SPEC.md",
     "process/issues/22e_AUDIT_SPEC.md",
+    "process/issues/22e_bis_BUILD_SPEC.md",
+    "process/issues/22e_bis_AUDIT_SPEC.md",
     "process/issues/22f_BUILD_SPEC.md",
     "process/issues/22f_AUDIT_SPEC.md",
     "process/issues/22_HARNESS.toml",
