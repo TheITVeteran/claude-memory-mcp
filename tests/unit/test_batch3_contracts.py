@@ -4,12 +4,13 @@ AUDIT-B3: Verifies that enrichment channel failures are surfaced in
 search metadata instead of being silently swallowed.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pydantic import ValidationError
 
 from claude_memory.schema import ChannelStatus, SearchMemoryParams
+from tests._helpers.mock_factory import make_mock_service
 
 # --- Test Constants ---
 SEARCH_QUERY = "async patterns"
@@ -70,29 +71,54 @@ class TestChannelStatusSchema:
 
 @pytest.fixture
 def search_service():
-    """Build a MemoryService with mocked infra for search testing."""
-    with patch("claude_memory.repository.FalkorDB"):
-        from claude_memory.tools import MemoryService
+    """Build a MemoryService with mocked infra for search testing via mock_factory.
 
-        embedder = MagicMock()
-        embedder.encode.return_value = [0.1] * 1024
-        vector_store = AsyncMock()
-        vector_store.search.return_value = []
+    Per process/issues/22e_bis_BUILD_SPEC.md.
+    """
+    embedder = MagicMock()
+    embedder.encode.return_value = [0.1] * 1024
+    service = make_mock_service(embedding_service=embedder)
 
-        service = MemoryService(embedding_service=embedder, vector_store=vector_store)
-        service.repo = AsyncMock()
-        service.repo.client = MagicMock()
-        service.repo.client.select_graph.return_value = MagicMock()
+    # Test-default returns on helper-built typed deps
+    service.vector_store.search.return_value = []
+    service.fts_store.search.return_value = []
+    service.activation_engine.activate.return_value = {}
+    service.activation_engine.spread.return_value = {}
+    service.repo.get_subgraph.return_value = {"nodes": [], "edges": []}
 
-        # FTS store
-        fts_mock = MagicMock()
-        fts_mock.search.return_value = []
-        service.fts_store = fts_mock
+    # Tests access service.repo.client.select_graph.return_value — preserve this access pattern
+    # by configuring on the helper-built AsyncMock
+    service.repo.client.select_graph.return_value = MagicMock()
 
-        # Activation engine
-        service.activation_engine = MagicMock()
+    yield service
 
-        yield service
+
+def test_meta_fixture_topology_required(search_service) -> None:
+    """Topographical forcing: helper must produce type-correct deps.
+
+    Added 22e-bis to extend forcing-test coverage to the contract-test files.
+    DO NOT remove or weaken — guard against migrations that bypass
+    make_mock_service() and reintroduce the hand-rolled bug class.
+
+    Per process/issues/22e_bis_BUILD_SPEC.md.
+    """
+    from unittest.mock import AsyncMock, MagicMock
+
+    assert isinstance(search_service.repo, AsyncMock), (
+        "search_service.repo targets AsyncMemoryRepository (async) — must be AsyncMock"
+    )
+    assert isinstance(search_service.vector_store, AsyncMock), (
+        "search_service.vector_store has async methods — must be AsyncMock"
+    )
+    assert isinstance(search_service.activation_engine.spread, AsyncMock), (
+        "ActivationEngine.spread is async — must be AsyncMock"
+    )
+    assert isinstance(search_service.activation_engine.activate, MagicMock), (
+        "ActivationEngine.activate is sync — must be MagicMock"
+    )
+    assert not isinstance(search_service.activation_engine.activate, AsyncMock), (
+        "Guard against bare AsyncMock — production does NOT await activate"
+    )
 
 
 @pytest.mark.asyncio
