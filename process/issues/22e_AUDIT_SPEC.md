@@ -125,21 +125,26 @@ for node in ast.walk(tree):
 
 ```bash
 python -c "
-import ast
+import ast, re
 with open('tests/unit/test_channel_degradation.py') as f:
     tree = ast.parse(f.read())
 for node in ast.walk(tree):
     if isinstance(node, ast.FunctionDef) and node.name == 'service':
         src = ast.unparse(node)
-        assert '__aenter__' in src, 'FAIL: async lock context manager __aenter__ missing'
-        assert '__aexit__' in src, 'FAIL: async lock context manager __aexit__ missing'
-        # Negative check: sync __enter__/__exit__ should NOT have been substituted
-        # (this would happen if AG copy-pasted the 22b/22c/22d sync pattern)
-        # __enter__ might appear in test bodies elsewhere, so check fixture-local only
-        assert '__enter__' not in src, \
-            'FAIL: sync __enter__ in fixture — should be __aenter__ (async). 22b/22c/22d pattern incorrectly applied.'
-        assert '__exit__' not in src, \
-            'FAIL: sync __exit__ in fixture — should be __aexit__ (async).'
+        # Positive: helper-correct async lock assignments must be present.
+        # Match assignment patterns (\.__name__\s*=), NOT bare string presence —
+        # docstring text mentioning __aenter__/__enter__ for teaching purposes
+        # must not trigger the check. Bug originally found 22e R1: build spec's
+        # golden diff docstring contained literal __enter__/__exit__ as a
+        # teaching note and crashed the bare-string-presence check.
+        assert re.search(r'\\.__aenter__\\s*=', src), 'FAIL: async .__aenter__ = assignment missing'
+        assert re.search(r'\\.__aexit__\\s*=', src), 'FAIL: async .__aexit__ = assignment missing'
+        # Negative: sync .__enter__ = / .__exit__ = assignments must NOT be present
+        # (docstring mentions are fine; only assignment patterns are forbidden).
+        assert not re.search(r'\\.__enter__\\s*=', src), \
+            'FAIL: sync .__enter__ = assignment in fixture — should be .__aenter__ = (async). 22b/22c/22d pattern incorrectly applied.'
+        assert not re.search(r'\\.__exit__\\s*=', src), \
+            'FAIL: sync .__exit__ = assignment in fixture — should be .__aexit__ = (async).'
         print('PASS: async lock context manager pattern preserved')
         break
 "
