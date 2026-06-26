@@ -45,3 +45,9 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [commit]
+      - id: verify-handoff-completeness
+        name: Verify handoff PR documents have complete checklist evidence
+        entry: python scripts/hooks/verify_handoff_completeness.py
+        language: system
+        files: ^process/PR_ISSUE_.*_HANDOFF\.md$
+        stages: [pre-commit]
