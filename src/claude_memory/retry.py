@@ -5,11 +5,12 @@ import functools
 import logging
 import time
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import ParamSpec, TypeVar, cast
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
+P = ParamSpec("P")
 
 # Default transient exceptions to retry on
 _TRANSIENT_EXCEPTIONS: tuple[type[BaseException], ...] = (
@@ -42,7 +43,7 @@ def retry_on_transient(  # noqa: C901
     base_delay: float = 1.0,
     max_delay: float = 16.0,
     exceptions: tuple[type[BaseException], ...] | None = None,
-) -> Callable[..., Any]:
+) -> Callable[[Callable[P, T]], Callable[P, T]]:
     """Decorator: retry a function on transient connection errors with exponential backoff.
 
     Args:
@@ -53,15 +54,15 @@ def retry_on_transient(  # noqa: C901
     """
     retryable = exceptions or _TRANSIENT_EXCEPTIONS
 
-    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+    def decorator(func: Callable[P, T]) -> Callable[P, T]:
         """Wrap a sync or async function with retry logic."""
 
         @functools.wraps(func)
-        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+        async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             """Async retry wrapper with exponential backoff."""
             for attempt in range(max_retries + 1):  # pragma: no branch
                 try:
-                    return await func(*args, **kwargs)
+                    return await func(*args, **kwargs)  # type: ignore[misc,no-any-return]
                 except retryable as exc:
                     if attempt == max_retries:
                         logger.error(
@@ -81,9 +82,10 @@ def retry_on_transient(  # noqa: C901
                         exc,
                     )
                     await asyncio.sleep(delay)
+            raise RuntimeError("Unreachable")
 
         @functools.wraps(func)
-        def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+        def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             """Sync retry wrapper with exponential backoff."""
             for attempt in range(max_retries + 1):  # pragma: no branch
                 try:
@@ -107,9 +109,10 @@ def retry_on_transient(  # noqa: C901
                         exc,
                     )
                     time.sleep(delay)
+            raise RuntimeError("Unreachable")
 
         if asyncio.iscoroutinefunction(func):
-            return async_wrapper
-        return sync_wrapper
+            return cast(Callable[P, T], async_wrapper)
+        return cast(Callable[P, T], sync_wrapper)
 
     return decorator

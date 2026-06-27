@@ -92,6 +92,7 @@ def make_mock_service(
     # Patch infrastructure constructors that would fail without real deps
     with (
         patch("claude_memory.repository.FalkorDB"),
+        patch("claude_memory.repository_async.FalkorDB"),
         patch("claude_memory.lock_manager.redis.Redis"),
         patch("claude_memory.vector_store.AsyncQdrantClient"),
     ):

@@ -1,4 +1,10 @@
-"""FalkorDB data access layer — Cypher queries, node/edge CRUD, and index management."""
+"""FalkorDB sync data access layer — Cypher queries, CRUD, index management.
+
+Post-B10.5 role: PRESERVED for diagnostics + CLI ops scripts (e.g.
+scripts/heal_graph.py, scripts/recover_graph.py). Production async path
+goes through AsyncMemoryRepository (native async) in repository_async.py.
+Both share canonical Cypher templates via cypher_queries.py.
+"""
 
 import logging
 import os
@@ -8,6 +14,15 @@ from typing import Any
 
 from falkordb import FalkorDB
 
+from claude_memory.cypher_queries import (
+    CREATE_EDGE,
+    CREATE_NODE,
+    DELETE_EDGE,
+    GET_NODE_BY_ID,
+    HARD_DELETE_NODE,
+    SOFT_DELETE_NODE,
+    UPDATE_NODE,
+)
 from claude_memory.repository_queries import RepositoryQueryMixin
 from claude_memory.repository_traversal import RepositoryTraversalMixin
 from claude_memory.retry import retry_on_transient
@@ -19,9 +34,13 @@ _CONSTRUCTOR_BASE_DELAY = 1.0
 
 
 class MemoryRepository(RepositoryQueryMixin, RepositoryTraversalMixin):
-    """
-    Data Access Layer for FalkorDB.
-    Handles all direct database interactions, Cypher queries, and Index management.
+    """FalkorDB sync data access layer — Cypher queries, CRUD, index management.
+
+    Post-B10.5 role: PRESERVED for diagnostics + CLI ops scripts (e.g.
+    scripts/heal_graph.py, scripts/recover_graph.py). Production async path
+    goes through AsyncMemoryRepository (native async) in repository_async.py.
+    Both share canonical Cypher templates via cypher_queries.py, giving a sync
+    x-ray vision into the same database.
     """
 
     def __init__(
@@ -92,22 +111,14 @@ class MemoryRepository(RepositoryQueryMixin, RepositoryTraversalMixin):
         params["project_id"] = props.get("project_id")
         params["updated_at"] = props.get("updated_at")
 
-        query = f"""
-        MERGE (n:{label}:Entity {{name: $name, project_id: $project_id}})
-        ON CREATE SET n = $props
-        ON MATCH SET n.updated_at = $updated_at
-        RETURN n
-        """
-
-        result = graph.query(query, params)
+        result = graph.query(CREATE_NODE.format(label=label), params)
         return result.result_set[0][0].properties  # type: ignore[no-any-return]
 
     @retry_on_transient()
     def get_node(self, node_id: str) -> dict[str, Any] | None:
         """Retrieves a node by its ID."""
         graph = self.select_graph()
-        query = "MATCH (n) WHERE n.id = $id RETURN n"
-        result = graph.query(query, {"id": node_id})
+        result = graph.query(GET_NODE_BY_ID, {"id": node_id})
 
         if not result.result_set:
             return None
@@ -120,15 +131,9 @@ class MemoryRepository(RepositoryQueryMixin, RepositoryTraversalMixin):
         graph = self.select_graph()
         props = properties.copy()
 
-        query_parts = []
-        query_parts.append("MATCH (n:Entity {id: $id})")
-        query_parts.append("SET n += $props")
-        query_parts.append("RETURN n")
-
-        query = "\n".join(query_parts)
         params = {"id": node_id, "props": props}
 
-        result = graph.query(query, params)
+        result = graph.query(UPDATE_NODE, params)
         if not result.result_set:
             return {}
         return result.result_set[0][0].properties  # type: ignore[no-any-return]
@@ -140,15 +145,10 @@ class MemoryRepository(RepositoryQueryMixin, RepositoryTraversalMixin):
         graph = self.select_graph()
 
         if soft_delete:
-            query = (
-                "MATCH (n) WHERE n.id = $id SET n.deleted = true, "
-                "n.deletion_reason = $reason RETURN n"
-            )
-            res = graph.query(query, {"id": node_id, "reason": reason})
+            res = graph.query(SOFT_DELETE_NODE, {"id": node_id, "reason": reason})
             return bool(res.result_set)
         else:
-            query = "MATCH (n) WHERE n.id = $id DETACH DELETE n"
-            graph.query(query, {"id": node_id})
+            graph.query(HARD_DELETE_NODE, {"id": node_id})
             return True
 
     def create_edge(
@@ -156,18 +156,14 @@ class MemoryRepository(RepositoryQueryMixin, RepositoryTraversalMixin):
     ) -> dict[str, Any]:
         """Creates or merges a relationship between two nodes.
 
-        Uses MERGE to prevent duplicate edges on retry.
+        Uses merge logic to prevent duplicate edges on retry.
         """
         graph = self.select_graph()
 
-        query = f"""
-        MATCH (a), (b)
-        WHERE a.id = $from AND b.id = $to
-        MERGE (a)-[r:{relation_type}]->(b)
-        ON CREATE SET r = $props
-        RETURN r
-        """
-        result = graph.query(query, {"from": from_id, "to": to_id, "props": properties})
+        result = graph.query(
+            CREATE_EDGE.format(relation_type=relation_type),
+            {"from": from_id, "to": to_id, "props": properties},
+        )
         if not result.result_set:
             return {}
         return result.result_set[0][0].properties  # type: ignore[no-any-return]
@@ -175,8 +171,7 @@ class MemoryRepository(RepositoryQueryMixin, RepositoryTraversalMixin):
     def delete_edge(self, edge_id: str) -> bool:
         """Deletes a relationship by ID."""
         graph = self.select_graph()
-        query = "MATCH ()-[r]->() WHERE r.id = $id DELETE r"
-        graph.query(query, {"id": edge_id})
+        graph.query(DELETE_EDGE, {"id": edge_id})
         return True
 
     @retry_on_transient()

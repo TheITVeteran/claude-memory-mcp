@@ -18,7 +18,7 @@ def _make_mock_service() -> tuple:
     mock_embedder = MagicMock()
     mock_embedder.encode.return_value = [0.1] * 1024
 
-    mock_repo = MagicMock()
+    mock_repo = AsyncMock()
     mock_repo.create_node.return_value = {
         "id": "test-id-123",
         "name": "Test",
@@ -57,7 +57,7 @@ def _make_mock_service() -> tuple:
 
 def _build(e, r, v, lm):
     with (
-        patch("claude_memory.tools.MemoryRepository", return_value=r),
+        patch("claude_memory.tools.AsyncMemoryRepository", return_value=r),
         patch("claude_memory.tools.LockManager", return_value=lm),
         patch("claude_memory.tools.QdrantVectorStore", return_value=v),
         patch("claude_memory.tools.ActivationEngine"),
