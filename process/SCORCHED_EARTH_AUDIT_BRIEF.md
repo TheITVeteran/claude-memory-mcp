@@ -32,7 +32,7 @@ You are an outside skeptic. Treat the codebase as if you have never seen it befo
 - `process/` — process docs, not production behavior
 - `benchmarks/` — research code, not production
 
-## Audit dimensions (cover all eight, tag each finding by bucket)
+## Audit dimensions (cover all nine, tag each finding by bucket)
 
 1. **Correctness** — logic bugs, off-by-one errors, wrong return shapes, edge cases (empty inputs, `None` handling, Unicode, integer overflow, type coercion surprises). Anything where the code does the wrong thing.
 
@@ -49,6 +49,17 @@ You are an outside skeptic. Treat the codebase as if you have never seen it befo
 7. **API / contract** — MCP tool surface contracts (do tool schemas match implementations?), schema drift between docs and code, deprecation handling, backward compatibility risks, semantic versioning concerns. The MCP boundary is what external clients depend on.
 
 8. **Observability** — logging quality (right level? structured? scrubbed of secrets?), error message clarity (would a maintainer at 2am understand it?), debuggability under failure (can you reconstruct what happened from logs alone?), audit-log completeness (the embedding service has a client_id audit hook — is it consistently honored?).
+
+9. **Lockdown infrastructure coverage (meta-dimension)** — verify that physical enforcement mechanisms actually cover the FULL surface they claim to. **Added 2026-06-27 after B10.5 R1 audit found `verify_handoff_completeness.py`'s regex was too narrow (`^process/PR_ISSUE_.*_HANDOFF\.md$` silently skipped `PR_B10_5_HANDOFF.md`).** Things to check across all enforcement mechanisms in `scripts/hooks/` + `scripts/trace_contracts_dragon.py` + `.pre-commit-config.yaml` + `tox.ini`:
+   - **File-path regex filters too narrow?** Pre-commit hook `files:` patterns, scanner `rglob` patterns, exclude lists. Could a future file naming convention bypass the check?
+   - **Scanners walk all relevant directories?** `trace_contracts_dragon.py` Pattern 12 walks `tests/unit/` — does it also need to walk `tests/integration/`? Are there source directories it skips?
+   - **Baselines computed from actual current state?** `tox -e contracts` baseline is hardcoded at 13 — what if the current count diverges silently due to a config gap?
+   - **Allowlists hardcoded vs config-driven?** `PATTERN_12_ALLOWLIST` is hardcoded in source — is there a config-driven escape hatch that could be abused?
+   - **Hook execution coverage?** Are hooks registered in `.pre-commit-config.yaml` actually running on the right `stages`? `stages: [pre-commit]` vs `stages: [commit-msg]` vs `stages: [pre-push]` — different coverage.
+   - **Audit-spec contracts vs reality?** When an audit spec says "criterion X verifies behavior Y," does the criterion's check actually verify behavior Y, or does it just check a proxy that can drift?
+   - **Hook bypass via `--no-verify`?** Are there commits in `git log` that appear to bypass hooks? (Not a runtime check, but a forensic audit dimension.)
+
+   **This dimension's value:** the 14a-22f arc + B10.5 R1 demonstrated that lockdown infrastructure can ship with blind spots. Catching them HERE means future arcs aren't silently bypassed.
 
 ## Output format (REQUIRED — keeps signal triagable)
 
@@ -126,6 +137,7 @@ You will not audit the remediations from this brief — fresh Codex sessions han
 - Audit Remediation Round 2 (May 2026) added you (Codex) as the adversarial Auditor seat; you caught 3 production bugs the prior trifecta missed (Cypher injection at `repository.py:90`, point-in-time payload drift, temporal direction enum drift)
 - 5 layers of physical enforcement now active: `branch_write_guard.py`, `inject_handoff_hash.py`, `verify_handoff_completeness.py`, `trace_contracts_dragon.py` Pattern 12, existing baseline ratchet at 13
 - `process/ARC_22_CLOSE.md` is the most comprehensive public artifact if you want the WHY behind the enforcement layers
+- **Precedent for Dimension 9 (lockdown coverage):** B10.5 R1 audit found `verify_handoff_completeness.py` had a too-narrow regex that silently bypassed a non-22-arc-style handoff filename. The hook was fixed at master commit `2a69a70` (regex broadened from `^process/PR_ISSUE_.*_HANDOFF\.md$` to `^process/PR_.*_HANDOFF\.md$`). **Look for analogous structural blind spots in every other enforcement mechanism.** Lockdown infrastructure that ships unaudited can silently fail to enforce — exactly the failure mode Round 1 (May 2026) was about (silent wrong-answer in `search()`). Same anti-pattern, different surface.
 
 **Do not use this context to suppress findings.** Use it ONLY to understand what the code is supposed to do.
 
