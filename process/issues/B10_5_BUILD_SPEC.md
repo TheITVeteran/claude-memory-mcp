@@ -42,9 +42,48 @@ Original 9-file scope was incomplete — missed the test-infrastructure dependen
 
   Critical: these are Category D files (intentional patterns); the modification preserves the mutant-testing factory pattern but updates the patch target to match the new production path. The architectural intent is unchanged.
 
+### Type-preserving decorators (ADDED 2026-06-27 after B10.5 R3 mypy escalation)
+
+When `@wrap_db_exceptions` and `@retry_on_transient()` are applied to `AsyncMemoryRepository` methods, the decorators' `Callable[..., Any]` return type erases the underlying signature. Mixin code (`temporal.py`, `crud.py`, `analysis.py`) that calls `await self.repo.X()` then gets `Any` back, and `return await self.repo.X()` triggers `[no-any-return]` against the mixin's declared `-> dict[str, Any]` return type.
+
+**Architect-prescribed fix:** make both decorators preserve signatures using `ParamSpec` (PEP 612) + `TypeVar`. This is the structural fix; type: ignore annotations across 7 mixin sites would be technical debt and would touch out-of-scope files.
+
+- **UPDATE:** `src/claude_memory/retry.py` — rewrite `retry_on_transient` signature to use `ParamSpec("P") + TypeVar("T")` and cast wrappers at return. Code shape:
+
+  ```python
+  from typing import Any, ParamSpec, TypeVar, cast
+  from collections.abc import Callable
+
+  P = ParamSpec("P")
+  T = TypeVar("T")
+
+  def retry_on_transient(
+      max_retries: int = 5,
+      base_delay: float = 1.0,
+      max_delay: float = 16.0,
+      exceptions: tuple[type[BaseException], ...] | None = None,
+  ) -> Callable[[Callable[P, T]], Callable[P, T]]:
+      ...
+      def decorator(func: Callable[P, T]) -> Callable[P, T]:
+          @functools.wraps(func)
+          async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+              ...  # existing retry body
+          @functools.wraps(func)
+          def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+              ...  # existing retry body
+          if asyncio.iscoroutinefunction(func):
+              return cast(Callable[P, T], async_wrapper)
+          return cast(Callable[P, T], sync_wrapper)
+      return decorator
+  ```
+
+  The `cast()` at return is the standard pattern for runtime-dispatched sync/async decorators that can't be cleanly expressed with overloads alone. Preserves the caller's `dict[str, Any]` return type through the decorator.
+
+- **UPDATE:** `src/claude_memory/repository_async.py`'s `wrap_db_exceptions` decorator — same ParamSpec/TypeVar pattern. Already in scope.
+
 ### Scope summary
 
-**13 files total** (9 original + 4 test-infrastructure additions). Stretched beyond initial scope to satisfy "no test regression" — flag this in handoff Discoveries with the cite to B10.5 R2 audit (oracle correction). Production code change. Higher reversibility cost than #22 — handle accordingly.
+**14 files total** (9 original + 4 test-infrastructure + 1 type-preserving decorator). Each expansion is oracle correction satisfying the spec's intent (`no test regression`, `mypy strict clean`). All three expansions flagged in handoff Discoveries with cite to the respective audit that surfaced them. Production code change. Higher reversibility cost than #22 — handle accordingly.
 
 ## Concrete Transformations
 

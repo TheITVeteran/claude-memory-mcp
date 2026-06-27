@@ -210,7 +210,7 @@ grep -A 0 "falkordb" pyproject.toml | head -3
 git diff --name-only origin/master..HEAD
 ```
 
-**REVISED 2026-06-27 after B10.5 R2 audit:** scope expanded from 9 → 13 files to include test infrastructure updates (helper + 3 mutant test files) per oracle correction in build spec. Expected output (must match, ordering insensitive — **13 files**):
+**REVISED 2026-06-27 after B10.5 R2 + R3 audits:** scope expanded from 9 → 13 → 14 files via two oracle corrections in build spec. Expected output (must match, ordering insensitive — **14 files**):
 
 Original 9:
 - `src/claude_memory/cypher_queries.py` (new)
@@ -223,13 +223,16 @@ Original 9:
 - `pyproject.toml`
 - `process/PR_B10_5_HANDOFF.md` (new)
 
-Added in R2 scope expansion:
+Added in R2 scope expansion (test infrastructure):
 - `tests/_helpers/mock_factory.py` (patch new async FalkorDB path)
 - `tests/unit/test_mutant_dict_crud.py` (update `_build()` patches)
 - `tests/unit/test_mutant_dict_services.py` (update `_build()` patches)
 - `tests/unit/test_mutant_temporal.py` (update `_build()` patches)
 
-Any file beyond these 13 = FAIL. Watch for:
+Added in R3 scope expansion (type-preserving decorator):
+- `src/claude_memory/retry.py` (`retry_on_transient` decorator rewrite with `ParamSpec` + `TypeVar` to preserve signatures through the wrapper — eliminates `[no-any-return]` in mixin call sites)
+
+Any file beyond these 14 = FAIL. Watch for:
 - `tests/unit/test_*` other than the 4 explicitly listed — must not be touched (Category A files already migrated in 22 arc don't need re-touching unless their patches now break)
 - `process/*_SPEC.md` other than the new B10.5 handoff — denied per spec discipline (architect-owned)
 - `scripts/hooks/*` — 5-layer enforcement infrastructure must not be modified
