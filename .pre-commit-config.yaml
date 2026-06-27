@@ -51,3 +51,10 @@ repos:
         language: system
         files: ^process/PR_.*_HANDOFF\.md$
         stages: [pre-commit]
+
+      - id: architect-branch-guard
+        name: Refuse architect-owned file commits on non-master branches
+        entry: python scripts/hooks/architect_branch_guard.py
+        language: system
+        pass_filenames: true
+        stages: [pre-commit]
