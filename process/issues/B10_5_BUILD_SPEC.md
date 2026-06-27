@@ -29,10 +29,22 @@ Migrate `AsyncMemoryRepository` from "thin wrapper over sync `MemoryRepository` 
 - **MINIMAL TOUCH:** `src/claude_memory/repository_traversal.py` — same (use extracted constants)
 - **UPDATE:** `src/claude_memory/tools.py` line 82 — construction simplifies to `AsyncMemoryRepository(host, port, password)`
 - **REWRITE:** `tests/unit/test_repository_async.py` — from delegation tests to behavioral tests
-- **UPDATE:** `pyproject.toml` — `falkordb>=1.4.0,<2.0.0` (explicit native-async lower bound)
+- **UPDATE:** `pyproject.toml` — `falkordb>=1.4.0,<2.0.0` AND `redis>=7.1.0,<8.0.0` (falkordb v1.4.0 dependency cascade)
 - **NEW:** `process/PR_B10_5_HANDOFF.md`
 
-Nine-file diff. Production code change. Higher reversibility cost than #22 — handle accordingly.
+### Test infrastructure scope (ADDED 2026-06-27 after B10.5 R2 audit)
+
+Original 9-file scope was incomplete — missed the test-infrastructure dependency on the changed production construction path. Per oracle correction discipline (substance test passes: AG was NOT semantically required to update test infra under original spec; the migration's "no test regression" intent REQUIRES test infrastructure to track production path changes):
+
+- **UPDATE:** `tests/_helpers/mock_factory.py` — add `patch("claude_memory.repository_async.FalkorDB")` to the patch tuple in `make_mock_service`. The 22-arc helper patches `claude_memory.repository.FalkorDB` (sync) which the new construction path no longer uses. Without the additional patch, helper-built services hit the real async FalkorDB constructor and tests fail with "MagicMock can't be used in 'await' expression."
+
+- **UPDATE:** `tests/unit/test_mutant_dict_crud.py`, `tests/unit/test_mutant_dict_services.py`, `tests/unit/test_mutant_temporal.py` — update each file's `_build()` factory (or equivalent constructor patch tuple) to patch the new async construction path. Replace `patch("claude_memory.tools.MemoryRepository", return_value=r)` with `patch("claude_memory.repository_async.FalkorDB")` (or analogous — the patches must intercept the actual production construction).
+
+  Critical: these are Category D files (intentional patterns); the modification preserves the mutant-testing factory pattern but updates the patch target to match the new production path. The architectural intent is unchanged.
+
+### Scope summary
+
+**13 files total** (9 original + 4 test-infrastructure additions). Stretched beyond initial scope to satisfy "no test regression" — flag this in handoff Discoveries with the cite to B10.5 R2 audit (oracle correction). Production code change. Higher reversibility cost than #22 — handle accordingly.
 
 ## Concrete Transformations
 

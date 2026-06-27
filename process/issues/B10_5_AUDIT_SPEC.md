@@ -26,9 +26,13 @@ This is the primary criterion. The other criteria below verify migration structu
 # File must exist
 test -f src/claude_memory/cypher_queries.py && echo "PASS" || echo "FAIL: missing"
 
-# Survey shows no inline Cypher remains in repo files
+# Survey shows no inline Cypher remains in repo files.
+# Excludes docstrings (Expr->Constant pattern) and module-level strings.
+# Only flags Constants used as arguments to .query()/.execute() calls.
+# REVISED 2026-06-27 after B10.5 R2 audit found bare-string check had
+# legitimate docstring false-positives (same pattern as 22e R1).
 python -c "
-import ast, re
+import ast
 files_to_check = [
     'src/claude_memory/repository.py',
     'src/claude_memory/repository_queries.py',
@@ -36,19 +40,50 @@ files_to_check = [
     'src/claude_memory/repository_async.py',
 ]
 cypher_keywords = ['MATCH ', 'MERGE ', 'CREATE ', 'WITH ', 'RETURN ', 'WHERE ']
+
+def is_docstring(node, parent_map):
+    '''Check if this Constant is a docstring (first Expr in module/class/function body).'''
+    parent = parent_map.get(id(node))
+    if not isinstance(parent, ast.Expr):
+        return False
+    grandparent = parent_map.get(id(parent))
+    if not isinstance(grandparent, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+        return False
+    return grandparent.body and grandparent.body[0] is parent
+
+def is_query_argument(node, parent_map):
+    '''Check if this Constant is passed as an argument to .query()/.execute() calls.'''
+    parent = parent_map.get(id(node))
+    if not isinstance(parent, ast.Call):
+        return False
+    func = parent.func
+    method_name = func.attr if isinstance(func, ast.Attribute) else None
+    return method_name in ('query', 'execute_cypher', 'execute')
+
 for path in files_to_check:
     with open(path) as f:
         tree = ast.parse(f.read())
+    parent_map = {}
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            parent_map[id(child)] = node
     inline_cypher = []
     for node in ast.walk(tree):
-        if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            if any(kw in node.value.upper() for kw in cypher_keywords) and len(node.value) > 30:
-                inline_cypher.append((node.lineno, node.value[:60]))
+        if not (isinstance(node, ast.Constant) and isinstance(node.value, str)):
+            continue
+        if not (any(kw in node.value.upper() for kw in cypher_keywords) and len(node.value) > 30):
+            continue
+        # Exclude docstrings — they're allowed to contain Cypher keywords for documentation
+        if is_docstring(node, parent_map):
+            continue
+        # Only flag if used as a query argument (this is the actual bug class)
+        if is_query_argument(node, parent_map):
+            inline_cypher.append((node.lineno, node.value[:60]))
     if inline_cypher:
-        print(f'FAIL: {path} contains inline Cypher at lines: {inline_cypher}')
-        print(f'  All Cypher should be in cypher_queries.py constants.')
+        print(f'FAIL: {path} contains inline Cypher passed to .query()/.execute() at lines: {inline_cypher}')
+        print(f'  All such Cypher should be in cypher_queries.py constants.')
         exit(1)
-print('PASS: no inline Cypher in repository files; all references go through cypher_queries.py')
+print('PASS: no inline Cypher passed as query arguments; docstrings excluded; all live queries reference cypher_queries.py constants')
 "
 ```
 
@@ -172,10 +207,12 @@ grep -A 0 "falkordb" pyproject.toml | head -3
 ### (j) Scope discipline
 
 ```bash
-git diff --name-only master..HEAD
+git diff --name-only origin/master..HEAD
 ```
 
-Expected output (must match, ordering insensitive — 9 files):
+**REVISED 2026-06-27 after B10.5 R2 audit:** scope expanded from 9 → 13 files to include test infrastructure updates (helper + 3 mutant test files) per oracle correction in build spec. Expected output (must match, ordering insensitive — **13 files**):
+
+Original 9:
 - `src/claude_memory/cypher_queries.py` (new)
 - `src/claude_memory/repository_async.py`
 - `src/claude_memory/repository.py`
@@ -186,12 +223,19 @@ Expected output (must match, ordering insensitive — 9 files):
 - `pyproject.toml`
 - `process/PR_B10_5_HANDOFF.md` (new)
 
-Any other file = FAIL. Watch for:
-- `tests/_helpers/*` — helper must remain unchanged
-- `tests/unit/test_*` other than `test_repository_async.py` — adjacent test files must not be touched
-- `process/*_SPEC.md` — denied per spec discipline (architect-owned)
+Added in R2 scope expansion:
+- `tests/_helpers/mock_factory.py` (patch new async FalkorDB path)
+- `tests/unit/test_mutant_dict_crud.py` (update `_build()` patches)
+- `tests/unit/test_mutant_dict_services.py` (update `_build()` patches)
+- `tests/unit/test_mutant_temporal.py` (update `_build()` patches)
+
+Any file beyond these 13 = FAIL. Watch for:
+- `tests/unit/test_*` other than the 4 explicitly listed — must not be touched (Category A files already migrated in 22 arc don't need re-touching unless their patches now break)
+- `process/*_SPEC.md` other than the new B10.5 handoff — denied per spec discipline (architect-owned)
 - `scripts/hooks/*` — 5-layer enforcement infrastructure must not be modified
 - `scripts/trace_contracts_dragon.py` — Pattern 12 scanner must not be modified
+
+**Verification:** the AG amend MUST first rebase onto current `origin/master` to absorb prior architect patches (hook regex fix at `2a69a70`, scorched earth Dimension 9 at `b500ced`, B10.5 spec patches at HEAD). Without rebase, `git diff origin/master..HEAD` shows phantom files. Failure to rebase = FAIL on this criterion with explanatory note "AG branch behind master; rebase required."
 
 ### (k) Pre-handoff checklist complete
 
