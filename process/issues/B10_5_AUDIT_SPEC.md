@@ -195,13 +195,17 @@ Any other file = FAIL. Watch for:
 
 ### (k) Pre-handoff checklist complete
 
-Per master spec + `verify_handoff_completeness.py` auto-enforcement:
+Per master spec + `verify_handoff_completeness.py` auto-enforcement (hook regex patched 2026-06-27 to `^process/PR_.*_HANDOFF\.md$` after B10.5 R1 audit found `PR_B10_5_HANDOFF.md` was bypassing the original `PR_ISSUE_*` filter):
 
 - Pre-PR baseline shows all 6 integration tests passing on master (Method A — clean output expected, narrative note in handoff explaining the wrapper works on master)
 - Post-PR shows all 6 integration tests passing on native async branch (load-bearing)
-- All 4 seed markers present in any relevant multi-seed evidence (the new `verify_handoff_completeness.py` hook enforces this — handoff will be REJECTED at commit time if missing)
+- All 4 seed markers present (hook enforces at commit time — handoff REJECTED if missing)
 - Ruff command canonical (no `--exclude`)
 - No `N/A` shortcuts on deterministic gates
+- **`tox -e contracts` evidence pasted verbatim** (must show baseline 13 or explicit reason for change)
+- **Canonical `bandit -r src/claude_memory -ll` output pasted** (must show only B104)
+- **`**Commit:**` field present** (auto-injected by `inject_handoff_hash.py` from `<auto>` placeholder)
+- **"Pre-handoff checklist" section present** with all 9 items
 - Two-commit topology preserved; handoff commit's `**Commit:**` field equals `git rev-parse HEAD~1`
 
 If `verify_handoff_completeness.py` rejects the handoff, AG amends; do not bypass with `--no-verify`.
