@@ -67,8 +67,16 @@ def validate_handoff(path: Path) -> list[str]:
     return failures
 
 
+_HANDOFF_FILENAME_PATTERN = re.compile(r"PR_.*_HANDOFF\.md$")
+
+
 def main(argv: list[str]) -> int:
-    handoff_files = [Path(p) for p in argv if "PR_ISSUE_" in p and p.endswith("_HANDOFF.md")]
+    # NOTE: this internal filter must match the .pre-commit-config.yaml `files:`
+    # regex exactly. Originally too narrow ("PR_ISSUE_" prefix); broadened to
+    # match any PR_*_HANDOFF.md after B10.5 R4 audit found the double-bypass
+    # (config regex matched the file, but this script's internal filter dropped
+    # it and returned 0 — silent skip). Fixed B10.5 R5.
+    handoff_files = [Path(p) for p in argv if _HANDOFF_FILENAME_PATTERN.search(p)]
     if not handoff_files:
         return 0  # No handoffs in this commit — nothing to validate
 
