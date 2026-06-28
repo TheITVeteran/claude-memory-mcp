@@ -29,13 +29,21 @@ import sys
 
 # Architect-owned file patterns. Modifying any of these on a non-master branch
 # triggers the guard.
+#
+# REVISED 2026-06-28 after self-test caught a gap: the `^process/ARC_.*\.md$`
+# pattern only matched files STARTING with ARC_ (like process/ARC_22_CLOSE.md),
+# but missed names like process/B10_5_ARC_CLOSE.md where ARC_ appears mid-name.
+# Broadened to match ARC_ anywhere in the filename. Same Dimension 9 lesson:
+# defense-in-depth filters need full naming-convention coverage, or they silently
+# bypass. The hook caught itself failing in the very turn this fix was authored.
 ARCHITECT_OWNED_PATTERNS = (
     re.compile(r"^process/issues/.*_BUILD_SPEC\.md$"),
     re.compile(r"^process/issues/.*_AUDIT_SPEC\.md$"),
     re.compile(r"^process/issues/.*_HARNESS\.toml$"),
     re.compile(r"^process/REMEDIATION_.*\.md$"),
     re.compile(r"^process/SCORCHED_EARTH_.*\.md$"),
-    re.compile(r"^process/ARC_.*\.md$"),
+    re.compile(r"^process/.*ARC_.*\.md$"),  # matches ARC_ anywhere in filename
+    re.compile(r"^process/.*POSTMORTEM.*\.md$"),  # future-proofing for alt naming
     re.compile(r"^\.pre-commit-config\.yaml$"),
     re.compile(r"^scripts/hooks/(?!__).*\.py$"),  # hooks themselves
     re.compile(r"^scripts/trace_contracts_dragon\.py$"),  # the contract scanner
