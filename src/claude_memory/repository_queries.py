@@ -8,6 +8,24 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
+from claude_memory.cypher_queries import (
+    COUNT_ALL_EDGES,
+    COUNT_ALL_NODES,
+    COUNT_ENTITY_NODES,
+    COUNT_OBSERVATION_NODES,
+    COUNT_ORPHAN_NODES,
+    CREATE_TEMPORAL_EDGE,
+    GET_ALL_EDGES,
+    GET_ALL_NODE_IDS,
+    GET_BOTTLES_TEMPLATE,
+    GET_OBSERVATIONS_FOR_ENTITY,
+    GET_TEMPORAL_NEIGHBORS_AFTER,
+    GET_TEMPORAL_NEIGHBORS_BEFORE,
+    GET_TEMPORAL_NEIGHBORS_BOTH,
+    LIST_ORPHANS,
+    QUERY_TIMELINE,
+    QUERY_TIMELINE_WITH_PROJECT,
+)
 from claude_memory.retry import retry_on_transient
 
 logger = logging.getLogger(__name__)
@@ -35,15 +53,7 @@ class RepositoryQueryMixin:
         """
         graph = self.select_graph()  # type: ignore[attr-defined]
         if project_id:
-            query = """
-            MATCH (n:Entity)
-            WHERE COALESCE(n.occurred_at, n.created_at) >= $start
-              AND COALESCE(n.occurred_at, n.created_at) <= $end
-              AND n.project_id = $project_id
-            RETURN n
-            ORDER BY COALESCE(n.occurred_at, n.created_at) ASC
-            LIMIT $limit
-            """
+            query = QUERY_TIMELINE_WITH_PROJECT
             params = {
                 "start": start,
                 "end": end,
@@ -51,14 +61,7 @@ class RepositoryQueryMixin:
                 "limit": limit,
             }
         else:
-            query = """
-            MATCH (n:Entity)
-            WHERE COALESCE(n.occurred_at, n.created_at) >= $start
-              AND COALESCE(n.occurred_at, n.created_at) <= $end
-            RETURN n
-            ORDER BY COALESCE(n.occurred_at, n.created_at) ASC
-            LIMIT $limit
-            """
+            query = QUERY_TIMELINE
             params = {"start": start, "end": end, "limit": limit}
         result = graph.query(query, params)
         return [row[0].properties for row in result.result_set if row]
@@ -82,28 +85,12 @@ class RepositoryQueryMixin:
             limit: Max results.
         """
         graph = self.select_graph()  # type: ignore[attr-defined]
-        temporal_types = "PRECEDED_BY|EVOLVED_FROM|SUPERSEDES|CONCURRENT_WITH"
         if direction in ("before", "backward"):
-            query = f"""
-            MATCH (n:Entity {{id: $entity_id}})<-[r:{temporal_types}]-(m:Entity)
-            RETURN m
-            ORDER BY COALESCE(m.occurred_at, m.created_at) DESC
-            LIMIT $limit
-            """
+            query = GET_TEMPORAL_NEIGHBORS_BEFORE
         elif direction in ("after", "forward"):
-            query = f"""
-            MATCH (n:Entity {{id: $entity_id}})-[r:{temporal_types}]->(m:Entity)
-            RETURN m
-            ORDER BY COALESCE(m.occurred_at, m.created_at) ASC
-            LIMIT $limit
-            """
+            query = GET_TEMPORAL_NEIGHBORS_AFTER
         else:  # "both" or unrecognized
-            query = f"""
-            MATCH (n:Entity {{id: $entity_id}})-[r:{temporal_types}]-(m:Entity)
-            RETURN DISTINCT m
-            ORDER BY COALESCE(m.occurred_at, m.created_at) ASC
-            LIMIT $limit
-            """
+            query = GET_TEMPORAL_NEIGHBORS_BOTH
         result = graph.query(query, {"entity_id": entity_id, "limit": limit})
         return [row[0].properties for row in result.result_set if row]
 
@@ -131,14 +118,8 @@ class RepositoryQueryMixin:
         if "created_at" not in props:
             props["created_at"] = datetime.now(UTC).isoformat()
 
-        query = f"""
-        MATCH (a:Entity {{id: $from_id}}), (b:Entity {{id: $to_id}})
-        CREATE (a)-[r:{edge_type}]->(b)
-        SET r = $props
-        RETURN type(r) AS rel_type, a.id AS from_id, b.id AS to_id
-        """
         result = graph.query(
-            query,
+            CREATE_TEMPORAL_EDGE.format(edge_type=edge_type),
             {"from_id": from_id, "to_id": to_id, "props": props},
         )
         if not result.result_set:
@@ -180,14 +161,7 @@ class RepositoryQueryMixin:
             params["pid"] = project_id
 
         where_clause = f"WHERE {' AND '.join(conditions)}"
-        query = f"""
-        MATCH (n:Entity)
-        {where_clause}
-        RETURN n
-        ORDER BY COALESCE(n.occurred_at, n.created_at) DESC
-        LIMIT $limit
-        """
-        result = graph.query(query, params)
+        result = graph.query(GET_BOTTLES_TEMPLATE.format(where_clause=where_clause), params)
         return [row[0].properties for row in result.result_set if row]
 
     # -- Graph health & edges -----------------------------------------------
@@ -203,22 +177,22 @@ class RepositoryQueryMixin:
         graph = self.select_graph()  # type: ignore[attr-defined]
 
         # Total node count (all labels)
-        node_result = graph.query("MATCH (n) RETURN count(n)")
+        node_result = graph.query(COUNT_ALL_NODES)
         total_nodes: int = int(node_result.result_set[0][0]) if node_result.result_set else 0
 
         # Breakdown: Entity vs Observation nodes
-        entity_result = graph.query("MATCH (n:Entity) RETURN count(n)")
+        entity_result = graph.query(COUNT_ENTITY_NODES)
         entity_count: int = int(entity_result.result_set[0][0]) if entity_result.result_set else 0
 
-        obs_result = graph.query("MATCH (n:Observation) RETURN count(n)")
+        obs_result = graph.query(COUNT_OBSERVATION_NODES)
         observation_count: int = int(obs_result.result_set[0][0]) if obs_result.result_set else 0
 
         # Total edge count (all relationships)
-        edge_result = graph.query("MATCH ()-[r]->() RETURN count(r)")
+        edge_result = graph.query(COUNT_ALL_EDGES)
         total_edges: int = int(edge_result.result_set[0][0]) if edge_result.result_set else 0
 
         # Orphan count (nodes with zero relationships — any label)
-        orphan_result = graph.query("MATCH (n) WHERE NOT (n)--() RETURN count(n)")
+        orphan_result = graph.query(COUNT_ORPHAN_NODES)
         orphan_count: int = int(orphan_result.result_set[0][0]) if orphan_result.result_set else 0
 
         # Density: edges / max_possible_edges  (directed graph)
@@ -246,20 +220,7 @@ class RepositoryQueryMixin:
         created_at so callers can decide whether to reconnect or delete.
         """
         graph = self.select_graph()  # type: ignore[attr-defined]
-        query = """
-            MATCH (n)
-            WHERE NOT (n)--()
-            RETURN n.id AS id,
-                   n.name AS name,
-                   n.node_type AS node_type,
-                   n.project_id AS project_id,
-                   n.focus AS focus,
-                   labels(n) AS labels,
-                   n.created_at AS created_at
-            ORDER BY n.created_at DESC
-            LIMIT $limit
-        """
-        result = graph.query(query, params={"limit": limit})
+        result = graph.query(LIST_ORPHANS, params={"limit": limit})
         return [
             {
                 "id": row[0],
@@ -278,7 +239,7 @@ class RepositoryQueryMixin:
     def get_all_edges(self) -> list[dict[str, Any]]:
         """Fetch all edges between Entity nodes for gap detection."""
         graph = self.select_graph()  # type: ignore[attr-defined]
-        result = graph.query("MATCH (a:Entity)-[r]->(b:Entity) RETURN a.id, b.id, type(r)")
+        result = graph.query(GET_ALL_EDGES)
         return [
             {"source": row[0], "target": row[1], "type": row[2]} for row in result.result_set if row
         ]
@@ -287,7 +248,7 @@ class RepositoryQueryMixin:
     def get_all_node_ids(self, limit: int = 10000) -> list[str]:
         """Return all Entity node IDs for diagnostics."""
         graph = self.select_graph()  # type: ignore[attr-defined]
-        result = graph.query("MATCH (n:Entity) RETURN n.id LIMIT $limit", {"limit": limit})
+        result = graph.query(GET_ALL_NODE_IDS, {"limit": limit})
         return [row[0] for row in result.result_set if row]
 
     @retry_on_transient()
@@ -299,12 +260,5 @@ class RepositoryQueryMixin:
         entity embeddings that include observation content.
         """
         graph = self.select_graph()  # type: ignore[attr-defined]
-        query = """
-        MATCH (e)-[:HAS_OBSERVATION]->(o:Observation)
-        WHERE e.id = $entity_id
-        RETURN o
-        ORDER BY o.created_at DESC
-        LIMIT $limit
-        """
-        result = graph.query(query, {"entity_id": entity_id, "limit": limit})
+        result = graph.query(GET_OBSERVATIONS_FOR_ENTITY, {"entity_id": entity_id, "limit": limit})
         return [row[0].properties for row in result.result_set if row]

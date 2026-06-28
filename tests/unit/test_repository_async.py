@@ -1,251 +1,508 @@
-"""Tests for AsyncMemoryRepository (B10.A).
+"""Tests for AsyncMemoryRepository (B10.5 native async).
 
 Verifies:
-- Every async method delegates to the correct sync method via asyncio.to_thread
-- Arguments are forwarded correctly (no signature mismatches)
-- Exceptions propagate transparently through the wrapper
-- None/empty returns are forwarded without mangling
+- Each async method dispatches to the native async client correctly
+- Cypher queries match the canonical templates in cypher_queries.py
+- Arguments forwarded with correct parameter binding
+- Return values parsed correctly from FalkorDB result format
+- Exceptions propagate transparently (SearchError contract preserved)
+- Async retry logic operates correctly on transient failures
 """
 
-import asyncio
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from redis.exceptions import ConnectionError as RedisConnectionError
 
+from claude_memory.cypher_queries import (
+    CREATE_EDGE,
+    CREATE_NODE,
+    DELETE_EDGE,
+    GET_NODE_BY_ID,
+    GET_TEMPORAL_NEIGHBORS_AFTER,
+    GET_TEMPORAL_NEIGHBORS_BEFORE,
+    GET_TEMPORAL_NEIGHBORS_BOTH,
+    HARD_DELETE_NODE,
+    QUERY_TIMELINE,
+    QUERY_TIMELINE_WITH_PROJECT,
+    SOFT_DELETE_NODE,
+    UPDATE_NODE,
+)
+from claude_memory.exceptions import SearchError
 from claude_memory.repository_async import AsyncMemoryRepository
 
-
-@pytest.fixture()
-def sync_repo() -> MagicMock:
-    """Create a mock MemoryRepository with all public methods."""
-    repo = MagicMock()
-    # Set default return values for methods that return specific types
-    repo.create_node.return_value = {"id": "abc-123", "name": "Test"}
-    repo.get_node.return_value = {"id": "abc-123", "name": "Test"}
-    repo.update_node.return_value = {"id": "abc-123", "name": "Updated"}
-    repo.delete_node.return_value = True
-    repo.create_edge.return_value = {"id": "edge-1"}
-    repo.delete_edge.return_value = True
-    repo.execute_cypher.return_value = MagicMock(result_set=[])
-    repo.query_timeline.return_value = [{"id": "e1"}]
-    repo.get_temporal_neighbors.return_value = [{"id": "e2"}]
-    repo.create_temporal_edge.return_value = {"rel_type": "PRECEDED_BY"}
-    repo.get_bottles.return_value = [{"id": "bottle-1"}]
-    repo.get_graph_health.return_value = {"total_nodes": 42}
-    repo.list_orphans.return_value = [{"id": "orphan-1"}]
-    repo.get_all_edges.return_value = [{"source": "a", "target": "b"}]
-    repo.get_all_node_ids.return_value = ["id-1", "id-2"]
-    repo.get_observations_for_entity.return_value = [{"content": "obs"}]
-    repo.get_subgraph.return_value = {"nodes": [], "edges": []}
-    repo.get_all_nodes.return_value = [{"id": "n1"}]
-    repo.get_total_node_count.return_value = 100
-    repo.increment_salience.return_value = [{"id": "n1", "salience_score": 2.0}]
-    repo.get_most_recent_entity.return_value = {"id": "recent-1"}
-    repo.shortest_path_length.return_value = 3
-    repo.select_graph.return_value = MagicMock()
-    repo.ensure_indices.return_value = None
-    return repo
+# ─── Mock Helpers ───────────────────────────────────────────────────
 
 
-@pytest.fixture()
-def wrapper(sync_repo: MagicMock) -> AsyncMemoryRepository:
-    """Create an AsyncMemoryRepository wrapping the mock."""
-    return AsyncMemoryRepository(sync_repo)
+def _make_mock_node(properties: dict[str, Any] | None = None) -> MagicMock:
+    node = MagicMock()
+    node.properties = properties or {}
+    return node
 
 
-# ── Parameterized delegation tests ────────────────────────────────────
-# One entry per public method: (method_name, args, kwargs)
-# Verifies asyncio.to_thread is called with the right delegate + args.
+def _make_mock_result(rows: list[list[Any]]) -> MagicMock:
+    result = MagicMock()
+    result.result_set = rows
+    return result
 
-_DELEGATION_CASES = [
-    # ── repository.py core ──
-    ("select_graph", (), {}),
-    ("ensure_indices", (), {}),
-    ("create_node", ("Entity", {"name": "X"}), {}),
-    ("get_node", ("abc-123",), {}),
-    ("update_node", ("abc-123", {"name": "Y"}), {}),
-    ("delete_node", ("abc-123", False, None), {}),
-    ("delete_node", ("abc-123", True, "stale"), {}),
-    ("create_edge", ("a", "b", "RELATES_TO", {"weight": 1.0}), {}),
-    ("delete_edge", ("edge-1",), {}),
-    ("execute_cypher", ("MATCH (n) RETURN n", None), {}),
-    ("execute_cypher", ("MATCH (n) RETURN n", {"id": "x"}), {}),
-    # ── repository_queries.py ──
-    ("query_timeline", ("2026-01-01", "2026-12-31", 20, None), {}),
-    ("query_timeline", ("2026-01-01", "2026-12-31", 10, "proj-1"), {}),
-    ("get_temporal_neighbors", ("entity-1", "both", 10), {}),
-    ("get_temporal_neighbors", ("entity-1", "before", 5), {}),
-    ("create_temporal_edge", ("a", "b", "PRECEDED_BY", None), {}),
-    ("create_temporal_edge", ("a", "b", "EVOLVED_FROM", {"ts": "now"}), {}),
-    ("get_bottles", (10, None, None, None, None), {}),
-    ("get_bottles", (5, "search", None, None, "proj"), {}),
-    ("get_graph_health", (), {}),
-    ("list_orphans", (50,), {}),
-    ("list_orphans", (100,), {}),
-    ("get_all_edges", (), {}),
-    ("get_all_node_ids", (10000,), {}),
-    ("get_all_node_ids", (500,), {}),
-    ("get_observations_for_entity", ("entity-1", 20), {}),
-    ("get_observations_for_entity", ("entity-1", 50), {}),
-    # ── repository_traversal.py ──
-    ("get_subgraph", (["id-1", "id-2"], 1), {}),
-    ("get_subgraph", (["id-1"], 3), {}),
-    ("get_all_nodes", (1000,), {}),
-    ("get_all_nodes", (2000,), {}),
-    ("get_total_node_count", (), {}),
-    ("increment_salience", (["id-1", "id-2"],), {}),
-    ("get_most_recent_entity", ("proj-1",), {}),
-    ("shortest_path_length", ("a", "b"), {}),
-]
+
+@pytest.fixture
+def mock_falkordb():
+    """Mock falkordb.asyncio.FalkorDB with async graph + query methods."""
+    mock_graph = MagicMock()
+    mock_graph.query = AsyncMock()
+    mock_client = MagicMock()
+    mock_client.select_graph = MagicMock(return_value=mock_graph)
+    mock_client.list_graphs = AsyncMock(return_value=[])
+    return mock_client, mock_graph
+
+
+@pytest.fixture
+def repo(mock_falkordb):
+    """AsyncMemoryRepository with mocked native async client."""
+    mock_client, _ = mock_falkordb
+    with patch("claude_memory.repository_async.FalkorDB", return_value=mock_client):
+        r = AsyncMemoryRepository("localhost", 6379, None)
+    return r
+
+
+# ─── Behavioral Tests per public method (26+ methods) ───────────────
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("method_name", "args", "kwargs"),
-    _DELEGATION_CASES,
-    ids=[f"{c[0]}({','.join(str(a) for a in c[1])})" for c in _DELEGATION_CASES],
-)
-async def test_happy_delegation(
-    sync_repo: MagicMock,
-    wrapper: AsyncMemoryRepository,
-    method_name: str,
-    args: tuple,
-    kwargs: dict,
-) -> None:
-    """B10.A: each async method delegates to the correct sync method via to_thread."""
-    sync_method = getattr(sync_repo, method_name)
-    expected_return = sync_method.return_value
-
-    with patch(
-        "claude_memory.repository_async.asyncio.to_thread", new_callable=AsyncMock
-    ) as mock_tt:
-        mock_tt.return_value = expected_return
-        async_method = getattr(wrapper, method_name)
-        result = await async_method(*args, **kwargs)
-
-    mock_tt.assert_awaited_once_with(sync_method, *args, **kwargs)
-    assert result == expected_return
-
-
-# ── Evil path: exceptions propagate through asyncio.to_thread ─────────
-
-_EXCEPTION_CASES = [
-    ("create_node", ("Entity", {"name": "X"}), ConnectionError("FalkorDB down")),
-    ("execute_cypher", ("BAD CYPHER",), RuntimeError("Syntax error")),
-    ("get_node", ("missing",), TimeoutError("DB timeout")),
-]
+async def test_select_graph(repo, mock_falkordb):
+    mock_client, mock_graph = mock_falkordb
+    res = await repo.select_graph()
+    assert res == mock_graph
+    mock_client.select_graph.assert_called_with("claude_memory")
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("method_name", "args", "exc"),
-    _EXCEPTION_CASES,
-    ids=[f"evil1_{c[0]}_{type(c[2]).__name__}" for c in _EXCEPTION_CASES],
-)
-async def test_evil1_exception_propagation(
-    sync_repo: MagicMock,
-    wrapper: AsyncMemoryRepository,
-    method_name: str,
-    args: tuple,
-    exc: Exception,
-) -> None:
-    """B10.A evil: sync exceptions propagate transparently through the wrapper."""
-    with patch(
-        "claude_memory.repository_async.asyncio.to_thread", new_callable=AsyncMock
-    ) as mock_tt:
-        mock_tt.side_effect = exc
-        with pytest.raises(type(exc), match=str(exc)):
-            await getattr(wrapper, method_name)(*args)
+async def test_ensure_indices(repo):
+    # Should be a no-op
+    await repo.ensure_indices()
 
 
 @pytest.mark.asyncio
-async def test_evil2_wrong_sync_repo_type() -> None:
-    """B10.A evil: constructing with a non-repo object stores it but fails on call."""
-    fake = MagicMock(spec=[])  # empty spec — no methods
-    wrapper = AsyncMemoryRepository(fake)
-    # The wrapper stores whatever you give it — failure surfaces at call time
-    assert wrapper._sync_repo is fake
+async def test_create_node(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_node = _make_mock_node({"id": "n1", "name": "test"})
+    mock_graph.query.return_value = _make_mock_result([[mock_node]])
+
+    res = await repo.create_node("Concept", {"id": "n1", "name": "test"})
+    assert res == {"id": "n1", "name": "test"}
+    mock_graph.query.assert_awaited_once()
+    assert mock_graph.query.call_args[0][0] == CREATE_NODE.format(label="Concept")
 
 
 @pytest.mark.asyncio
-async def test_evil3_concurrent_calls_do_not_interfere(
-    sync_repo: MagicMock,
-    wrapper: AsyncMemoryRepository,
-) -> None:
-    """B10.A evil: concurrent async calls to different methods don't cross-contaminate."""
-    sync_repo.get_node.return_value = {"id": "node-1"}
-    sync_repo.get_graph_health.return_value = {"total_nodes": 5}
+async def test_get_node_found(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_node = _make_mock_node({"id": "n1"})
+    mock_graph.query.return_value = _make_mock_result([[mock_node]])
 
-    with patch(
-        "claude_memory.repository_async.asyncio.to_thread", new_callable=AsyncMock
-    ) as mock_tt:
-        # Make to_thread return the correct value based on which sync method is called
-        async def side_effect(fn, *args, **kwargs):
-            return fn(*args, **kwargs)
-
-        mock_tt.side_effect = side_effect
-
-        results = await asyncio.gather(
-            wrapper.get_node("node-1"),
-            wrapper.get_graph_health(),
-        )
-
-    assert results[0] == {"id": "node-1"}
-    assert results[1] == {"total_nodes": 5}
-
-
-# ── Sad path: None/empty returns forwarded correctly ──────────────────
+    res = await repo.get_node("n1")
+    assert res == {"id": "n1"}
+    mock_graph.query.assert_awaited_once_with(GET_NODE_BY_ID, {"id": "n1"})
 
 
 @pytest.mark.asyncio
-async def test_sad1_none_return_forwarded(
-    sync_repo: MagicMock,
-    wrapper: AsyncMemoryRepository,
-) -> None:
-    """B10.A sad: when sync repo returns None, wrapper returns None (not swallowed)."""
-    with patch(
-        "claude_memory.repository_async.asyncio.to_thread", new_callable=AsyncMock
-    ) as mock_tt:
-        mock_tt.return_value = None
-        result = await wrapper.get_node("nonexistent")
+async def test_get_node_not_found(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_graph.query.return_value = _make_mock_result([])
 
-    assert result is None
-
-
-# ── Happy path: wrapper stores sync_repo correctly ────────────────────
-
-
-def test_happy_init_stores_sync_repo(sync_repo: MagicMock) -> None:
-    """B10.A happy: wrapper stores the sync repo as _sync_repo."""
-    wrapper = AsyncMemoryRepository(sync_repo)
-    assert wrapper._sync_repo is sync_repo
+    res = await repo.get_node("n2")
+    assert res is None
 
 
 @pytest.mark.asyncio
-async def test_happy_full_roundtrip(
-    sync_repo: MagicMock,
-    wrapper: AsyncMemoryRepository,
-) -> None:
-    """B10.A happy: create → read → update → delete roundtrip through wrapper."""
-    with patch(
-        "claude_memory.repository_async.asyncio.to_thread", new_callable=AsyncMock
-    ) as mock_tt:
-        # Create
-        mock_tt.return_value = {"id": "new-1", "name": "Test"}
-        created = await wrapper.create_node("Entity", {"name": "Test"})
-        assert created["id"] == "new-1"
+async def test_update_node_success(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_node = _make_mock_node({"id": "n1", "val": 2})
+    mock_graph.query.return_value = _make_mock_result([[mock_node]])
 
-        # Read
-        mock_tt.return_value = {"id": "new-1", "name": "Test"}
-        found = await wrapper.get_node("new-1")
-        assert found["id"] == "new-1"
+    res = await repo.update_node("n1", {"val": 2})
+    assert res == {"id": "n1", "val": 2}
+    mock_graph.query.assert_awaited_once_with(UPDATE_NODE, {"id": "n1", "props": {"val": 2}})
 
-        # Update
-        mock_tt.return_value = {"id": "new-1", "name": "Updated"}
-        updated = await wrapper.update_node("new-1", {"name": "Updated"})
-        assert updated["name"] == "Updated"
 
-        # Delete
-        mock_tt.return_value = True
-        deleted = await wrapper.delete_node("new-1")
-        assert deleted is True
+@pytest.mark.asyncio
+async def test_update_node_empty(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_graph.query.return_value = _make_mock_result([])
+
+    res = await repo.update_node("n1", {"val": 2})
+    assert res == {}
+
+
+@pytest.mark.asyncio
+async def test_delete_node_soft(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_graph.query.return_value = _make_mock_result([[1]])
+
+    res = await repo.delete_node("n1", soft_delete=True, reason="test")
+    assert res is True
+    mock_graph.query.assert_awaited_once_with(SOFT_DELETE_NODE, {"id": "n1", "reason": "test"})
+
+
+@pytest.mark.asyncio
+async def test_delete_node_hard(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    res = await repo.delete_node("n1", soft_delete=False)
+    assert res is True
+    mock_graph.query.assert_awaited_once_with(HARD_DELETE_NODE, {"id": "n1"})
+
+
+@pytest.mark.asyncio
+async def test_create_edge(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_edge = MagicMock()
+    mock_edge.properties = {"confidence": 0.9}
+    mock_graph.query.return_value = _make_mock_result([[mock_edge]])
+
+    res = await repo.create_edge("n1", "n2", "RELATED_TO", {"confidence": 0.9})
+    assert res == {"confidence": 0.9}
+    mock_graph.query.assert_awaited_once_with(
+        CREATE_EDGE.format(relation_type="RELATED_TO"),
+        {"from": "n1", "to": "n2", "props": {"confidence": 0.9}},
+    )
+
+
+@pytest.mark.asyncio
+async def test_create_edge_empty(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_graph.query.return_value = _make_mock_result([])
+
+    res = await repo.create_edge("n1", "n2", "RELATED_TO", {})
+    assert res == {}
+
+
+@pytest.mark.asyncio
+async def test_delete_edge(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    res = await repo.delete_edge("e1")
+    assert res is True
+    mock_graph.query.assert_awaited_once_with(DELETE_EDGE, {"id": "e1"})
+
+
+@pytest.mark.asyncio
+async def test_execute_cypher(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_graph.query.return_value = "raw_result"
+
+    res = await repo.execute_cypher("MATCH (n) RETURN n", {"x": 1})
+    assert res == "raw_result"
+    mock_graph.query.assert_awaited_once_with("MATCH (n) RETURN n", {"x": 1})
+
+
+@pytest.mark.asyncio
+async def test_query_timeline_no_project(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_node = _make_mock_node({"id": "e1"})
+    mock_graph.query.return_value = _make_mock_result([[mock_node]])
+
+    res = await repo.query_timeline("2026-01-01", "2026-01-02", limit=5)
+    assert res == [{"id": "e1"}]
+    mock_graph.query.assert_awaited_once_with(
+        QUERY_TIMELINE,
+        {"start": "2026-01-01", "end": "2026-01-02", "limit": 5},
+    )
+
+
+@pytest.mark.asyncio
+async def test_query_timeline_with_project(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_node = _make_mock_node({"id": "e1"})
+    mock_graph.query.return_value = _make_mock_result([[mock_node]])
+
+    res = await repo.query_timeline("2026-01-01", "2026-01-02", limit=5, project_id="p1")
+    assert res == [{"id": "e1"}]
+    mock_graph.query.assert_awaited_once_with(
+        QUERY_TIMELINE_WITH_PROJECT,
+        {"start": "2026-01-01", "end": "2026-01-02", "limit": 5, "project_id": "p1"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_temporal_neighbors_before(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_node = _make_mock_node({"id": "e1"})
+    mock_graph.query.return_value = _make_mock_result([[mock_node]])
+
+    res = await repo.get_temporal_neighbors("n1", direction="before", limit=5)
+    assert res == [{"id": "e1"}]
+    mock_graph.query.assert_awaited_once_with(
+        GET_TEMPORAL_NEIGHBORS_BEFORE,
+        {"entity_id": "n1", "limit": 5},
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_temporal_neighbors_after(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_node = _make_mock_node({"id": "e1"})
+    mock_graph.query.return_value = _make_mock_result([[mock_node]])
+
+    res = await repo.get_temporal_neighbors("n1", direction="after", limit=5)
+    assert res == [{"id": "e1"}]
+    mock_graph.query.assert_awaited_once_with(
+        GET_TEMPORAL_NEIGHBORS_AFTER,
+        {"entity_id": "n1", "limit": 5},
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_temporal_neighbors_both(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_node = _make_mock_node({"id": "e1"})
+    mock_graph.query.return_value = _make_mock_result([[mock_node]])
+
+    res = await repo.get_temporal_neighbors("n1", direction="both", limit=5)
+    assert res == [{"id": "e1"}]
+    mock_graph.query.assert_awaited_once_with(
+        GET_TEMPORAL_NEIGHBORS_BOTH,
+        {"entity_id": "n1", "limit": 5},
+    )
+
+
+@pytest.mark.asyncio
+async def test_create_temporal_edge(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_graph.query.return_value = _make_mock_result([["PRECEDED_BY", "n1", "n2"]])
+
+    res = await repo.create_temporal_edge("n1", "n2", "PRECEDED_BY", {"weight": 1.0})
+    assert res == {"rel_type": "PRECEDED_BY", "from_id": "n1", "to_id": "n2"}
+    mock_graph.query.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_create_temporal_edge_empty(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_graph.query.return_value = _make_mock_result([])
+
+    res = await repo.create_temporal_edge("n1", "n2")
+    assert "error" in res
+
+
+@pytest.mark.asyncio
+async def test_get_bottles(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_node = _make_mock_node({"id": "b1"})
+    mock_graph.query.return_value = _make_mock_result([[mock_node]])
+
+    res = await repo.get_bottles(
+        limit=5, search_text="hello", before_date="2026", after_date="2025", project_id="p1"
+    )
+    assert res == [{"id": "b1"}]
+    mock_graph.query.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_get_graph_health(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    # Mock return values for counts: total, entity, obs, edges, orphans
+    mock_graph.query.side_effect = [
+        _make_mock_result([[10]]),  # total nodes
+        _make_mock_result([[6]]),  # entity
+        _make_mock_result([[4]]),  # obs
+        _make_mock_result([[15]]),  # edges
+        _make_mock_result([[2]]),  # orphans
+    ]
+
+    res = await repo.get_graph_health()
+    assert res["total_nodes"] == 10
+    assert res["entity_count"] == 6
+    assert res["observation_count"] == 4
+    assert res["total_edges"] == 15
+    assert res["orphan_count"] == 2
+    assert res["density"] == round(15 / 90, 6)
+    assert res["avg_degree"] == 1.5
+
+
+@pytest.mark.asyncio
+async def test_list_orphans(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_graph.query.return_value = _make_mock_result(
+        [["n1", "name", "Concept", "p1", True, ["Entity"], "2026"]]
+    )
+
+    res = await repo.list_orphans(limit=5)
+    assert len(res) == 1
+    assert res[0]["id"] == "n1"
+
+
+@pytest.mark.asyncio
+async def test_get_all_edges(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_graph.query.return_value = _make_mock_result([["n1", "n2", "RELATED_TO"]])
+
+    res = await repo.get_all_edges()
+    assert res == [{"source": "n1", "target": "n2", "type": "RELATED_TO"}]
+
+
+@pytest.mark.asyncio
+async def test_get_all_node_ids(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_graph.query.return_value = _make_mock_result([["n1"], ["n2"]])
+
+    res = await repo.get_all_node_ids(limit=5)
+    assert res == ["n1", "n2"]
+
+
+@pytest.mark.asyncio
+async def test_get_observations_for_entity(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_node = _make_mock_node({"content": "obs1"})
+    mock_graph.query.return_value = _make_mock_result([[mock_node]])
+
+    res = await repo.get_observations_for_entity("n1", limit=5)
+    assert res == [{"content": "obs1"}]
+
+
+@pytest.mark.asyncio
+async def test_get_subgraph_depth_zero(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_graph.query.return_value = _make_mock_result([[[{"properties": {"id": "n1"}}]]])
+
+    res = await repo.get_subgraph(["n1"], depth=0)
+    assert res["nodes"] == [{"id": "n1"}]
+    assert res["edges"] == []
+
+
+@pytest.mark.asyncio
+async def test_get_subgraph_depth_one(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    edges = [{"id": "e1", "source": "n1", "target": "n2", "type": "RELATED_TO", "properties": {}}]
+    nodes = [
+        {"id": "n1", "labels": ["Entity"], "properties": {"id": "n1"}},
+        {"id": "n2", "labels": ["Entity"], "properties": {"id": "n2"}},
+    ]
+    mock_graph.query.return_value = _make_mock_result([[edges, nodes]])
+
+    res = await repo.get_subgraph(["n1"], depth=1)
+    assert len(res["nodes"]) == 2
+    assert len(res["edges"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_get_all_nodes(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_node = _make_mock_node({"id": "n1"})
+    mock_graph.query.return_value = _make_mock_result([[mock_node]])
+
+    res = await repo.get_all_nodes(limit=5)
+    assert res == [{"id": "n1"}]
+
+
+@pytest.mark.asyncio
+async def test_get_total_node_count(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_graph.query.return_value = _make_mock_result([[42]])
+
+    res = await repo.get_total_node_count()
+    assert res == 42
+
+
+@pytest.mark.asyncio
+async def test_increment_salience(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_graph.query.return_value = _make_mock_result([["n1", 2.5, 3]])
+
+    res = await repo.increment_salience(["n1"])
+    assert res == [{"id": "n1", "salience_score": 2.5, "retrieval_count": 3}]
+
+
+@pytest.mark.asyncio
+async def test_get_most_recent_entity(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_node = _make_mock_node({"id": "n1"})
+    mock_graph.query.return_value = _make_mock_result([[mock_node]])
+
+    res = await repo.get_most_recent_entity("p1")
+    assert res == {"id": "n1"}
+
+
+@pytest.mark.asyncio
+async def test_shortest_path_length_forward(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_graph.query.side_effect = [
+        _make_mock_result([[3]]),  # forward
+    ]
+
+    res = await repo.shortest_path_length("n1", "n2")
+    assert res == 3
+
+
+@pytest.mark.asyncio
+async def test_shortest_path_length_reverse(repo, mock_falkordb):
+    _, mock_graph = mock_falkordb
+    mock_graph.query.side_effect = [
+        Exception("forward failed"),  # forward
+        _make_mock_result([[4]]),  # reverse
+    ]
+
+    res = await repo.shortest_path_length("n1", "n2")
+    assert res == 4
+
+
+# ─── Contract & Exception Tests ─────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_search_error_propagates_on_falkordb_failure(repo, mock_falkordb):
+    """When falkordb.asyncio raises, SearchError contract is preserved."""
+    _, mock_graph = mock_falkordb
+    mock_graph.query.side_effect = RedisConnectionError("falkordb down")
+
+    with pytest.raises(SearchError):
+        await repo.get_node("n1")
+
+
+# ─── Connection & Retry Logic Tests ─────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_connect_with_retry_success(mock_falkordb):
+    mock_client, _ = mock_falkordb
+    mock_client.list_graphs.return_value = []
+
+    with patch("claude_memory.repository_async.FalkorDB", return_value=mock_client):
+        repo = AsyncMemoryRepository("localhost", 6379, None)
+        await repo._connect_with_retry()
+
+    assert repo._connected is True
+    mock_client.list_graphs.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_connect_with_retry_failure_then_success(mock_falkordb):
+    mock_client, _ = mock_falkordb
+    # Fail twice, then succeed
+    mock_client.list_graphs.side_effect = [
+        RedisConnectionError("temp error"),
+        RedisConnectionError("temp error 2"),
+        [],
+    ]
+
+    with patch("claude_memory.repository_async.FalkorDB", return_value=mock_client):
+        repo = AsyncMemoryRepository("localhost", 6379, None)
+        repo._connect_backoff = 0.001  # speed up test
+        await repo._connect_with_retry()
+
+    assert repo._connected is True
+    assert mock_client.list_graphs.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_connect_with_retry_exhausted(mock_falkordb):
+    mock_client, _ = mock_falkordb
+    mock_client.list_graphs.side_effect = RedisConnectionError("down")
+
+    with patch("claude_memory.repository_async.FalkorDB", return_value=mock_client):
+        repo = AsyncMemoryRepository("localhost", 6379, None)
+        repo._connect_backoff = 0.001
+        with pytest.raises(ConnectionError, match="FalkorDB connection exhausted retries"):
+            await repo._connect_with_retry()
+
+    assert repo._connected is False

@@ -12,10 +12,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from claude_memory.schema import BottleQueryParams, SessionEndParams
 
 
-def _make_service() -> tuple[Any, MagicMock]:
+def _make_service() -> tuple[Any, AsyncMock]:
     """Build MemoryService with mocked infrastructure."""
     mock_embedder = MagicMock()
-    mock_repo = MagicMock()
+    mock_repo = AsyncMock()
     mock_vector = MagicMock()
     mock_vector.upsert = AsyncMock()
     mock_vector.search = AsyncMock(return_value=[])
@@ -27,7 +27,7 @@ def _make_service() -> tuple[Any, MagicMock]:
     lock_mock.lock.return_value = lock_ctx
 
     with (
-        patch("claude_memory.tools.MemoryRepository", return_value=mock_repo),
+        patch("claude_memory.tools.AsyncMemoryRepository", return_value=mock_repo),
         patch("claude_memory.tools.LockManager", return_value=lock_mock),
         patch("claude_memory.tools.QdrantVectorStore", return_value=mock_vector),
         patch("claude_memory.tools.ActivationEngine"),

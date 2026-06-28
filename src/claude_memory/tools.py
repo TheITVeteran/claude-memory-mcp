@@ -9,6 +9,7 @@ All actual method implementations live in their respective modules.
 
 import asyncio
 import logging
+from typing import cast
 
 from claude_memory.activation import ActivationEngine
 from claude_memory.analysis import AnalysisMixin
@@ -23,7 +24,7 @@ from claude_memory.temporal import TemporalMixin
 
 from .lock_manager import LockManager
 from .ontology import OntologyManager
-from .repository import MemoryRepository
+from .repository import MemoryRepository  # noqa: F401  # diagnostic re-export for test patches
 from .repository_async import AsyncMemoryRepository
 
 # Re-export schema items for backward compatibility
@@ -79,9 +80,9 @@ class MemoryService(
         password: str | None = None,
     ) -> None:
         """Wire up repository, embedder, vector store, ontology, and lock manager."""
-        self.repo = AsyncMemoryRepository(MemoryRepository(host, port, password))
+        self.repo = AsyncMemoryRepository(host, port, password)
         self.embedder = embedding_service
-        self.vector_store = vector_store or QdrantVectorStore()
+        self.vector_store = cast(VectorStore, vector_store or QdrantVectorStore())
 
         # Core Components
         self.ontology = OntologyManager()
